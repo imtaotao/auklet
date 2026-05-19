@@ -9,11 +9,13 @@ export type {
   PackageBuildFormat,
   PackageBuildOptions,
   ResolvedModuleCssBuildContext,
-  StyleLanguage,
 } from '#auklet/types';
 export type { RunTsdownOptions } from '#auklet/build/runTsdown';
 export type { AukletCssPluginOptions } from '#auklet/css/vite/vitePlugin';
-export { aukletDefaultCssDependencyConfig } from '#auklet/config';
+export {
+  aukletDefaultCssDependencyConfig,
+  aukletDefaultCssOptions,
+} from '#auklet/config';
 export {
   loadAukletConfig,
   resolveAukletConfigModule,

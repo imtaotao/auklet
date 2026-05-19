@@ -1,6 +1,12 @@
-import type { CssDependencyGroup } from '#auklet/types';
+import type { CssDependencyGroup, CssOptions } from '#auklet/types';
 
 export const aukletConfigFile = 'auklet.config.ts';
+
+export const aukletDefaultCssOptions = {
+  sourceDir: 'src',
+  outputDir: 'dist',
+  themes: {},
+} satisfies Required<Pick<CssOptions, 'sourceDir' | 'outputDir' | 'themes'>>;
 
 export const aukletDefaultCssDependencyConfig: CssDependencyGroup = {
   global: '/style.css',

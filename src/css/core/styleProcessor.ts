@@ -85,7 +85,7 @@ export class StyleProcessor {
         const specifier = this.parseImportSpecifier(rule.params);
         if (
           !specifier?.startsWith(RELATIVE_IMPORT_PREFIX) ||
-          !this.config.styleExtensions[path.extname(specifier)]
+          !this.config.styleExtensions.includes(path.extname(specifier))
         ) {
           return;
         }
@@ -96,12 +96,8 @@ export class StyleProcessor {
   }
 
   private parse(code: string, from: string) {
-    const language = this.config.styleExtensions[path.extname(from)];
-
-    if (language === this.config.lessLanguage) {
-      // Less support will plug into this branch before parsing once enabled.
-      return postcss.parse(code, { from });
-    }
+    // Keep parsing behind one method so future style languages can transform
+    // to CSS before PostCSS reads the final stylesheet.
     return postcss.parse(code, { from });
   }
 

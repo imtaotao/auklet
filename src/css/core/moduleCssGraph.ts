@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { aukletConfigFile } from '#auklet/config';
+import { aukletConfigFile, aukletDefaultCssOptions } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
 import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
@@ -113,7 +113,7 @@ export class ModuleCssGraph {
       return true;
     }
 
-    return Object.keys(this.config.styleExtensions).some((extension) =>
+    return this.config.styleExtensions.some((extension) =>
       normalizedFile.endsWith(extension),
     );
   }
@@ -123,7 +123,7 @@ export class ModuleCssGraph {
   }
 
   isStyleFile(file: string) {
-    return Boolean(this.config.styleExtensions[path.extname(file)]);
+    return this.config.styleExtensions.includes(path.extname(file));
   }
 
   getWorkspacePackageNames() {
@@ -178,8 +178,8 @@ export class ModuleCssGraph {
     });
     const context: ResolvedModuleCssBuildContext = {
       packageRoot,
-      sourceDir: cssOptions.sourceDir ?? 'src',
-      outputDir: cssOptions.outputDir ?? 'dist',
+      sourceDir: cssOptions.sourceDir ?? aukletDefaultCssOptions.sourceDir,
+      outputDir: cssOptions.outputDir ?? aukletDefaultCssOptions.outputDir,
     };
     const sourceRoot = path.join(packageRoot, context.sourceDir);
     const resolver = new WorkspaceStyleResolver(this.config, context);
@@ -346,7 +346,7 @@ export class ModuleCssGraph {
       context.sourceRoot,
       context.context.packageRoot,
       context.resolver,
-      Object.keys(this.config.styleExtensions),
+      this.config.styleExtensions,
     );
     const sourceFiles = fileWalker(context.sourceRoot);
     const moduleStyleImports = importCollector.collect(
@@ -406,7 +406,7 @@ export class ModuleCssGraph {
   private getStyleFiles(sourceRoot: string) {
     if (!fs.existsSync(sourceRoot)) return [];
     return fileWalker(sourceRoot).filter((file) =>
-      Boolean(this.config.styleExtensions[path.extname(file)]),
+      this.config.styleExtensions.includes(path.extname(file)),
     );
   }
 

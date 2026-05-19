@@ -267,7 +267,6 @@ const collectStyleImports = (code: string) => {
 
 - CLI 完整行为。
 - 真实 Vite dev server。
-- Less 实现和 Less 真实产物。
 - 发布包 tarball。
 
 CLI 后续如果补测试，单独建测试文件，只做命令入口层 smoke test，例如：
@@ -276,11 +275,11 @@ CLI 后续如果补测试，单独建测试文件，只做命令入口层 smoke 
 - `auk build-css` 能触发构建流程。
 - unknown command 返回失败退出码。
 
-Less 后续落地时：
+其他样式语言后续如果通过 hook 接入：
 
 - 不要新增长期 pending/skipped 测试。
-- 先扩展 fixture 和 `StyleStructure` 的 style 语义能力。
-- 再补真实 `.less` 输入、输出结构和关键内容断言。
+- 先明确它只负责把源样式转换成 CSS，还是也要参与 auklet 的依赖图。
+- 再扩展 fixture、`StyleStructure` 和真实产物断言。
 
 ## 当前状态
 

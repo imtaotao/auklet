@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
+import { aukletDefaultCssOptions } from '#auklet/config';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
 import type {
@@ -125,15 +126,21 @@ export class ModuleCssBuilder {
 
   private getStyleFiles(files: Array<string>) {
     return files.filter((file) =>
-      Boolean(this.config.styleExtensions[path.extname(file)]),
+      this.config.styleExtensions.includes(path.extname(file)),
     );
   }
 
   private createBuildContext(cssOptions: CssOptions) {
     return {
       packageRoot: this.context.packageRoot,
-      sourceDir: cssOptions.sourceDir ?? this.context.sourceDir ?? 'src',
-      outputDir: cssOptions.outputDir ?? this.context.outputDir ?? 'dist',
+      sourceDir:
+        cssOptions.sourceDir ??
+        this.context.sourceDir ??
+        aukletDefaultCssOptions.sourceDir,
+      outputDir:
+        cssOptions.outputDir ??
+        this.context.outputDir ??
+        aukletDefaultCssOptions.outputDir,
     };
   }
 
@@ -145,7 +152,7 @@ export class ModuleCssBuilder {
       this.srcRoot,
       context.packageRoot,
       this.resolver,
-      Object.keys(this.config.styleExtensions),
+      this.config.styleExtensions,
     );
   }
 

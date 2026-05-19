@@ -90,22 +90,22 @@ describe('StyleProcessor', () => {
     expect(content.match(/\.base/g)).toHaveLength(1);
   });
 
-  test('collects only relative style imports with supported style extensions', () => {
+  test('collects only relative CSS imports', () => {
     const entry = project.writeFile(
       'entry.css',
       `
         @import "./base.css";
-        @import "./theme.less";
+        @import "./theme.module.css";
         @import "./ignored.txt";
         @import "@scope/ui/style.css";
       `,
     );
     const base = project.resolve('base.css');
-    const theme = project.resolve('theme.less');
+    const themeModule = project.resolve('theme.module.css');
 
     const imported = processor.collectImportedStyleFiles([entry]);
 
-    expect(imported).toEqual(new Set([base, theme]));
+    expect(imported).toEqual(new Set([base, themeModule]));
   });
 
   test('removes imports whose resolved file does not produce CSS content', () => {

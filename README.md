@@ -76,7 +76,7 @@ export const config: AukletConfig = {
 
 - `sourceDir`: source directory relative to the package root. Defaults to `src`.
 - `outputDir`: build output directory relative to the package root. Defaults to `dist`.
-- `themes`: package theme style entries.
+- `themes`: package theme style entries. Defaults to no themes.
 - `cssDependencies`: external package style dependencies.
 
 Each `cssDependencies` entry may define:

@@ -51,8 +51,6 @@ export type LoadAukletConfigOptions = {
   cacheBust?: boolean;
 };
 
-export type StyleLanguage = 'css' | 'less';
-
 export interface ModuleCssBuildContext {
   // 当前执行 CSS 构建的包根目录，默认使用 process.cwd()。
   packageRoot?: string;
@@ -96,8 +94,6 @@ export interface ModuleCssBuildOutputConfig {
 export interface ModuleCssBuildConfig {
   // CSS 产物结构配置。
   output: ModuleCssBuildOutputConfig;
-  // 支持处理的样式文件后缀和对应语言类型。
-  styleExtensions: Record<string, StyleLanguage>;
-  // Less 文件在构建流程中的语言标识。
-  lessLanguage: StyleLanguage;
+  // 支持处理的样式文件后缀。
+  styleExtensions: Array<string>;
 }
