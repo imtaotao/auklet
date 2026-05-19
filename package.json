@@ -1,0 +1,86 @@
+{
+  "name": "auklet",
+  "version": "0.0.2",
+  "type": "module",
+  "author": "chentao.arthur",
+  "packageManager": "pnpm@10.27.0",
+  "description": "Build utilities for TypeScript packages and module CSS output.",
+  "engines": {
+    "node": ">=22",
+    "pnpm": "=10.27.0"
+  },
+  "bin": {
+    "auk": "./bin/entry.cjs",
+    "auklet": "./bin/entry.cjs"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "build": "rimraf dist && tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit --skipLibCheck",
+    "format:md": "prettier --write --parser markdown \"TESTING.md\"",
+    "format": "prettier --write \"(bin|src|dist)/**/*.{js,mjs,cjs,ts,tsx}\""
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "imports": {
+    "#auklet/*": {
+      "source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imtaotao/auklet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/imtaotao/auklet/issues"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "!dist/__tests__"
+  ],
+  "dependencies": {
+    "@types/node": "^22.17.0",
+    "@types/minimist": "^1.2.5",
+    "@vitest/coverage-v8": "^1.6.0",
+    "execa": "^9.1.0",
+    "aidly": "^1.37.0",
+    "rimraf": "^6.0.1",
+    "tsdown": "^0.22.0",
+    "postcss": "^8.5.14",
+    "chokidar": "^5.0.0",
+    "minimist": "^1.2.8",
+    "typescript": "^6.0.3",
+    "tailwindcss": "^4.2.4"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.5",
+    "prettier": "^2.4.1",
+    "vite": "^8.0.13",
+    "vitest": "^1.6.0"
+  },
+  "lint-staged": {
+    "*.js": [
+      "prettier --write"
+    ],
+    "*.ts?(x)": [
+      "prettier --parser=typescript --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
+  }
+}

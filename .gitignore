@@ -1,0 +1,26 @@
+# Logs
+logs
+*.log
+pnpm-debug.log*
+
+node_modules
+dist
+src/__tests__/.tmp/
+*.local
+.env
+.corepack
+Microsoft
+dev/
+.pnpm-store/
+
+# Editor directories and files
+docs.md
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
