@@ -8,7 +8,7 @@ import {
   type VirtualProject,
 } from '../fixtures/virtualProject';
 
-const cssOptions = normalizeAukletConfig({
+const normalizedConfig = normalizeAukletConfig({
   styles: {
     dependencies: {
       '@scope/ui': {
@@ -97,7 +97,7 @@ describe('ModuleStyleImportCollector', () => {
     writeStyleDependency(project, '@scope/ui/components/Button.css');
     writeStyleDependency(project, '@scope/ui/components/Dialog.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'pages/Article', [
       '@scope/ui/components/Button.css',
@@ -132,7 +132,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeStyleDependency(project, '@scope/ui/components/Button.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'pages/Article', [
       '@scope/ui/components/Button.css',
@@ -147,7 +147,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeStyleDependency(project, '@scope/ui/components/Button.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'pages/Article', [
       '@scope/ui/components/Button.css',
@@ -162,7 +162,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeStyleDependency(project, '@scope/ui/pages/DashboardPage.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'routes/App', [
       '@scope/ui/pages/DashboardPage.css',
@@ -177,7 +177,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeStyleDependency(project, '@scope/ui/pages/DashboardPage.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'routes/App', [
       '@scope/ui/pages/DashboardPage.css',
@@ -192,7 +192,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeStyleDependency(project, '@scope/ui/pages/DashboardPage.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'routes/App', [
       '@scope/ui/pages/DashboardPage.css',
@@ -207,7 +207,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeStyleDependency(project, '@scope/ui/components/Button.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'pages/Article', [
       '@scope/ui/components/Button.css',
@@ -221,7 +221,7 @@ describe('ModuleStyleImportCollector', () => {
       "import * as UI from '@scope/ui';",
     );
 
-    expect(() => collector.collect([file], cssOptions)).toThrow(
+    expect(() => collector.collect([file], normalizedConfig)).toThrow(
       'Namespace import is not supported for CSS auto import: @scope/ui',
     );
   });
@@ -248,7 +248,7 @@ describe('ModuleStyleImportCollector', () => {
     writeSourceCss(project, 'components/Renderer/index.css');
     writeSourceCss(project, 'components/CodeBlock/index.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'components/Renderer', [
       '../../CodeBlock/style/index.css',
@@ -290,7 +290,7 @@ describe('ModuleStyleImportCollector', () => {
     writeSourceCss(project, 'components/Chat/index.css');
     writeSourceCss(project, 'components/DetailsBlock/index.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expectCollectedStyles(entries, 'components/Chat', [
       '../../DetailsBlock/style/index.css',
@@ -324,7 +324,7 @@ describe('ModuleStyleImportCollector', () => {
       "import { MissingComponent } from '@scope/ui';",
     );
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expect(entries.size).toBe(0);
   });
@@ -337,7 +337,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeStyleDependency(project, '@scope/ui/components/Button.css');
 
-    const entries = collector.collect([file], cssOptions);
+    const entries = collector.collect([file], normalizedConfig);
 
     expect(entries.size).toBe(0);
   });
@@ -358,7 +358,7 @@ describe('ModuleStyleImportCollector', () => {
 
     const entries = collector.collect(
       [sourceFile, declarationFile],
-      cssOptions,
+      normalizedConfig,
     );
 
     expect(entries.size).toBe(0);

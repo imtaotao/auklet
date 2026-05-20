@@ -232,6 +232,33 @@ describe('ModuleCssBuilder', () => {
     expect(esButtonStyle).toBe('@import "../../Button.css";\n');
   });
 
+  test('builds theme entries from dependency themes without local theme files', async () => {
+    aukletConfig = {
+      ...sourceModuleBuildConfig,
+      styles: {
+        dependencies: {
+          '@scope/ui': {
+            themes: {
+              light: '/themes/light.css',
+              dark: '/themes/dark.css',
+            },
+          },
+        },
+      },
+    };
+    fixture.writeFile('source/index.css', '.local {}');
+
+    await createBuilder(fixture, aukletConfig).build();
+
+    expect(fixture.readFile('output/es/themes/light.css')).toBe(
+      '@import "@scope/ui/themes/light.css";\n',
+    );
+    expect(fixture.readFile('output/lib/themes/dark.css')).toBe(
+      '@import "@scope/ui/themes/dark.css";\n',
+    );
+    expect(fixture.exists('output/es/style/themes/light.css')).toBe(false);
+  });
+
   test('uses process cwd as the default package root', async () => {
     fixture.writeFile('auklet.config.ts', 'export const config = {};');
     fixture.writeFile('src/index.tsx', 'export const value = 1;');

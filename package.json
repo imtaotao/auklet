@@ -1,6 +1,6 @@
 {
   "name": "auklet",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
   "author": "chentao.arthur",
   "packageManager": "pnpm@10.27.0",
@@ -16,8 +16,9 @@
   "scripts": {
     "prepare": "husky",
     "build": "rimraf dist && tsc -p tsconfig.json",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run src/__tests__",
+    "test:examples": "pnpm build:examples && vitest run examples/__tests__",
+    "test:coverage": "vitest run src/__tests__ --coverage",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "build:examples": "pnpm --filter './examples/*' build",
     "format:md": "prettier --write --parser markdown \"TESTING.md\"",
@@ -53,9 +54,6 @@
     "!dist/__tests__"
   ],
   "dependencies": {
-    "@types/node": "^22.17.0",
-    "@types/minimist": "^1.2.5",
-    "@vitest/coverage-v8": "^1.6.0",
     "unrun": "^0.3.0",
     "execa": "^9.1.0",
     "aidly": "^1.37.0",
@@ -68,9 +66,12 @@
     "tailwindcss": "^4.2.4"
   },
   "devDependencies": {
+    "@types/node": "^22.17.0",
+    "@types/minimist": "^1.2.5",
+    "@vitest/coverage-v8": "^1.6.0",
     "husky": "^9.0.11",
-    "lint-staged": "^15.2.5",
     "prettier": "^2.4.1",
+    "lint-staged": "^15.2.5",
     "vite": "^8.0.13",
     "vitest": "^1.6.0"
   },

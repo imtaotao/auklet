@@ -1,4 +1,11 @@
-# auklet
+<div align="center">
+<h2>auklet</h2>
+
+[![NPM version](https://img.shields.io/npm/v/auklet.svg?style=flat-square)](https://www.npmjs.com/package/auklet)
+
+</div>
+
+<h1></h1>
 
 Build utilities for TypeScript packages and module CSS output.
 
@@ -87,7 +94,7 @@ Each `styles.dependencies` entry may define:
 - `themes`: theme style dependency map.
 - `components`: glob-like component style rules used to infer style imports from source imports.
 
-Legacy `sourceDir`, `outputDir`, `themes`, and `cssDependencies` fields are still supported, but new config should use `source`, `output`, and `styles`.
+Legacy `themes` and `cssDependencies` fields are still supported, but new config should use `styles`.
 
 ```ts
 export const config: AukletConfig = {

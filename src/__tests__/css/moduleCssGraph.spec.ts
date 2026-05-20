@@ -65,8 +65,8 @@ describe('ModuleCssGraph', () => {
         import type { AukletConfig } from '/auklet';
 
         export const config: AukletConfig = {
-          sourceDir: 'src',
-          outputDir: 'dist',
+          source: 'src',
+          output: 'dist',
           cssDependencies: {
             '@scope/ui': {
               global: '/style.css',
@@ -85,8 +85,8 @@ describe('ModuleCssGraph', () => {
         import type { AukletConfig } from '/auklet';
 
         export const config: AukletConfig = {
-          sourceDir: 'src',
-          outputDir: 'dist',
+          source: 'src',
+          output: 'dist',
           cssDependencies: {
             katex: {
               global: '/dist/katex.min.css',
@@ -123,8 +123,8 @@ describe('ModuleCssGraph', () => {
         import type { AukletConfig } from '/auklet';
 
         export const config: AukletConfig = {
-          sourceDir: 'src',
-          outputDir: 'dist',
+          source: 'src',
+          output: 'dist',
           themes: {
             light: './src/themes/light.css',
             dark: './src/themes/dark.css',
@@ -147,8 +147,8 @@ describe('ModuleCssGraph', () => {
         import type { AukletConfig } from '/auklet';
 
         export const config: AukletConfig = {
-          sourceDir: 'src',
-          outputDir: 'dist',
+          source: 'src',
+          output: 'dist',
           themes: {
             light: './src/themes/light.css',
             dark: './src/themes/dark.css',
@@ -251,6 +251,70 @@ describe('ModuleCssGraph', () => {
     );
   });
 
+  test('creates dev theme CSS from dependency themes without local theme files', async () => {
+    fixture.writeFile(
+      'packages/app-package/auklet.config.ts',
+      `
+        import type { AukletConfig } from '/auklet';
+
+        export const config: AukletConfig = {
+          source: 'src',
+          output: 'dist',
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                themes: {
+                  light: '/themes/light.css',
+                  dark: '/themes/dark.css',
+                },
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      'packages/ui-package/auklet.config.ts',
+      `
+        import type { AukletConfig } from '/auklet';
+
+        export const config: AukletConfig = {
+          source: 'src',
+          output: 'dist',
+          styles: {
+            themes: {
+              light: './src/themes/light.css',
+              dark: './src/themes/dark.css',
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      'packages/ui-package/src/themes/light.css',
+      '.ui-light { color-scheme: light; }',
+    );
+
+    const graph = createGraph(fixture);
+    const result = await graph.createPackageCssCode(
+      graph.parsePackageCssId('@scope/app/themes/light.css')!,
+    );
+
+    expect(result.code).toContain('.ui-light { color-scheme: light; }');
+    expectWatchFile(
+      result.watchFiles,
+      fixture,
+      appPackageRoot,
+      'auklet.config.ts',
+    );
+    expectWatchFile(
+      result.watchFiles,
+      fixture,
+      uiPackageRoot,
+      'src/themes/light.css',
+    );
+  });
+
   test('normalizes slash styles for workspace source graph checks and watch roots', () => {
     const graph = new ModuleCssGraph({
       workspaceRoot: 'C:\\repo\\workspace',
@@ -279,8 +343,8 @@ describe('ModuleCssGraph', () => {
         import type { AukletConfig } from '/auklet';
 
         export const config: AukletConfig = {
-          sourceDir: 'src',
-          outputDir: 'dist',
+          source: 'src',
+          output: 'dist',
           cssDependencies: {
             '@scope/ui': {
               global: '/style.css',
@@ -300,8 +364,8 @@ describe('ModuleCssGraph', () => {
         import type { AukletConfig } from '/auklet';
 
         export const config: AukletConfig = {
-          sourceDir: 'src',
-          outputDir: 'dist',
+          source: 'src',
+          output: 'dist',
           themes: {
             light: './src/themes/light.css',
             dark: './src/themes/dark.css',

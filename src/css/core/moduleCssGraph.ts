@@ -1,10 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  aukletConfigFile,
-  aukletDefaultCssOptions,
-  normalizeAukletConfig,
-} from '#auklet/config';
+import { aukletConfigFile, normalizeAukletConfig } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
 import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
@@ -20,6 +16,7 @@ import {
   createStyleFileKeySet,
   getExternalStyleDependencies,
   getGlobalStyleDependencies,
+  getThemeNames,
   getThemeStyleDependencies,
   groupStyleFilesByDir,
   MODULE_ENTRY,
@@ -40,7 +37,7 @@ import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver'
 import { fileWalker, toPosixPath } from '#auklet/utils';
 
 type PackageCssContext = {
-  cssOptions: NormalizedAukletConfig;
+  normalizedConfig: NormalizedAukletConfig;
   context: ResolvedModuleCssBuildContext;
   packageName: string;
   configPath: string;
@@ -180,24 +177,18 @@ export class ModuleCssGraph {
     const rawConfig = await this.loadAukletConfig(packageRoot, {
       cacheBust: true,
     });
-    const cssOptions = normalizeAukletConfig(rawConfig);
+    const normalizedConfig = normalizeAukletConfig(rawConfig);
     const context: ResolvedModuleCssBuildContext = {
       packageRoot,
-      sourceDir:
-        rawConfig.source ??
-        rawConfig.sourceDir ??
-        aukletDefaultCssOptions.source,
-      outputDir:
-        rawConfig.output ??
-        rawConfig.outputDir ??
-        aukletDefaultCssOptions.output,
+      sourceDir: normalizedConfig.source,
+      outputDir: normalizedConfig.output,
     };
     const sourceRoot = path.join(packageRoot, context.sourceDir);
     const resolver = new WorkspaceStyleResolver(this.config, context);
     const styleProcessor = new StyleProcessor(this.config, resolver);
 
     return {
-      cssOptions,
+      normalizedConfig,
       context,
       packageName: parsed.packageName,
       configPath: path.join(packageRoot, aukletConfigFile),
@@ -219,7 +210,9 @@ export class ModuleCssGraph {
     const results: Array<PackageCssLoadResult> = [];
     const imports: Array<string> = [];
 
-    for (const specifier of getGlobalStyleDependencies(context.cssOptions)) {
+    for (const specifier of getGlobalStyleDependencies(
+      context.normalizedConfig,
+    )) {
       const parsed = this.parsePackageCssId(specifier);
       if (parsed) {
         results.push(await this.createPackageCssCode(parsed));
@@ -241,7 +234,9 @@ export class ModuleCssGraph {
     const results: Array<PackageCssLoadResult> = [];
     const imports: Array<string> = [];
 
-    for (const specifier of getExternalStyleDependencies(context.cssOptions)) {
+    for (const specifier of getExternalStyleDependencies(
+      context.normalizedConfig,
+    )) {
       const external = this.toDevExternalStyleSpecifier(specifier);
       const parsed = this.parsePackageCssId(external);
       if (parsed) {
@@ -269,16 +264,18 @@ export class ModuleCssGraph {
     const targetThemeName = cssPath
       ? removeCssExtension(cssPath.slice(THEMES_ENTRY_PREFIX.length))
       : null;
+    const themeNames = getThemeNames(context.normalizedConfig);
     const root = context.styleProcessor.createRoot();
     const watchFiles = [context.configPath, ...themeFiles.values()];
     const dependencyResults: Array<PackageCssLoadResult> = [];
     const imports: Array<string> = [];
 
-    for (const [themeName, themeFile] of themeFiles) {
+    for (const themeName of themeNames) {
       if (targetThemeName && themeName !== targetThemeName) continue;
+      const themeFile = themeFiles.get(themeName);
       if (includeDependencies) {
         for (const specifier of getThemeStyleDependencies(
-          context.cssOptions,
+          context.normalizedConfig,
           themeName,
         )) {
           const parsed = this.parsePackageCssId(specifier);
@@ -289,6 +286,7 @@ export class ModuleCssGraph {
           dependencyResults.push(await this.createPackageCssCode(parsed));
         }
       }
+      if (!themeFile) continue;
       const content = context.styleProcessor.readStyleFile(themeFile);
       if (content.trim()) {
         context.styleProcessor.appendStyleContent(root, content, themeFile);
@@ -310,7 +308,7 @@ export class ModuleCssGraph {
 
   private getThemeStyleFiles(context: PackageCssContext) {
     return resolveThemeStyleFiles(
-      context.cssOptions,
+      context.normalizedConfig,
       context.context.packageRoot,
     );
   }
@@ -362,7 +360,7 @@ export class ModuleCssGraph {
     const sourceFiles = fileWalker(context.sourceRoot);
     const moduleStyleImports = importCollector.collect(
       sourceFiles,
-      context.cssOptions,
+      context.normalizedConfig,
     );
     const sourceStyleDir = path.join(
       context.sourceRoot,

@@ -40,9 +40,9 @@ export class ModuleStyleImportCollector {
     this.sourceImportAliasRules = this.createSourceImportAliasRules();
   }
 
-  collect(files: Array<string>, cssOptions: NormalizedAukletConfig) {
+  collect(files: Array<string>, config: NormalizedAukletConfig) {
     const entries = new Map<string, Array<string>>();
-    const rules = this.createAutoImportRules(cssOptions);
+    const rules = this.createAutoImportRules(config);
 
     for (const file of files) {
       if (!SOURCE_MODULE_RE.test(file) || SOURCE_DECLARATION_RE.test(file)) {
@@ -215,10 +215,10 @@ export class ModuleStyleImportCollector {
     return relative.startsWith('.') ? relative : `./${relative}`;
   }
 
-  private createAutoImportRules(cssOptions: NormalizedAukletConfig) {
+  private createAutoImportRules(config: NormalizedAukletConfig) {
     const rules: Array<AutoImportRule> = [];
     for (const [packageName, dependency] of Object.entries(
-      cssOptions.styles.dependencies,
+      config.styles.dependencies,
     )) {
       const dependencyPaths = isArray(dependency.components)
         ? dependency.components

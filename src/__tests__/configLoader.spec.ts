@@ -155,8 +155,8 @@ describe('normalizeAukletConfig', () => {
   test('normalizes legacy style fields', () => {
     expect(
       normalizeAukletConfig({
-        sourceDir: 'source',
-        outputDir: 'output',
+        source: 'source',
+        output: 'output',
         themes: {
           dark: './source/themes/dark.css',
         },

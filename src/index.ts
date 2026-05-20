@@ -19,6 +19,7 @@ export type { AukletCssPluginOptions } from '#auklet/css/vite/vitePlugin';
 export {
   aukletDefaultCssDependencyConfig,
   aukletDefaultCssOptions,
+  aukletDefaultOptions,
   normalizeAukletConfig,
 } from '#auklet/config';
 export {

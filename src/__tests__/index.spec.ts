@@ -4,9 +4,11 @@ import * as auklet from '#auklet/index';
 describe('auklet public api', () => {
   test('exports runtime APIs from the root entry', () => {
     expect(auklet.aukletDefaultCssOptions).toEqual({
+      themes: {},
+    });
+    expect(auklet.aukletDefaultOptions).toEqual({
       source: 'src',
       output: 'dist',
-      themes: {},
     });
     expect(auklet.aukletDefaultCssDependencyConfig.entry).toBe('/style.css');
     expect(auklet.normalizeAukletConfig).toEqual(expect.any(Function));

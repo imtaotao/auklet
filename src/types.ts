@@ -21,20 +21,12 @@ export type StyleOptions = {
 };
 
 export interface CssOptions {
-  // 源码目录，相对于当前包根目录。
-  source?: string;
-  // 构建产物目录，相对于当前包根目录。
-  output?: string;
   // 样式构建配置。
   styles?: StyleOptions;
   // 兼容旧配置：请使用 styles.dependencies。
   cssDependencies?: Record<string, CssDependencyGroup>;
   // 兼容旧配置：请使用 styles.themes。
   themes?: Record<string, string>;
-  // 兼容旧配置：请使用 source。
-  sourceDir?: string;
-  // 兼容旧配置：请使用 output。
-  outputDir?: string;
 }
 
 export type NormalizedStyleDependencyGroup = {
@@ -76,6 +68,10 @@ export type PackageBuildOptions = {
 };
 
 export interface AukletConfig extends CssOptions {
+  // 源码目录，相对于当前包根目录。
+  source?: string;
+  // 构建产物目录，相对于当前包根目录。
+  output?: string;
   // 是否生成 dist/es 和 dist/lib 下的模块产物；CSS 组件级产物也依赖该行为。
   modules?: boolean;
   // JavaScript/TypeScript 构建配置。
@@ -102,10 +98,10 @@ export interface ModuleCssBuildContext {
   aukletConfig?: AukletConfig;
   // 可选日志输出；核心 API 默认静默，CLI 会传入 console。
   logger?: AukletLogger;
-  // 命令行传入的源码目录，会覆盖包内 auklet.config.ts 的配置。
-  sourceDir?: string;
-  // 命令行传入的产物目录，会覆盖包内 auklet.config.ts 的配置。
-  outputDir?: string;
+  // API 传入的源码目录，会覆盖包内 auklet.config.ts 的配置。
+  source?: string;
+  // API 传入的产物目录，会覆盖包内 auklet.config.ts 的配置。
+  output?: string;
 }
 
 export interface ResolvedModuleCssBuildContext {

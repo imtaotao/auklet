@@ -9,10 +9,13 @@ import type {
 export const aukletConfigFile = 'auklet.config.ts';
 
 export const aukletDefaultCssOptions = {
+  themes: {},
+} satisfies Required<Pick<CssOptions, 'themes'>>;
+
+export const aukletDefaultOptions = {
   source: 'src',
   output: 'dist',
-  themes: {},
-} satisfies Required<Pick<CssOptions, 'source' | 'output' | 'themes'>>;
+} satisfies Required<Pick<AukletConfig, 'source' | 'output'>>;
 
 export const aukletDefaultCssDependencyConfig: CssDependencyGroup = {
   entry: '/style.css',
@@ -34,9 +37,9 @@ export const normalizeAukletConfig = (config: AukletConfig = {}) => {
     config.styles?.dependencies ?? config.cssDependencies ?? {};
 
   return {
-    source: config.source ?? config.sourceDir ?? aukletDefaultCssOptions.source,
+    source: config.source ?? aukletDefaultOptions.source,
 
-    output: config.output ?? config.outputDir ?? aukletDefaultCssOptions.output,
+    output: config.output ?? aukletDefaultOptions.output,
 
     build: config.build,
 

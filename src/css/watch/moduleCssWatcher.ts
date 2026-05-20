@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
-import { aukletConfigFile, aukletDefaultCssOptions } from '#auklet/config';
+import { aukletConfigFile, aukletDefaultOptions } from '#auklet/config';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
 import { ModuleCssBuilder } from '#auklet/css/production/moduleCssBuilder';
 import type {
@@ -56,12 +56,9 @@ export class ModuleCssWatcher {
   }
 
   private async refreshWatcher() {
-    const cssOptions = this.context.aukletConfig ?? {};
+    const aukletConfig = this.context.aukletConfig ?? {};
     const sourceDir =
-      cssOptions.source ??
-      cssOptions.sourceDir ??
-      this.context.sourceDir ??
-      aukletDefaultCssOptions.source;
+      this.context.source ?? aukletConfig.source ?? aukletDefaultOptions.source;
     const sourceRoot = path.join(this.context.packageRoot, sourceDir);
     const configPath = path.join(this.context.packageRoot, aukletConfigFile);
     const watchPaths = [sourceRoot, configPath].filter((file) =>

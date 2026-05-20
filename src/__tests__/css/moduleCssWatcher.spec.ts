@@ -71,7 +71,7 @@ describe('ModuleCssWatcher', () => {
 
   test('watches configured source root and auklet config file', async () => {
     const aukletConfig: AukletConfig = {
-      sourceDir: 'source',
+      source: 'source',
     };
     project.writeFile('source/index.tsx', 'export const value = 1;');
     project.writeFile('auklet.config.ts', 'export const config = {};');

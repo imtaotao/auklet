@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { aukletDefaultCssOptions, normalizeAukletConfig } from '#auklet/config';
+import { normalizeAukletConfig } from '#auklet/config';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
 import type {
-  CssOptions,
   AukletLogger,
   ModuleCssBuildConfig,
   ModuleCssBuildContext,
@@ -20,6 +19,7 @@ import {
   groupStyleFilesByDir,
   getExternalStyleDependencies,
   getGlobalStyleDependencies,
+  getThemeNames,
   getThemeStyleDependencies,
   resolveThemeStyleFiles,
 } from '#auklet/css/core/styleEntry';
@@ -43,44 +43,47 @@ export class ModuleCssBuilder {
   ) {
     this.context = {
       packageRoot: process.cwd(),
-      sourceDir: context.sourceDir,
-      outputDir: context.outputDir,
+      source: context.source,
+      output: context.output,
       ...context,
     };
     this.logger = context.logger;
-    this.applyContext(this.createBuildContext({}));
+    this.applyContext(this.createBuildContext(normalizeAukletConfig({})));
   }
 
   async build(options: ModuleCssBuildOptions = {}) {
     const rawConfig = options.aukletConfig ?? this.context.aukletConfig ?? {};
-    const cssOptions = normalizeAukletConfig(rawConfig);
+    const normalizedConfig = normalizeAukletConfig(rawConfig);
     const logger = options.logger ?? this.logger;
-    const context = this.createBuildContext(rawConfig);
+    const context = this.createBuildContext(normalizedConfig);
 
     this.applyContext(context);
 
     logger?.log?.(`[auklet:css] build ${path.basename(context.packageRoot)}`);
 
     const sourceFiles = fileWalker(this.srcRoot);
-    const themeFiles = resolveThemeStyleFiles(cssOptions, context.packageRoot);
+    const themeFiles = resolveThemeStyleFiles(
+      normalizedConfig,
+      context.packageRoot,
+    );
     const themeFileKeys = createStyleFileKeySet(themeFiles.values());
     const styleFiles = this.getStyleFiles(sourceFiles).filter(
       (styleFile) => !themeFileKeys.has(createStyleFileKey(styleFile)),
     );
     const moduleStyleImports = this.importCollector.collect(
       sourceFiles,
-      cssOptions,
+      normalizedConfig,
     );
     const outputs: Array<string> = [];
     const packageStyle = this.writePackageStyles(
       styleFiles,
       themeFiles,
-      cssOptions,
+      normalizedConfig,
       context,
     );
     if (packageStyle) outputs.push(packageStyle);
 
-    if (!cssOptions.modules) {
+    if (!normalizedConfig.modules) {
       this.logOutputs(context, styleFiles, outputs, logger);
       return;
     }
@@ -91,15 +94,20 @@ export class ModuleCssBuilder {
       this.copyStyleFiles(styleFiles, outRoot);
       const themeStyles = this.writeThemeStyles(themeFiles, outRoot);
       const themeEntries = this.writeThemeEntries(
-        themeStyles,
+        new Map(
+          themeStyles.map((themeStyle) => [
+            themeStyle.themeName,
+            themeStyle.file,
+          ]),
+        ),
         outRoot,
-        cssOptions,
+        normalizedConfig,
       );
-      const externalStyle = this.writeExternalStyle(outRoot, cssOptions);
+      const externalStyle = this.writeExternalStyle(outRoot, normalizedConfig);
       const moduleStyle = this.writeModuleStyle(styleFiles, outRoot);
       const entryStyle = this.writeEntryStyle(
         outRoot,
-        cssOptions,
+        normalizedConfig,
         themeStyles.map((themeStyle) => themeStyle.file),
         moduleStyle,
       );
@@ -146,19 +154,11 @@ export class ModuleCssBuilder {
     }
   }
 
-  private createBuildContext(cssOptions: CssOptions) {
+  private createBuildContext(config: NormalizedAukletConfig) {
     return {
       packageRoot: this.context.packageRoot,
-      sourceDir:
-        cssOptions.source ??
-        cssOptions.sourceDir ??
-        this.context.sourceDir ??
-        aukletDefaultCssOptions.source,
-      outputDir:
-        cssOptions.output ??
-        cssOptions.outputDir ??
-        this.context.outputDir ??
-        aukletDefaultCssOptions.output,
+      sourceDir: this.context.source ?? config.source,
+      outputDir: this.context.output ?? config.output,
     };
   }
 
@@ -287,17 +287,18 @@ export class ModuleCssBuilder {
   }
 
   private writeThemeEntries(
-    themeStyles: Array<{ themeName: string; file: string }>,
+    themeStyles: Map<string, string>,
     outRoot: string,
     buildConfig: NormalizedAukletConfig,
   ) {
     const outputs: Array<string> = [];
     const themesDir = path.join(outRoot, THEMES_DIR);
 
-    for (const { themeName, file } of themeStyles) {
+    for (const themeName of getThemeNames(buildConfig)) {
       const target = path.join(themesDir, `${themeName}.css`);
       const root = this.styleProcessor.createRoot();
       const targetDir = path.dirname(target);
+      const themeStyle = themeStyles.get(themeName);
 
       for (const specifier of getThemeStyleDependencies(
         buildConfig,
@@ -305,10 +306,14 @@ export class ModuleCssBuilder {
       )) {
         this.styleProcessor.appendImportRule(root, specifier);
       }
-      this.styleProcessor.appendImportRule(
-        root,
-        this.toRelativeImportSpecifier(targetDir, file),
-      );
+      if (themeStyle) {
+        this.styleProcessor.appendImportRule(
+          root,
+          this.toRelativeImportSpecifier(targetDir, themeStyle),
+        );
+      }
+
+      if (!root.nodes?.length) continue;
 
       fs.mkdirSync(targetDir, { recursive: true });
       fs.writeFileSync(target, this.styleProcessor.stringify(root));
