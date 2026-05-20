@@ -4,6 +4,7 @@ import { aukletConfigFile, normalizeAukletConfig } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
 import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
+import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import {
   normalizeCssFileKey,
   toCssFsSpecifier,
@@ -12,17 +13,13 @@ import {
 import {
   createImportCode,
   EXTERNAL_ENTRY,
-  createStyleFileKey,
-  createStyleFileKeySet,
   getExternalStyleDependencies,
   getGlobalStyleDependencies,
-  getThemeNames,
   getThemeStyleDependencies,
   groupStyleFilesByDir,
   MODULE_ENTRY,
   parsePackageStyleSpecifier,
   removeCssExtension,
-  resolveThemeStyleFiles,
   STYLE_ENTRY,
   THEMES_ENTRY_PREFIX,
 } from '#auklet/css/core/styleEntry';
@@ -34,11 +31,12 @@ import type {
   NormalizedAukletConfig,
 } from '#auklet/types';
 import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
-import { fileWalker, toPosixPath } from '#auklet/utils';
+import { toPosixPath } from '#auklet/utils';
 
 type PackageCssContext = {
   normalizedConfig: NormalizedAukletConfig;
   context: ResolvedModuleCssBuildContext;
+  packageContext: StylePackageContext;
   packageName: string;
   configPath: string;
   resolver: WorkspaceStyleResolver;
@@ -183,18 +181,21 @@ export class ModuleCssGraph {
       sourceDir: normalizedConfig.source,
       outputDir: normalizedConfig.output,
     };
-    const sourceRoot = path.join(packageRoot, context.sourceDir);
-    const resolver = new WorkspaceStyleResolver(this.config, context);
-    const styleProcessor = new StyleProcessor(this.config, resolver);
+    const packageContext = new StylePackageContext({
+      config: this.config,
+      context,
+      normalizedConfig,
+    });
 
     return {
       normalizedConfig,
       context,
+      packageContext,
       packageName: parsed.packageName,
       configPath: path.join(packageRoot, aukletConfigFile),
-      resolver,
-      sourceRoot,
-      styleProcessor,
+      resolver: packageContext.resolver,
+      sourceRoot: packageContext.sourceRoot,
+      styleProcessor: packageContext.styleProcessor,
     };
   }
 
@@ -260,11 +261,10 @@ export class ModuleCssGraph {
     cssPath?: string,
     includeDependencies = true,
   ) {
-    const themeFiles = this.getThemeStyleFiles(context);
+    const { themeFiles, themeNames } = context.packageContext;
     const targetThemeName = cssPath
       ? removeCssExtension(cssPath.slice(THEMES_ENTRY_PREFIX.length))
       : null;
-    const themeNames = getThemeNames(context.normalizedConfig);
     const root = context.styleProcessor.createRoot();
     const watchFiles = [context.configPath, ...themeFiles.values()];
     const dependencyResults: Array<PackageCssLoadResult> = [];
@@ -306,19 +306,8 @@ export class ModuleCssGraph {
     );
   }
 
-  private getThemeStyleFiles(context: PackageCssContext) {
-    return resolveThemeStyleFiles(
-      context.normalizedConfig,
-      context.context.packageRoot,
-    );
-  }
-
   private createModuleCssCode(context: PackageCssContext) {
-    const themeFiles = this.getThemeStyleFiles(context);
-    const themeFileKeys = createStyleFileKeySet(themeFiles.values());
-    const styleFiles = this.getStyleFiles(context.sourceRoot).filter(
-      (styleFile) => !themeFileKeys.has(createStyleFileKey(styleFile)),
-    );
+    const { styleFiles } = context.packageContext;
     const root = context.styleProcessor.createRoot();
     const seen = new Set<string>();
 
@@ -340,11 +329,7 @@ export class ModuleCssGraph {
     cssPath: string,
   ) {
     const sourceModuleDir = removeCssExtension(cssPath);
-    const themeFiles = this.getThemeStyleFiles(context);
-    const themeFileKeys = createStyleFileKeySet(themeFiles.values());
-    const styleFiles = this.getStyleFiles(context.sourceRoot).filter(
-      (styleFile) => !themeFileKeys.has(createStyleFileKey(styleFile)),
-    );
+    const { styleFiles, sourceFiles } = context.packageContext;
     const styleFilesByDir = groupStyleFilesByDir(
       context.sourceRoot,
       styleFiles,
@@ -357,7 +342,6 @@ export class ModuleCssGraph {
       context.resolver,
       this.config.styleExtensions,
     );
-    const sourceFiles = fileWalker(context.sourceRoot);
     const moduleStyleImports = importCollector.collect(
       sourceFiles,
       context.normalizedConfig,
@@ -410,13 +394,6 @@ export class ModuleCssGraph {
         ...sourceFiles.filter((file) => /\.(ts|tsx)$/.test(file)),
       ],
     });
-  }
-
-  private getStyleFiles(sourceRoot: string) {
-    if (!fs.existsSync(sourceRoot)) return [];
-    return fileWalker(sourceRoot).filter((file) =>
-      this.config.styleExtensions.includes(path.extname(file)),
-    );
   }
 
   private toDevModuleImportSpecifier(

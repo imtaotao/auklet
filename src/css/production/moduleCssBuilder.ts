@@ -2,8 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeAukletConfig } from '#auklet/config';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
-import { StyleProcessor } from '#auklet/css/core/styleProcessor';
-import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
+import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import type {
   AukletLogger,
   ModuleCssBuildConfig,
@@ -14,17 +13,13 @@ import type {
 } from '#auklet/types';
 import {
   THEMES_DIR,
-  createStyleFileKey,
-  createStyleFileKeySet,
   groupStyleFilesByDir,
   getExternalStyleDependencies,
   getGlobalStyleDependencies,
-  getThemeNames,
   getThemeStyleDependencies,
-  resolveThemeStyleFiles,
 } from '#auklet/css/core/styleEntry';
 import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
-import { fileWalker, getSourceModuleDir, toPosixPath } from '#auklet/utils';
+import { getSourceModuleDir, toPosixPath } from '#auklet/utils';
 
 const EMPTY_MODULE_STYLE_ENTRY_COMMENT =
   '/* Empty style entry kept so automated tooling can resolve this module CSS path. */\n';
@@ -34,8 +29,7 @@ export class ModuleCssBuilder {
   private readonly logger?: AukletLogger;
   private srcRoot: string;
   private resolver: WorkspaceStyleResolver;
-  private styleProcessor: StyleProcessor;
-  private importCollector: ModuleStyleImportCollector;
+  private styleProcessor: StylePackageContext['styleProcessor'];
 
   constructor(
     context: ModuleCssBuildContext = {},
@@ -48,7 +42,12 @@ export class ModuleCssBuilder {
       ...context,
     };
     this.logger = context.logger;
-    this.applyContext(this.createBuildContext(normalizeAukletConfig({})));
+    this.applyContext(
+      this.createPackageContext(
+        this.createBuildContext(normalizeAukletConfig({})),
+        normalizeAukletConfig({}),
+      ),
+    );
   }
 
   async build(options: ModuleCssBuildOptions = {}) {
@@ -56,22 +55,15 @@ export class ModuleCssBuilder {
     const normalizedConfig = normalizeAukletConfig(rawConfig);
     const logger = options.logger ?? this.logger;
     const context = this.createBuildContext(normalizedConfig);
+    const packageContext = this.createPackageContext(context, normalizedConfig);
 
-    this.applyContext(context);
+    this.applyContext(packageContext);
 
     logger?.log?.(`[auklet:css] build ${path.basename(context.packageRoot)}`);
 
-    const sourceFiles = fileWalker(this.srcRoot);
-    const themeFiles = resolveThemeStyleFiles(
-      normalizedConfig,
-      context.packageRoot,
-    );
-    const themeFileKeys = createStyleFileKeySet(themeFiles.values());
-    const styleFiles = this.getStyleFiles(sourceFiles).filter(
-      (styleFile) => !themeFileKeys.has(createStyleFileKey(styleFile)),
-    );
-    const moduleStyleImports = this.importCollector.collect(
-      sourceFiles,
+    const { sourceFiles, themeFiles, styleFiles } = packageContext;
+    const moduleStyleImports = packageContext.importCollector.collect(
+      packageContext.sourceFiles,
       normalizedConfig,
     );
     const outputs: Array<string> = [];
@@ -101,7 +93,7 @@ export class ModuleCssBuilder {
           ]),
         ),
         outRoot,
-        normalizedConfig,
+        packageContext,
       );
       const externalStyle = this.writeExternalStyle(outRoot, normalizedConfig);
       const moduleStyle = this.writeModuleStyle(styleFiles, outRoot);
@@ -130,12 +122,6 @@ export class ModuleCssBuilder {
     this.logOutputs(context, styleFiles, outputs, logger);
   }
 
-  private getStyleFiles(files: Array<string>) {
-    return files.filter((file) =>
-      this.config.styleExtensions.includes(path.extname(file)),
-    );
-  }
-
   private logOutputs(
     context: ResolvedModuleCssBuildContext,
     styleFiles: Array<string>,
@@ -162,16 +148,21 @@ export class ModuleCssBuilder {
     };
   }
 
-  private applyContext(context: ResolvedModuleCssBuildContext) {
-    this.srcRoot = path.join(context.packageRoot, context.sourceDir);
-    this.resolver = new WorkspaceStyleResolver(this.config, context);
-    this.styleProcessor = new StyleProcessor(this.config, this.resolver);
-    this.importCollector = new ModuleStyleImportCollector(
-      this.srcRoot,
-      context.packageRoot,
-      this.resolver,
-      this.config.styleExtensions,
-    );
+  private createPackageContext(
+    context: ResolvedModuleCssBuildContext,
+    normalizedConfig: NormalizedAukletConfig,
+  ) {
+    return new StylePackageContext({
+      config: this.config,
+      context,
+      normalizedConfig,
+    });
+  }
+
+  private applyContext(packageContext: StylePackageContext) {
+    this.srcRoot = packageContext.sourceRoot;
+    this.resolver = packageContext.resolver;
+    this.styleProcessor = packageContext.styleProcessor;
   }
 
   private copyStyleFiles(files: Array<string>, outRoot: string) {
@@ -289,19 +280,19 @@ export class ModuleCssBuilder {
   private writeThemeEntries(
     themeStyles: Map<string, string>,
     outRoot: string,
-    buildConfig: NormalizedAukletConfig,
+    packageContext: StylePackageContext,
   ) {
     const outputs: Array<string> = [];
     const themesDir = path.join(outRoot, THEMES_DIR);
 
-    for (const themeName of getThemeNames(buildConfig)) {
+    for (const themeName of packageContext.themeNames) {
       const target = path.join(themesDir, `${themeName}.css`);
       const root = this.styleProcessor.createRoot();
       const targetDir = path.dirname(target);
       const themeStyle = themeStyles.get(themeName);
 
       for (const specifier of getThemeStyleDependencies(
-        buildConfig,
+        packageContext.normalizedConfig,
         themeName,
       )) {
         this.styleProcessor.appendImportRule(root, specifier);

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { POSIX_SEPARATOR } from '#auklet/utils';
+import { parsePackageStyleSpecifier } from '#auklet/css/core/styleEntry';
 import type {
   ModuleCssBuildConfig,
   ResolvedModuleCssBuildContext,
@@ -43,7 +44,7 @@ export class WorkspaceStyleResolver {
   }
 
   toOutputStyleSpecifier(specifier: string, outRoot: string) {
-    const parsed = this.parsePackageStyleSpecifier(specifier);
+    const parsed = parsePackageStyleSpecifier(specifier);
     if (!parsed) return specifier;
     const { packageName, stylePath } = parsed;
     const currentOutputFormat = path.basename(outRoot);
@@ -59,7 +60,7 @@ export class WorkspaceStyleResolver {
   }
 
   toExternalStyleSpecifier(specifier: string, outRoot: string) {
-    const parsed = this.parsePackageStyleSpecifier(specifier);
+    const parsed = parsePackageStyleSpecifier(specifier);
     if (!parsed) return specifier;
     const { packageName, stylePath } = parsed;
     const currentOutputFormat = path.basename(outRoot);
@@ -99,20 +100,5 @@ export class WorkspaceStyleResolver {
       };
     }
     return null;
-  }
-
-  private parsePackageStyleSpecifier(specifier: string) {
-    if (specifier.startsWith('.')) return null;
-
-    const parts = specifier.split(POSIX_SEPARATOR);
-    const packageName = specifier.startsWith('@')
-      ? `${parts.shift() ?? ''}${POSIX_SEPARATOR}${parts.shift() ?? ''}`
-      : parts.shift() ?? '';
-
-    if (!packageName) return null;
-    return {
-      packageName,
-      stylePath: parts.join(POSIX_SEPARATOR),
-    };
   }
 }
