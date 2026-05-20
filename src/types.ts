@@ -58,10 +58,13 @@ export interface NormalizedAukletConfig {
 }
 
 export type PackageBuildFormat = 'cjs' | 'esm' | 'iife';
+export type PackageBuildPlatform = 'node' | 'neutral' | 'browser';
 
 export type PackageBuildOptions = {
   // 包级 bundle 产物格式，例如 cjs、esm、iife。
   formats?: Array<PackageBuildFormat>;
+  // 构建目标运行平台，默认 neutral，不假设 Node 或浏览器环境。
+  platform?: PackageBuildPlatform;
   // 自定义 bundle banner；未传入时根据 package.json 自动生成。
   banner?: string;
   // 额外标记为外部依赖的包名；会和 package.json dependencies、peerDependencies 一起传给 tsdown。

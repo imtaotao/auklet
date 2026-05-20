@@ -106,6 +106,7 @@ export const config: AukletConfig = {
 
 - `modules`: whether to generate unbundled `dist/es` and `dist/lib` output. CSS module style entries also follow this flag.
 - `formats`: package bundle formats: `esm`, `cjs`, or `iife`.
+- `platform`: build target runtime platform: `neutral`, `node`, or `browser`. Defaults to `neutral`.
 - `banner`: custom bundle banner.
 - `externals`: additional external packages.
 - `tsconfig`: TypeScript config path relative to the package root.

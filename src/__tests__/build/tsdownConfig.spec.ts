@@ -26,6 +26,12 @@ describe('defineKernelPackageConfigFromOptions', () => {
       dependencies: {
         aidly: '^1.0.0',
       },
+      optionalDependencies: {
+        kleur: '^4.0.0',
+      },
+      devDependencies: {
+        '@scope/dev-tool': '^1.0.0',
+      },
       peerDependencies: {
         react: '^19.0.0',
       },
@@ -38,6 +44,14 @@ describe('defineKernelPackageConfigFromOptions', () => {
   });
 
   test('maps auk build options to bundle and module tsdown configs', () => {
+    project.writeFiles({
+      'src/index.ts': 'export const value = 1;',
+      'src/components/Button/index.tsx': 'export const Button = () => null;',
+      'src/components/Button/index.spec.tsx': 'export const ignored = true;',
+      'src/types.d.ts': 'export type Ignored = string;',
+      'src/__tests__/fixture.ts': 'export const ignored = true;',
+    });
+
     const configs = defineKernelPackageConfigFromOptions(project.root, {
       modules: true,
       build: {
@@ -50,10 +64,14 @@ describe('defineKernelPackageConfigFromOptions', () => {
     expect(configs).toHaveLength(4);
     expect(configs[0]).toMatchObject({
       cwd: project.root,
-      entry: ['src/index.ts'],
+      root: project.root,
+      entry: {
+        index: 'src/index.ts',
+      },
       format: 'esm',
       outDir: 'dist',
-      dts: false,
+      dts: true,
+      platform: 'neutral',
       tsconfig: path.join(project.root, 'tsconfig.package.json'),
       deps: {
         neverBundle: [
@@ -61,6 +79,10 @@ describe('defineKernelPackageConfigFromOptions', () => {
           'aidly/*',
           'react',
           'react/*',
+          'kleur',
+          'kleur/*',
+          '@scope/dev-tool',
+          '@scope/dev-tool/*',
           '@scope/external',
           '@scope/external/*',
         ],
@@ -71,19 +93,16 @@ describe('defineKernelPackageConfigFromOptions', () => {
     });
     expect(configs[1]).toMatchObject({
       format: 'esm',
+      dts: false,
       outputOptions: {
         entryFileNames: '[name].mjs',
       },
     });
     expect(configs[2]).toMatchObject({
-      entry: [
-        'src/**/*.ts',
-        'src/**/*.tsx',
-        '!src/**/*.d.ts',
-        '!src/**/__tests__/**',
-        '!src/**/*.spec.ts',
-        '!src/**/*.spec.tsx',
-      ],
+      entry: {
+        'components/Button/index': 'src/components/Button/index.tsx',
+        index: 'src/index.ts',
+      },
       format: 'esm',
       outDir: 'dist/es',
       dts: true,
@@ -93,6 +112,10 @@ describe('defineKernelPackageConfigFromOptions', () => {
           'aidly/*',
           'react',
           'react/*',
+          'kleur',
+          'kleur/*',
+          '@scope/dev-tool',
+          '@scope/dev-tool/*',
           '@scope/external',
           '@scope/external/*',
         ],
@@ -134,6 +157,55 @@ describe('defineKernelPackageConfigFromOptions', () => {
 
     expect(configs[0]).toMatchObject({
       banner: '/* custom banner */',
+    });
+  });
+
+  test('uses custom build platform', () => {
+    const configs = defineKernelPackageConfigFromOptions(project.root, {
+      build: {
+        formats: ['cjs'],
+        platform: 'node',
+      },
+    });
+
+    expect(configs[0]).toMatchObject({
+      platform: 'node',
+    });
+  });
+
+  test('uses custom output directory for bundle and module configs', () => {
+    const configs = defineKernelPackageConfigFromOptions(project.root, {
+      output: 'build',
+      modules: true,
+      build: {
+        formats: ['cjs'],
+      },
+    });
+
+    expect(configs[0]).toMatchObject({
+      outDir: 'build',
+    });
+    expect(configs[1]).toMatchObject({
+      outDir: path.join('build', 'es'),
+    });
+    expect(configs[2]).toMatchObject({
+      outDir: path.join('build', 'lib'),
+    });
+  });
+
+  test('uses tsx package entry when ts entry is missing', () => {
+    project.writeFile('src/index.tsx', 'export const Component = () => null;');
+
+    const configs = defineKernelPackageConfigFromOptions(project.root, {
+      build: {
+        formats: ['esm'],
+      },
+    });
+
+    expect(configs[0]).toMatchObject({
+      entry: {
+        index: 'src/index.tsx',
+      },
     });
   });
 
