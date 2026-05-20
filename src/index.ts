@@ -6,15 +6,20 @@ export type {
   ModuleCssBuildConfig,
   ModuleCssBuildContext,
   ModuleCssBuildOptions,
+  NormalizedAukletConfig,
+  NormalizedStyleDependencyGroup,
   PackageBuildFormat,
   PackageBuildOptions,
   ResolvedModuleCssBuildContext,
+  StyleDependencyGroup,
+  StyleOptions,
 } from '#auklet/types';
 export type { RunTsdownOptions } from '#auklet/build/runTsdown';
 export type { AukletCssPluginOptions } from '#auklet/css/vite/vitePlugin';
 export {
   aukletDefaultCssDependencyConfig,
   aukletDefaultCssOptions,
+  normalizeAukletConfig,
 } from '#auklet/config';
 export {
   loadAukletConfig,

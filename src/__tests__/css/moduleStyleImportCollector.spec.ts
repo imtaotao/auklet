@@ -1,20 +1,34 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
-import type { CssOptions } from '#auklet/types';
+import { normalizeAukletConfig } from '#auklet/config';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../fixtures/virtualProject';
 
-const cssOptions: CssOptions = {
-  cssDependencies: {
-    '@scope/ui': {
-      component: ['/pages/**.css', '/components/**.css'],
+const cssOptions = normalizeAukletConfig({
+  styles: {
+    dependencies: {
+      '@scope/ui': {
+        components: ['/pages/**.css', '/components/**.css'],
+      },
     },
   },
-};
+});
+
+const singleComponentRuleOptions = normalizeAukletConfig({
+  styles: {
+    dependencies: {
+      '@scope/ui': {
+        components: '/components/**.css',
+      },
+    },
+  },
+});
+
+const emptyOptions = normalizeAukletConfig();
 
 const writeSourceFile = (
   project: VirtualProject,
@@ -99,13 +113,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeStyleDependency(project, '@scope/ui/components/Button.css');
 
-    const entries = collector.collect([file], {
-      cssDependencies: {
-        '@scope/ui': {
-          component: '/components/**.css',
-        },
-      },
-    });
+    const entries = collector.collect([file], singleComponentRuleOptions);
 
     expectCollectedStyles(entries, 'pages/Article', [
       '@scope/ui/components/Button.css',
@@ -261,7 +269,7 @@ describe('ModuleStyleImportCollector', () => {
     writeSourceCss(project, 'components/Renderer/index.css');
     writeSourceCss(project, 'components/CodeBlock/index.css');
 
-    const entries = collector.collect([file], {});
+    const entries = collector.collect([file], emptyOptions);
 
     expectCollectedStyles(entries, 'components/Renderer', [
       '../../CodeBlock/style/index.css',
@@ -302,7 +310,7 @@ describe('ModuleStyleImportCollector', () => {
     );
     writeSourceCss(project, 'components/Button.css');
 
-    const entries = collector.collect([file], {});
+    const entries = collector.collect([file], emptyOptions);
 
     expectCollectedStyles(entries, 'components/Renderer', [
       '../../Button/style/index.css',

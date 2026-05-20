@@ -10,8 +10,15 @@ const emptyStyleEntry =
   '/* Empty style entry kept so automated tooling can resolve this module CSS path. */\n';
 
 const sourceBuildConfig = {
-  sourceDir: 'source',
-  outputDir: 'output',
+  source: 'source',
+  output: 'output',
+} satisfies AukletConfig;
+
+const sourceModuleBuildConfig = {
+  ...sourceBuildConfig,
+  build: {
+    modules: true,
+  },
 } satisfies AukletConfig;
 
 const createBuilder = (fixture: VirtualProject, aukletConfig: AukletConfig) => {
@@ -46,12 +53,17 @@ describe('ModuleCssBuilder', () => {
 
   test('rewrites legacy output-format package style imports per format', async () => {
     aukletConfig = {
-      sourceDir: 'source',
-      outputDir: 'output',
-      cssDependencies: {
-        '@scope/ui': {
-          global: '/es/style/index.css',
+      source: 'source',
+      output: 'output',
+      styles: {
+        dependencies: {
+          '@scope/ui': {
+            entry: '/es/style/index.css',
+          },
         },
+      },
+      build: {
+        modules: true,
       },
     };
     fixture.writeFile('node_modules/@scope/ui/es/style/index.css', '.esm {}');
@@ -79,7 +91,7 @@ describe('ModuleCssBuilder', () => {
 
   test('builds same-package module CSS entries without cssDependencies', async () => {
     writePackageWithSourceImports(fixture);
-    aukletConfig = sourceBuildConfig;
+    aukletConfig = sourceModuleBuildConfig;
     fixture.writeFile(
       'source/components/Renderer/index.tsx',
       `
@@ -119,7 +131,7 @@ describe('ModuleCssBuilder', () => {
 
   test('builds module CSS entries for source modules without own CSS', async () => {
     writePackageWithSourceImports(fixture);
-    aukletConfig = sourceBuildConfig;
+    aukletConfig = sourceModuleBuildConfig;
     fixture.writeFile(
       'source/components/Renderer/index.tsx',
       `
@@ -148,7 +160,7 @@ describe('ModuleCssBuilder', () => {
   });
 
   test('builds empty module CSS entries for second-level tsx modules without styles', async () => {
-    aukletConfig = sourceBuildConfig;
+    aukletConfig = sourceModuleBuildConfig;
     fixture.writeFile('source/index.ts', 'export const root = true;');
     fixture.writeFile(
       'source/components/Plain/data.ts',
@@ -197,7 +209,7 @@ describe('ModuleCssBuilder', () => {
 
   test('builds same-name style entries for flat source modules', async () => {
     writePackageWithSourceImports(fixture);
-    aukletConfig = sourceBuildConfig;
+    aukletConfig = sourceModuleBuildConfig;
     fixture.writeFile(
       'source/components/Renderer.tsx',
       `
@@ -240,5 +252,25 @@ describe('ModuleCssBuilder', () => {
     const rootStyle = fixture.readFile('dist/index.css');
 
     expect(rootStyle).toContain('.root { color: red; }');
+  });
+
+  test('builds only package CSS when module output is disabled', async () => {
+    aukletConfig = sourceBuildConfig;
+    fixture.writeFile(
+      'source/components/Button/index.tsx',
+      'export const Button = null;',
+    );
+    fixture.writeFile('source/components/Button/index.css', '.button {}');
+
+    await createBuilder(fixture, aukletConfig).build();
+
+    const packageStyle = fixture.readFile('output/index.css');
+
+    expect(packageStyle).toContain('.button {}');
+    expect(fixture.exists('output/es/style/index.css')).toBe(false);
+    expect(fixture.exists('output/es/components/Button/style/index.css')).toBe(
+      false,
+    );
+    expect(fixture.exists('output/lib/style/index.css')).toBe(false);
   });
 });

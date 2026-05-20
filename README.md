@@ -45,22 +45,24 @@ Create `auklet.config.ts` in the package root:
 import type { AukletConfig } from 'auklet';
 
 export const config: AukletConfig = {
-  sourceDir: 'src',
-  outputDir: 'dist',
-  themes: {
-    light: './src/themes/light.css',
-    dark: './src/themes/dark.css',
-  },
-  cssDependencies: {
-    '@scope/ui': {
-      global: '/style.css',
-      component: ['/components/**.css'],
+  source: 'src',
+  output: 'dist',
+  styles: {
+    themes: {
+      light: './src/themes/light.css',
+      dark: './src/themes/dark.css',
     },
-    '@scope/theme': {
-      global: '/style.css',
-      themes: {
-        light: '/themes/light.css',
-        dark: '/themes/dark.css',
+    dependencies: {
+      '@scope/ui': {
+        entry: '/style.css',
+        components: ['/components/**.css'],
+      },
+      '@scope/theme': {
+        entry: '/style.css',
+        themes: {
+          light: '/themes/light.css',
+          dark: '/themes/dark.css',
+        },
       },
     },
   },
@@ -72,18 +74,33 @@ export const config: AukletConfig = {
 };
 ```
 
-### CSS Options
+### Style Options
 
-- `sourceDir`: source directory relative to the package root. Defaults to `src`.
-- `outputDir`: build output directory relative to the package root. Defaults to `dist`.
-- `themes`: package theme style entries. Defaults to no themes.
-- `cssDependencies`: external package style dependencies.
+- `source`: source directory relative to the package root. Defaults to `src`.
+- `output`: build output directory relative to the package root. Defaults to `dist`.
+- `styles.themes`: package theme style entries. Defaults to no themes.
+- `styles.dependencies`: external package style dependencies.
 
-Each `cssDependencies` entry may define:
+Each `styles.dependencies` entry may define:
 
-- `global`: package-level style dependency.
+- `entry`: package-level style dependency.
 - `themes`: theme style dependency map.
-- `component`: glob-like component style rules used to infer style imports from source imports.
+- `components`: glob-like component style rules used to infer style imports from source imports.
+
+Legacy `sourceDir`, `outputDir`, `themes`, and `cssDependencies` fields are still supported, but new config should use `source`, `output`, and `styles`.
+
+```ts
+export const config: AukletConfig = {
+  styles: {
+    dependencies: {
+      '@scope/ui': {
+        entry: '/style.css',
+        components: ['/components/**.css'],
+      },
+    },
+  },
+};
+```
 
 ### Build Options
 
@@ -95,9 +112,11 @@ Each `cssDependencies` entry may define:
 
 ## CSS Output
 
-`build-css` generates package and module style entries under the output directory.
+`build-css` always generates the package-level `index.css` when source styles exist.
 
-Typical output includes:
+Module style entries under `dist/es` and `dist/lib` are generated only when `build.modules` is `true`, matching the JavaScript module output.
+
+Typical module output includes:
 
 ```text
 dist/

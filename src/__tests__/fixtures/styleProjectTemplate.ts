@@ -20,24 +20,29 @@ export type StyleProjectTemplate = {
 
 const createAukletConfig = () => `
   export const config = {
-    sourceDir: '${sourceDir}',
-    outputDir: '${outputDir}',
-    themes: {
-      light: './${sourceDir}/themes/light.css',
-      dark: './${sourceDir}/themes/dark.css',
-    },
-    cssDependencies: {
-      '@scope/theme': {
-        global: '/style.css',
-        themes: {
-          light: '/themes/light.css',
-          dark: '/themes/dark.css',
+    source: '${sourceDir}',
+    output: '${outputDir}',
+    styles: {
+      themes: {
+        light: './${sourceDir}/themes/light.css',
+        dark: './${sourceDir}/themes/dark.css',
+      },
+      dependencies: {
+        '@scope/theme': {
+          entry: '/style.css',
+          themes: {
+            light: '/themes/light.css',
+            dark: '/themes/dark.css',
+          },
+        },
+        '@scope/ui': {
+          entry: '/style.css',
+          components: ['/components/**.css'],
         },
       },
-      '@scope/ui': {
-        global: '/style.css',
-        component: ['/components/**.css'],
-      },
+    },
+    build: {
+      modules: true,
     },
   };
 `;

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { isArray } from 'aidly';
-import type { CssOptions } from '#auklet/types';
+import type { NormalizedAukletConfig } from '#auklet/types';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import {
   appendUniqueMapValue,
@@ -40,7 +40,7 @@ export class ModuleStyleImportCollector {
     this.sourceImportAliasRules = this.createSourceImportAliasRules();
   }
 
-  collect(files: Array<string>, cssOptions: CssOptions) {
+  collect(files: Array<string>, cssOptions: NormalizedAukletConfig) {
     const entries = new Map<string, Array<string>>();
     const rules = this.createAutoImportRules(cssOptions);
 
@@ -215,14 +215,14 @@ export class ModuleStyleImportCollector {
     return relative.startsWith('.') ? relative : `./${relative}`;
   }
 
-  private createAutoImportRules(cssOptions: CssOptions) {
+  private createAutoImportRules(cssOptions: NormalizedAukletConfig) {
     const rules: Array<AutoImportRule> = [];
     for (const [packageName, dependency] of Object.entries(
-      cssOptions.cssDependencies ?? {},
+      cssOptions.styles.dependencies,
     )) {
-      const dependencyPaths = isArray(dependency.component)
-        ? dependency.component
-        : [dependency.component].filter((value): value is string =>
+      const dependencyPaths = isArray(dependency.components)
+        ? dependency.components
+        : [dependency.components].filter((value): value is string =>
             Boolean(value),
           );
 

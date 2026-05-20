@@ -58,9 +58,10 @@ export class ModuleCssWatcher {
   private async refreshWatcher() {
     const cssOptions = this.context.aukletConfig ?? {};
     const sourceDir =
+      cssOptions.source ??
       cssOptions.sourceDir ??
       this.context.sourceDir ??
-      aukletDefaultCssOptions.sourceDir;
+      aukletDefaultCssOptions.source;
     const sourceRoot = path.join(this.context.packageRoot, sourceDir);
     const configPath = path.join(this.context.packageRoot, aukletConfigFile);
     const watchPaths = [sourceRoot, configPath].filter((file) =>

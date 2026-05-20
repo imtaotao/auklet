@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { aukletDefaultCssOptions, normalizeAukletConfig } from '#auklet/config';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
-import { aukletDefaultCssOptions } from '#auklet/config';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
 import type {
@@ -10,6 +10,7 @@ import type {
   ModuleCssBuildConfig,
   ModuleCssBuildContext,
   ModuleCssBuildOptions,
+  NormalizedAukletConfig,
   ResolvedModuleCssBuildContext,
 } from '#auklet/types';
 import {
@@ -51,9 +52,10 @@ export class ModuleCssBuilder {
   }
 
   async build(options: ModuleCssBuildOptions = {}) {
-    const cssOptions = options.aukletConfig ?? this.context.aukletConfig ?? {};
+    const rawConfig = options.aukletConfig ?? this.context.aukletConfig ?? {};
+    const cssOptions = normalizeAukletConfig(rawConfig);
     const logger = options.logger ?? this.logger;
-    const context = this.createBuildContext(cssOptions);
+    const context = this.createBuildContext(rawConfig);
 
     this.applyContext(context);
 
@@ -77,6 +79,11 @@ export class ModuleCssBuilder {
       context,
     );
     if (packageStyle) outputs.push(packageStyle);
+
+    if (!cssOptions.build?.modules) {
+      this.logOutputs(context, styleFiles, outputs, logger);
+      return;
+    }
 
     for (const format of this.config.output.outputFormats) {
       const outRoot = path.join(context.packageRoot, context.outputDir, format);
@@ -112,6 +119,21 @@ export class ModuleCssBuilder {
       );
     }
 
+    this.logOutputs(context, styleFiles, outputs, logger);
+  }
+
+  private getStyleFiles(files: Array<string>) {
+    return files.filter((file) =>
+      this.config.styleExtensions.includes(path.extname(file)),
+    );
+  }
+
+  private logOutputs(
+    context: ResolvedModuleCssBuildContext,
+    styleFiles: Array<string>,
+    outputs: Array<string>,
+    logger?: AukletLogger,
+  ) {
     logger?.log?.(
       `[auklet:css] ${styleFiles.length} source style file(s), ${outputs.length} output entry file(s)`,
     );
@@ -124,23 +146,19 @@ export class ModuleCssBuilder {
     }
   }
 
-  private getStyleFiles(files: Array<string>) {
-    return files.filter((file) =>
-      this.config.styleExtensions.includes(path.extname(file)),
-    );
-  }
-
   private createBuildContext(cssOptions: CssOptions) {
     return {
       packageRoot: this.context.packageRoot,
       sourceDir:
+        cssOptions.source ??
         cssOptions.sourceDir ??
         this.context.sourceDir ??
-        aukletDefaultCssOptions.sourceDir,
+        aukletDefaultCssOptions.source,
       outputDir:
+        cssOptions.output ??
         cssOptions.outputDir ??
         this.context.outputDir ??
-        aukletDefaultCssOptions.outputDir,
+        aukletDefaultCssOptions.output,
     };
   }
 
@@ -168,7 +186,7 @@ export class ModuleCssBuilder {
   private writePackageStyles(
     styleFiles: Array<string>,
     themeFiles: Map<string, string>,
-    buildConfig: CssOptions,
+    buildConfig: NormalizedAukletConfig,
     context: ResolvedModuleCssBuildContext,
   ) {
     const seen = new Set<string>();
@@ -213,7 +231,7 @@ export class ModuleCssBuilder {
 
   private writeEntryStyle(
     outRoot: string,
-    buildConfig: CssOptions,
+    buildConfig: NormalizedAukletConfig,
     themeStyles: Array<string>,
     moduleStyle: string | null,
   ) {
@@ -271,7 +289,7 @@ export class ModuleCssBuilder {
   private writeThemeEntries(
     themeStyles: Array<{ themeName: string; file: string }>,
     outRoot: string,
-    buildConfig: CssOptions,
+    buildConfig: NormalizedAukletConfig,
   ) {
     const outputs: Array<string> = [];
     const themesDir = path.join(outRoot, THEMES_DIR);
@@ -332,7 +350,10 @@ export class ModuleCssBuilder {
     return target;
   }
 
-  private writeExternalStyle(outRoot: string, buildConfig: CssOptions) {
+  private writeExternalStyle(
+    outRoot: string,
+    buildConfig: NormalizedAukletConfig,
+  ) {
     const target = path.join(
       outRoot,
       this.config.output.styleDir,

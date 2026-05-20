@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { aukletConfigFile, aukletDefaultCssOptions } from '#auklet/config';
+import {
+  aukletConfigFile,
+  aukletDefaultCssOptions,
+  normalizeAukletConfig,
+} from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { moduleCssBuildConfig } from '#auklet/css/core/config';
 import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
@@ -27,16 +31,16 @@ import {
 } from '#auklet/css/core/styleEntry';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import type {
-  CssOptions,
   AukletConfig,
   ModuleCssBuildConfig,
   ResolvedModuleCssBuildContext,
+  NormalizedAukletConfig,
 } from '#auklet/types';
 import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import { fileWalker, toPosixPath } from '#auklet/utils';
 
 type PackageCssContext = {
-  cssOptions: CssOptions;
+  cssOptions: NormalizedAukletConfig;
   context: ResolvedModuleCssBuildContext;
   packageName: string;
   configPath: string;
@@ -173,13 +177,20 @@ export class ModuleCssGraph {
     const packageRoot = workspacePackage.packageRoot;
     if (!fs.existsSync(packageRoot)) return null;
 
-    const cssOptions = await this.loadAukletConfig(packageRoot, {
+    const rawConfig = await this.loadAukletConfig(packageRoot, {
       cacheBust: true,
     });
+    const cssOptions = normalizeAukletConfig(rawConfig);
     const context: ResolvedModuleCssBuildContext = {
       packageRoot,
-      sourceDir: cssOptions.sourceDir ?? aukletDefaultCssOptions.sourceDir,
-      outputDir: cssOptions.outputDir ?? aukletDefaultCssOptions.outputDir,
+      sourceDir:
+        rawConfig.source ??
+        rawConfig.sourceDir ??
+        aukletDefaultCssOptions.source,
+      outputDir:
+        rawConfig.output ??
+        rawConfig.outputDir ??
+        aukletDefaultCssOptions.output,
     };
     const sourceRoot = path.join(packageRoot, context.sourceDir);
     const resolver = new WorkspaceStyleResolver(this.config, context);

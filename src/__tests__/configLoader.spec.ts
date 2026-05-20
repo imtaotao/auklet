@@ -4,6 +4,7 @@ import {
   loadAukletConfig,
   resolveAukletConfigModule,
 } from '#auklet/configLoader';
+import { normalizeAukletConfig } from '#auklet/config';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -29,7 +30,7 @@ describe('loadAukletConfig', () => {
       'dependency.mjs',
       `
         export const dependency = {
-          global: '/dist/dependency.css',
+          entry: '/dist/dependency.css',
         };
       `,
     );
@@ -40,13 +41,15 @@ describe('loadAukletConfig', () => {
         import type { AukletConfig } from '/auklet';
 
         export const config: AukletConfig = {
-          sourceDir: 'source',
-          outputDir: 'output',
+          source: 'source',
+          output: 'output',
           build: {
             formats: ['esm'],
           },
-          cssDependencies: {
-            katex: dependency,
+          styles: {
+            dependencies: {
+              katex: dependency,
+            },
           },
         };
       `,
@@ -55,14 +58,16 @@ describe('loadAukletConfig', () => {
     await expect(
       loadAukletConfig(project.root, { cacheBust: true }),
     ).resolves.toEqual({
-      sourceDir: 'source',
-      outputDir: 'output',
+      source: 'source',
+      output: 'output',
       build: {
         formats: ['esm'],
       },
-      cssDependencies: {
-        katex: {
-          global: '/dist/dependency.css',
+      styles: {
+        dependencies: {
+          katex: {
+            entry: '/dist/dependency.css',
+          },
         },
       },
     });
@@ -73,7 +78,7 @@ describe('loadAukletConfig', () => {
       'auklet.config.ts',
       `
         export const config = {
-          sourceDir: 'source',
+          source: 'source',
         };
       `,
     );
@@ -95,17 +100,85 @@ describe('resolveAukletConfigModule', () => {
     expect(
       resolveAukletConfigModule({
         config: {
-          sourceDir: 'src',
-          outputDir: 'dist',
+          source: 'src',
+          output: 'dist',
         },
       }),
     ).toEqual({
-      sourceDir: 'src',
-      outputDir: 'dist',
+      source: 'src',
+      output: 'dist',
     });
   });
 
   test('falls back to empty config for unsupported module shapes', () => {
     expect(resolveAukletConfigModule({ default: null })).toEqual({});
+  });
+});
+
+describe('normalizeAukletConfig', () => {
+  test('normalizes the grouped config shape', () => {
+    expect(
+      normalizeAukletConfig({
+        source: 'source',
+        output: 'output',
+        styles: {
+          themes: {
+            light: './source/themes/light.css',
+          },
+          dependencies: {
+            '@scope/ui': {
+              entry: '/style.css',
+              components: ['/components/**.css'],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      source: 'source',
+      output: 'output',
+      styles: {
+        themes: {
+          light: './source/themes/light.css',
+        },
+        dependencies: {
+          '@scope/ui': {
+            entry: '/style.css',
+            components: ['/components/**.css'],
+          },
+        },
+      },
+    });
+  });
+
+  test('normalizes legacy style fields', () => {
+    expect(
+      normalizeAukletConfig({
+        sourceDir: 'source',
+        outputDir: 'output',
+        themes: {
+          dark: './source/themes/dark.css',
+        },
+        cssDependencies: {
+          '@scope/ui': {
+            global: '/style.css',
+            component: '/components/**.css',
+          },
+        },
+      }),
+    ).toMatchObject({
+      source: 'source',
+      output: 'output',
+      styles: {
+        themes: {
+          dark: './source/themes/dark.css',
+        },
+        dependencies: {
+          '@scope/ui': {
+            entry: '/style.css',
+            components: '/components/**.css',
+          },
+        },
+      },
+    });
   });
 });

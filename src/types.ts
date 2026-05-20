@@ -1,21 +1,59 @@
-export type CssDependencyGroup = {
-  // 全局 CSS 依赖，会被合并进包级 dist/index.css。
-  global?: string | Array<string>;
-  // 主题 CSS 依赖，key 是当前包主题名，value 是依赖包对应主题入口。
+export type StyleDependencyGroup = {
+  // 包级样式入口依赖，会被合并进包级 dist/index.css。
+  entry?: string | Array<string>;
+  // 主题样式依赖，key 是当前包主题名，value 是依赖包对应主题入口。
   themes?: Record<string, string>;
-  // 模块 CSS 自动引用规则，用于从 import 推导对应样式入口。
+  // 模块样式自动引用规则，用于从 import 推导对应样式入口。
+  components?: string | Array<string>;
+  // 兼容旧配置：请使用 entry。
+  global?: string | Array<string>;
+  // 兼容旧配置：请使用 components。
   component?: string | Array<string>;
 };
 
-export interface CssOptions {
-  // 外部包 CSS 依赖配置，key 是包名前缀，value 是该包的样式依赖规则。
-  cssDependencies?: Record<string, CssDependencyGroup>;
-  // 主题 CSS 入口，key 是主题名，value 是相对于当前包根目录的 CSS 文件路径。
+export type CssDependencyGroup = StyleDependencyGroup;
+
+export type StyleOptions = {
+  // 当前包主题样式入口，key 是主题名，value 是相对于当前包根目录的样式文件路径。
   themes?: Record<string, string>;
+  // 外部包样式依赖配置，key 是包名前缀，value 是该包的样式依赖规则。
+  dependencies?: Record<string, StyleDependencyGroup>;
+};
+
+export interface CssOptions {
   // 源码目录，相对于当前包根目录。
-  sourceDir?: string;
+  source?: string;
   // 构建产物目录，相对于当前包根目录。
+  output?: string;
+  // 样式构建配置。
+  styles?: StyleOptions;
+  // 兼容旧配置：请使用 styles.dependencies。
+  cssDependencies?: Record<string, CssDependencyGroup>;
+  // 兼容旧配置：请使用 styles.themes。
+  themes?: Record<string, string>;
+  // 兼容旧配置：请使用 source。
+  sourceDir?: string;
+  // 兼容旧配置：请使用 output。
   outputDir?: string;
+}
+
+export type NormalizedStyleDependencyGroup = {
+  // 全局 CSS 依赖，会被合并进包级 dist/index.css。
+  entry?: string | Array<string>;
+  // 主题 CSS 依赖，key 是当前包主题名，value 是依赖包对应主题入口。
+  themes?: Record<string, string>;
+  // 模块 CSS 自动引用规则，用于从 import 推导对应样式入口。
+  components?: string | Array<string>;
+};
+
+export interface NormalizedAukletConfig {
+  source: string;
+  output: string;
+  styles: {
+    themes: Record<string, string>;
+    dependencies: Record<string, NormalizedStyleDependencyGroup>;
+  };
+  build?: PackageBuildOptions;
 }
 
 export type PackageBuildFormat = 'cjs' | 'esm' | 'iife';

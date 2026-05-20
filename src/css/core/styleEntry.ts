@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { isArray } from 'aidly';
-import type { CssOptions } from '#auklet/types';
+import type { NormalizedAukletConfig } from '#auklet/types';
 import { getSourceModuleDir } from '#auklet/utils';
 import { normalizeCssFileKey } from '#auklet/css/core/path';
 
@@ -30,14 +30,14 @@ export function groupStyleFilesByDir(
   return styleFilesByDir;
 }
 
-export function getGlobalStyleDependencies(cssOptions: CssOptions) {
+export function getGlobalStyleDependencies(cssOptions: NormalizedAukletConfig) {
   const dependencies: Array<string> = [];
   for (const [packageName, dependency] of Object.entries(
-    cssOptions.cssDependencies ?? {},
+    cssOptions.styles.dependencies,
   )) {
-    const globalDependencies = isArray(dependency.global)
-      ? dependency.global
-      : [dependency.global].filter((value): value is string => Boolean(value));
+    const globalDependencies = isArray(dependency.entry)
+      ? dependency.entry
+      : [dependency.entry].filter((value): value is string => Boolean(value));
 
     for (const globalDependency of globalDependencies) {
       dependencies.push(joinDependencySpecifier(packageName, globalDependency));
@@ -46,17 +46,19 @@ export function getGlobalStyleDependencies(cssOptions: CssOptions) {
   return dependencies;
 }
 
-export function getExternalStyleDependencies(cssOptions: CssOptions) {
+export function getExternalStyleDependencies(
+  cssOptions: NormalizedAukletConfig,
+) {
   return getGlobalStyleDependencies(cssOptions);
 }
 
 export function getThemeStyleDependencies(
-  cssOptions: CssOptions,
+  cssOptions: NormalizedAukletConfig,
   themeName: string,
 ) {
   const dependencies: Array<string> = [];
   for (const [packageName, dependency] of Object.entries(
-    cssOptions.cssDependencies ?? {},
+    cssOptions.styles.dependencies,
   )) {
     const themeDependency = dependency.themes?.[themeName];
     if (!themeDependency) continue;
@@ -65,15 +67,15 @@ export function getThemeStyleDependencies(
   return dependencies;
 }
 
-export function getThemeStyleEntries(cssOptions: CssOptions) {
-  return Object.entries(cssOptions.themes ?? {}).map(([themeName, file]) => ({
+export function getThemeStyleEntries(cssOptions: NormalizedAukletConfig) {
+  return Object.entries(cssOptions.styles.themes).map(([themeName, file]) => ({
     themeName,
     file,
   }));
 }
 
 export function resolveThemeStyleFiles(
-  cssOptions: CssOptions,
+  cssOptions: NormalizedAukletConfig,
   packageRoot: string,
 ) {
   const themeFiles = new Map<string, string>();
