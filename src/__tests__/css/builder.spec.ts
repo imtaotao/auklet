@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { ModuleCssBuilder } from '#auklet/css/production/moduleCssBuilder';
+import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import type { AukletConfig } from '#auklet/types';
 import {
   createVirtualProject,
@@ -20,7 +20,7 @@ const sourceModuleBuildConfig = {
 } satisfies AukletConfig;
 
 const createBuilder = (fixture: VirtualProject, aukletConfig: AukletConfig) => {
-  return new ModuleCssBuilder({
+  return new ModuleStyleBuilder({
     packageRoot: fixture.root,
     aukletConfig,
   });
@@ -35,7 +35,7 @@ const writePackageWithSourceImports = (fixture: VirtualProject) => {
   });
 };
 
-describe('ModuleCssBuilder', () => {
+describe('ModuleStyleBuilder', () => {
   let fixture: VirtualProject;
   let aukletConfig: AukletConfig;
 
@@ -85,19 +85,19 @@ describe('ModuleCssBuilder', () => {
     expect(esModuleStyle).toBe('.local {}\n');
   });
 
-  test('builds same-package module CSS entries without cssDependencies', async () => {
+  test('builds same-package module CSS entries without dependency config', async () => {
     writePackageWithSourceImports(fixture);
     aukletConfig = sourceModuleBuildConfig;
     fixture.writeFile(
       'source/components/Renderer/index.tsx',
       `
         import { CodeBlock } from '#fixture/components/CodeBlock';
-        export const Renderer = () => null;
+        export function Renderer() { return null; }
       `,
     );
     fixture.writeFile(
       'source/components/CodeBlock/index.tsx',
-      'export const CodeBlock = () => null;',
+      'export function CodeBlock() { return null; }',
     );
     fixture.writeFile('source/components/Renderer/index.css', '.renderer {}');
     fixture.writeFile(
@@ -132,12 +132,12 @@ describe('ModuleCssBuilder', () => {
       'source/components/Renderer/index.tsx',
       `
         import { CodeBlock } from '#fixture/components/CodeBlock';
-        export const Renderer = () => null;
+        export function Renderer() { return null; }
       `,
     );
     fixture.writeFile(
       'source/components/CodeBlock/index.tsx',
-      'export const CodeBlock = () => null;',
+      'export function CodeBlock() { return null; }',
     );
     fixture.writeFile(
       'source/components/CodeBlock/index.css',
@@ -164,15 +164,15 @@ describe('ModuleCssBuilder', () => {
     );
     fixture.writeFile(
       'source/components/Plain/index.tsx',
-      'export const Plain = () => null;',
+      'export function Plain() { return null; }',
     );
     fixture.writeFile(
       'source/components/Plain/Part/index.tsx',
-      'export const Part = () => null;',
+      'export function Part() { return null; }',
     );
     fixture.writeFile(
       'source/pages/AboutPage.tsx',
-      'export const AboutPage = () => null;',
+      'export function AboutPage() { return null; }',
     );
 
     await createBuilder(fixture, aukletConfig).build();
@@ -210,12 +210,12 @@ describe('ModuleCssBuilder', () => {
       'source/components/Renderer.tsx',
       `
         import { Button } from '#fixture/components/Button';
-        export const Renderer = () => null;
+        export function Renderer() { return null; }
       `,
     );
     fixture.writeFile(
       'source/components/Button.tsx',
-      'export const Button = () => null;',
+      'export function Button() { return null; }',
     );
     fixture.writeFile('source/components/Button.css', '.button {}');
 
@@ -267,7 +267,7 @@ describe('ModuleCssBuilder', () => {
     const cwd = vi.spyOn(process, 'cwd').mockReturnValue(fixture.root);
 
     try {
-      await new ModuleCssBuilder().build();
+      await new ModuleStyleBuilder().build();
     } finally {
       cwd.mockRestore();
     }

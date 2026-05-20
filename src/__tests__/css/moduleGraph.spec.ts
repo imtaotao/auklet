@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { ModuleCssGraph } from '#auklet/css/core/moduleCssGraph';
-import { normalizeCssFileKey } from '#auklet/css/core/path';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { ModuleStyleGraph } from '#auklet/css/core/moduleGraph';
+import { normalizeFileKey } from '#auklet/utils';
 import { normalizeGraphStyleStructure } from '../fixtures/styleStructure';
 import {
   createVirtualProject,
@@ -12,7 +12,7 @@ const appPackageRoot = 'packages/app-package';
 const uiPackageRoot = 'packages/ui-package';
 
 const createGraph = (fixture: VirtualProject) => {
-  return new ModuleCssGraph({
+  return new ModuleStyleGraph({
     workspaceRoot: fixture.root,
   });
 };
@@ -32,7 +32,7 @@ const expectWatchFile = (
   relativePath: string,
 ) => {
   expect(watchFiles).toContain(
-    normalizeCssFileKey(packagePath(fixture, packageRoot, relativePath)),
+    normalizeFileKey(packagePath(fixture, packageRoot, relativePath)),
   );
 };
 
@@ -40,7 +40,7 @@ const expectContentOrder = (content: string, before: string, after: string) => {
   expect(content.indexOf(before)).toBeLessThan(content.indexOf(after));
 };
 
-describe('ModuleCssGraph', () => {
+describe('ModuleStyleGraph', () => {
   let fixture: VirtualProject;
 
   beforeEach(() => {
@@ -67,12 +67,14 @@ describe('ModuleCssGraph', () => {
         export const config: AukletConfig = {
           source: 'src',
           output: 'dist',
-          cssDependencies: {
-            '@scope/ui': {
-              global: '/style.css',
-              themes: {
-                light: '/themes/light.css',
-                dark: '/themes/dark.css',
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+                themes: {
+                  light: '/themes/light.css',
+                  dark: '/themes/dark.css',
+                },
               },
             },
           },
@@ -87,9 +89,11 @@ describe('ModuleCssGraph', () => {
         export const config: AukletConfig = {
           source: 'src',
           output: 'dist',
-          cssDependencies: {
-            katex: {
-              global: '/dist/katex.min.css',
+          styles: {
+            dependencies: {
+              katex: {
+                entry: '/dist/katex.min.css',
+              },
             },
           },
         };
@@ -97,9 +101,9 @@ describe('ModuleCssGraph', () => {
     );
 
     const graph = createGraph(fixture);
-    const parsed = graph.parsePackageCssId('@scope/app/external.css');
+    const parsed = graph.parsePackageStyleId('@scope/app/external.css');
 
-    const result = await graph.createPackageCssCode(parsed!);
+    const result = await graph.createPackageStyleCode(parsed!);
 
     expect(result.code).toBe('@import "katex/dist/katex.min.css";');
     expectWatchFile(
@@ -125,16 +129,18 @@ describe('ModuleCssGraph', () => {
         export const config: AukletConfig = {
           source: 'src',
           output: 'dist',
-          themes: {
-            light: './src/themes/light.css',
-            dark: './src/themes/dark.css',
-          },
-          cssDependencies: {
-            '@scope/ui': {
-              global: '/style.css',
-              themes: {
-                light: '/themes/light.css',
-                dark: '/themes/dark.css',
+          styles: {
+            themes: {
+              light: './src/themes/light.css',
+              dark: './src/themes/dark.css',
+            },
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+                themes: {
+                  light: '/themes/light.css',
+                  dark: '/themes/dark.css',
+                },
               },
             },
           },
@@ -149,13 +155,15 @@ describe('ModuleCssGraph', () => {
         export const config: AukletConfig = {
           source: 'src',
           output: 'dist',
-          themes: {
-            light: './src/themes/light.css',
-            dark: './src/themes/dark.css',
-          },
-          cssDependencies: {
-            katex: {
-              global: '/dist/katex.min.css',
+          styles: {
+            themes: {
+              light: './src/themes/light.css',
+              dark: './src/themes/dark.css',
+            },
+            dependencies: {
+              katex: {
+                entry: '/dist/katex.min.css',
+              },
             },
           },
         };
@@ -187,9 +195,9 @@ describe('ModuleCssGraph', () => {
     );
 
     const graph = createGraph(fixture);
-    const parsed = graph.parsePackageCssId('@scope/app/style.css');
+    const parsed = graph.parsePackageStyleId('@scope/app/style.css');
 
-    const result = await graph.createPackageCssCode(parsed!);
+    const result = await graph.createPackageStyleCode(parsed!);
 
     expect(result.code.indexOf('@import "katex/dist/katex.min.css";')).toBe(0);
     expectContentOrder(
@@ -228,11 +236,11 @@ describe('ModuleCssGraph', () => {
       appPackageRoot,
       'auklet.config.ts',
     );
-    const lightTheme = await graph.createPackageCssCode(
-      graph.parsePackageCssId('@scope/app/themes/light.css')!,
+    const lightTheme = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/themes/light.css')!,
     );
-    const darkTheme = await graph.createPackageCssCode(
-      graph.parsePackageCssId('@scope/app/themes/dark.css')!,
+    const darkTheme = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/themes/dark.css')!,
     );
 
     expectContentOrder(
@@ -296,8 +304,8 @@ describe('ModuleCssGraph', () => {
     );
 
     const graph = createGraph(fixture);
-    const result = await graph.createPackageCssCode(
-      graph.parsePackageCssId('@scope/app/themes/light.css')!,
+    const result = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/themes/light.css')!,
     );
 
     expect(result.code).toContain('.ui-light { color-scheme: light; }');
@@ -316,7 +324,7 @@ describe('ModuleCssGraph', () => {
   });
 
   test('normalizes slash styles for workspace source graph checks and watch roots', () => {
-    const graph = new ModuleCssGraph({
+    const graph = new ModuleStyleGraph({
       workspaceRoot: 'C:\\repo\\workspace',
     });
 
@@ -336,6 +344,64 @@ describe('ModuleCssGraph', () => {
     ]);
   });
 
+  test('reuses package contexts inside one CSS request', async () => {
+    const loadAukletConfig = vi.fn(
+      async (packageRoot: string, _options?: { cacheBust?: boolean }) => {
+        if (path.basename(packageRoot) === 'app-package') {
+          return {
+            styles: {
+              dependencies: {
+                '@scope/ui': {
+                  entry: ['/style.css', '/style.css'],
+                },
+              },
+            },
+          };
+        }
+
+        return {};
+      },
+    );
+    const graph = new ModuleStyleGraph({
+      workspaceRoot: fixture.root,
+      loadAukletConfig,
+    });
+
+    await graph.createPackageStyleCode({
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    });
+
+    expect(loadAukletConfig).toHaveBeenCalledTimes(2);
+    expect(
+      loadAukletConfig.mock.calls.map(([packageRoot]) =>
+        path.basename(packageRoot),
+      ),
+    ).toEqual(['app-package', 'ui-package']);
+    expect(
+      loadAukletConfig.mock.calls.every(
+        ([, options]) => options?.cacheBust === true,
+      ),
+    ).toBe(true);
+  });
+
+  test('creates a fresh package context cache for each CSS request', async () => {
+    const loadAukletConfig = vi.fn(async () => ({}));
+    const graph = new ModuleStyleGraph({
+      workspaceRoot: fixture.root,
+      loadAukletConfig,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+
+    await graph.createPackageStyleCode(parsed);
+    await graph.createPackageStyleCode(parsed);
+
+    expect(loadAukletConfig).toHaveBeenCalledTimes(2);
+  });
+
   test('creates source module CSS with dependency modules before own styles', async () => {
     fixture.writeFile(
       'packages/app-package/auklet.config.ts',
@@ -345,14 +411,16 @@ describe('ModuleCssGraph', () => {
         export const config: AukletConfig = {
           source: 'src',
           output: 'dist',
-          cssDependencies: {
-            '@scope/ui': {
-              global: '/style.css',
-              themes: {
-                light: '/themes/light.css',
-                dark: '/themes/dark.css',
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+                themes: {
+                  light: '/themes/light.css',
+                  dark: '/themes/dark.css',
+                },
+                components: ['/components/**.css'],
               },
-              component: ['/components/**.css'],
             },
           },
         };
@@ -366,9 +434,11 @@ describe('ModuleCssGraph', () => {
         export const config: AukletConfig = {
           source: 'src',
           output: 'dist',
-          themes: {
-            light: './src/themes/light.css',
-            dark: './src/themes/dark.css',
+          styles: {
+            themes: {
+              light: './src/themes/light.css',
+              dark: './src/themes/dark.css',
+            },
           },
         };
       `,
@@ -377,7 +447,7 @@ describe('ModuleCssGraph', () => {
       'packages/app-package/src/pages/BlogArticlePage.tsx',
       `
         import { Renderer } from '@scope/ui';
-        export const BlogArticlePage = () => Renderer;
+        export function BlogArticlePage() { return Renderer; }
       `,
     );
     fixture.writeFile(
@@ -394,8 +464,8 @@ describe('ModuleCssGraph', () => {
     );
 
     const graph = createGraph(fixture);
-    const result = await graph.createPackageCssCode(
-      graph.parsePackageCssId('@scope/app/pages/BlogArticlePage.css')!,
+    const result = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/pages/BlogArticlePage.css')!,
     );
 
     expectContentOrder(result.code, '.markdown-prose', '.article');

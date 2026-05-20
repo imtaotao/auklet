@@ -45,7 +45,7 @@ const createAukletConfig = () => `
   };
 `;
 
-export const createStyleProject = () => {
+export function createStyleProject() {
   const project = createVirtualProject('auklet-style-project-');
   const packageRoot = path.join(project.root, packageDirectory);
   const fromPackageRoot = (relativePath: string) => {
@@ -68,31 +68,42 @@ export const createStyleProject = () => {
     `,
     [fromPackageRoot('node_modules/@scope/theme/tokens.css')]:
       '.external-token { color: green; }',
+
     [fromPackageRoot('node_modules/@scope/theme/themes/light.css')]:
       '.external-theme-light { color: white; }',
+
     [fromPackageRoot('node_modules/@scope/theme/themes/dark.css')]:
       '.external-theme-dark { color: black; }',
+
     [fromPackageRoot('node_modules/@scope/ui/style.css')]:
       '.external-ui { display: block; }',
+
     [fromPackageRoot('node_modules/@scope/ui/components/Button.css')]:
       '.external-button { border: 0; }',
+
     [fromPackageRoot(`${sourceDir}/themes/light.css`)]:
       ':root { --color: white; }',
+
     [fromPackageRoot(`${sourceDir}/themes/dark.css`)]:
       ':root[data-theme="dark"] { --color: black; }',
+
     [fromPackageRoot(`${sourceDir}/components/Button/index.tsx`)]:
-      'export const Button = () => null;',
+      'export function Button() { return null; }',
+
     [fromPackageRoot(`${sourceDir}/components/Button/index.css`)]:
       '.button { color: green; }',
+
     [fromPackageRoot(`${sourceDir}/components/Card/index.tsx`)]: `
       import { Button } from '#fixture/components/Button';
       import { Button as ExternalButton } from '@scope/ui';
-      export const Card = () => Button ?? ExternalButton ?? null;
+      export function Card() { return Button ?? ExternalButton ?? null; }
     `,
+
     [fromPackageRoot(`${sourceDir}/components/Card/index.css`)]: `
       @import "./tokens.css";
       .card { color: red; }
     `,
+
     [fromPackageRoot(`${sourceDir}/components/Card/tokens.css`)]:
       '.card-token { margin: 0; }',
   });
@@ -122,4 +133,4 @@ export const createStyleProject = () => {
     readOutput,
     outputFiles,
   } satisfies StyleProjectTemplate;
-};
+}

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { moduleCssBuildConfig } from '#auklet/css/core/config';
+import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import {
@@ -34,7 +34,7 @@ describe('StyleProcessor', () => {
       },
     } as WorkspaceStyleResolver;
 
-    processor = new StyleProcessor(moduleCssBuildConfig, resolver);
+    processor = new StyleProcessor(moduleStyleBuildConfig, resolver);
   });
 
   afterEach(() => {

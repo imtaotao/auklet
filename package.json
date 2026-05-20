@@ -21,7 +21,7 @@
     "test:coverage": "vitest run src/__tests__ --coverage",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "build:examples": "pnpm --filter './examples/*' build",
-    "format:md": "prettier --write --parser markdown \"TESTING.md\"",
+    "format:md": "prettier --write \"*.md\" \"examples/**/*.md\"",
     "format": "prettier --write \"package.json\" \"pnpm-workspace.yaml\" \"(bin|src|dist|examples)/**/*.{js,mjs,cjs,ts,tsx,json,md,yaml,css}\""
   },
   "exports": {

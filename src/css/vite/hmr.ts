@@ -5,8 +5,8 @@ import type {
   ModuleNode,
   ViteDevServer,
 } from 'vite';
-import type { ModuleCssGraph } from '#auklet/css/core/moduleCssGraph';
-import { normalizeCssFileKey } from '#auklet/css/core/path';
+import type { ModuleStyleGraph } from '#auklet/css/core/moduleGraph';
+import { normalizeFileKey } from '#auklet/utils';
 
 // package CSS 的 HMR 不能直接走 Vite 原生 CSS 文件链路：
 // - 浏览器 import 的是 auklet-css:* 虚拟 CSS 模块，不是真实的
@@ -30,7 +30,7 @@ const getRelativeFile = (file: string) => {
 
 const invalidateVirtualModules = (
   server: Pick<ViteDevServer, 'moduleGraph'>,
-  graph: ModuleCssGraph,
+  graph: ModuleStyleGraph,
 ) => {
   const modules: Array<ModuleNode> = [];
   for (const packageName of graph.getWorkspacePackageNames()) {
@@ -46,12 +46,12 @@ const invalidateVirtualModules = (
   return modules;
 };
 
-const addVirtualCssDependency = (
+const addVirtualStyleDependency = (
   virtualIdsByDependency: VirtualIdsByDependency,
   file: string,
   virtualId: string,
 ) => {
-  const normalizedFile = normalizeCssFileKey(file);
+  const normalizedFile = normalizeFileKey(file);
   const values =
     virtualIdsByDependency.get(normalizedFile) ?? new Set<string>();
   values.add(virtualId);
@@ -62,9 +62,7 @@ const getDependencyVirtualIds = (
   virtualIdsByDependency: VirtualIdsByDependency,
   file: string,
 ) => {
-  return Array.from(
-    virtualIdsByDependency.get(normalizeCssFileKey(file)) ?? [],
-  );
+  return Array.from(virtualIdsByDependency.get(normalizeFileKey(file)) ?? []);
 };
 
 const getDependencyVirtualModules = (
@@ -80,15 +78,15 @@ const getDependencyVirtualModules = (
 
 type VirtualIdsByDependency = Map<string, Set<string>>;
 
-export class AukletCssHmr {
+export class AukletStyleHmr {
   private readonly lastUpdateTimes = new Map<string, number>();
   private suppressFullReloadUntil = 0;
   private readonly virtualIdsByDependency: VirtualIdsByDependency = new Map();
 
-  constructor(private readonly graph: () => ModuleCssGraph) {}
+  constructor(private readonly graph: () => ModuleStyleGraph) {}
 
-  trackVirtualCssDependency(file: string, virtualId: string) {
-    addVirtualCssDependency(this.virtualIdsByDependency, file, virtualId);
+  trackVirtualStyleDependency(file: string, virtualId: string) {
+    addVirtualStyleDependency(this.virtualIdsByDependency, file, virtualId);
   }
 
   installFullReloadGuard(server: Pick<ViteDevServer, 'ws'>) {
@@ -175,7 +173,7 @@ export class AukletCssHmr {
 
   private isDuplicateUpdate(file: string) {
     const now = Date.now();
-    const normalizedFile = normalizeCssFileKey(file);
+    const normalizedFile = normalizeFileKey(file);
     const lastUpdateTime = this.lastUpdateTimes.get(normalizedFile) ?? 0;
     const isDuplicate = now - lastUpdateTime < DUPLICATE_UPDATE_IGNORE_MS;
 

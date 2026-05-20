@@ -16,7 +16,7 @@ const runVersion = async () => {
   return 0;
 };
 
-const runBuildCss = async (args) => {
+const runBuildStyle = async (args) => {
   const shouldWatch = args.includes('--watch') || args.includes('-w');
   const { loadAukletConfig } = await import('../dist/configLoader.js');
   const aukletConfig = await loadAukletConfig(process.cwd(), {
@@ -24,10 +24,8 @@ const runBuildCss = async (args) => {
   });
 
   if (shouldWatch) {
-    const { ModuleCssWatcher } = await import(
-      '../dist/css/watch/moduleCssWatcher.js'
-    );
-    const watcher = new ModuleCssWatcher({ aukletConfig, logger: console });
+    const { ModuleStyleWatcher } = await import('../dist/css/watch/watcher.js');
+    const watcher = new ModuleStyleWatcher({ aukletConfig, logger: console });
     await watcher.watch();
     const close = () => {
       watcher
@@ -41,10 +39,10 @@ const runBuildCss = async (args) => {
     return 0;
   }
 
-  const { ModuleCssBuilder } = await import(
-    '../dist/css/production/moduleCssBuilder.js'
+  const { ModuleStyleBuilder } = await import(
+    '../dist/css/production/builder.js'
   );
-  const builder = new ModuleCssBuilder({ aukletConfig, logger: console });
+  const builder = new ModuleStyleBuilder({ aukletConfig, logger: console });
   await builder.build();
   return 0;
 };
@@ -63,7 +61,7 @@ const runBuild = async (args) => {
   const jsExitCode = await runBuildJs(args);
   if (jsExitCode) return jsExitCode;
 
-  return runBuildCss([]);
+  return runBuildStyle([]);
 };
 
 const runDev = async () => {
@@ -137,7 +135,7 @@ if (argv.help || !command) {
 const runners = {
   build: runBuild,
   'build-js': runBuildJs,
-  'build-css': runBuildCss,
+  'build-css': runBuildStyle,
   dev: runDev,
   version: runVersion,
 };

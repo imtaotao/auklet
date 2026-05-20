@@ -1,32 +1,29 @@
 export type {
-  CssOptions,
-  CssDependencyGroup,
   AukletConfig,
   LoadAukletConfigOptions,
-  ModuleCssBuildConfig,
-  ModuleCssBuildContext,
-  ModuleCssBuildOptions,
+  ModuleStyleBuildConfig,
+  ModuleStyleBuildContext,
+  ModuleStyleBuildOptions,
   NormalizedAukletConfig,
   NormalizedStyleDependencyGroup,
   PackageBuildFormat,
   PackageBuildOptions,
-  ResolvedModuleCssBuildContext,
+  ResolvedModuleStyleBuildContext,
   StyleDependencyGroup,
   StyleOptions,
 } from '#auklet/types';
 export type { RunTsdownOptions } from '#auklet/build/runTsdown';
-export type { AukletCssPluginOptions } from '#auklet/css/vite/vitePlugin';
+export type { AukletStylePluginOptions } from '#auklet/css/vite/vitePlugin';
 export {
-  aukletDefaultCssDependencyConfig,
-  aukletDefaultCssOptions,
   aukletDefaultOptions,
+  aukletDefaultStyleDependencyConfig,
   normalizeAukletConfig,
 } from '#auklet/config';
 export {
   loadAukletConfig,
   resolveAukletConfigModule,
 } from '#auklet/configLoader';
-export { aukletCssPlugin } from '#auklet/css/vite/vitePlugin';
+export { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
 export { createTsdownArgs, runTsdown } from '#auklet/build/runTsdown';
-export { ModuleCssWatcher } from '#auklet/css/watch/moduleCssWatcher';
-export { ModuleCssBuilder } from '#auklet/css/production/moduleCssBuilder';
+export { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
+export { ModuleStyleBuilder } from '#auklet/css/production/builder';

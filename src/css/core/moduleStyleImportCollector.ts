@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { isArray } from 'aidly';
 import type { NormalizedAukletConfig } from '#auklet/types';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
+import { joinDependencySpecifier } from '#auklet/css/core/style/specifier';
 import {
   appendUniqueMapValue,
   getSourceModuleDir,
@@ -66,11 +67,13 @@ export class ModuleStyleImportCollector {
         const ruleMatches = this.matchAutoImportRules(rules, importPath);
         if (!ruleMatches.length) continue;
 
-        const directSpecifiers = ruleMatches
-          .map((ruleMatch) =>
-            this.createDirectStyleSpecifier(ruleMatch.rule, importPath),
-          )
-          .filter((specifier): specifier is string => Boolean(specifier));
+        const directSpecifiers = ruleMatches.flatMap((ruleMatch) => {
+          const specifier = this.createDirectStyleSpecifier(
+            ruleMatch.rule,
+            importPath,
+          );
+          return specifier ? [specifier] : [];
+        });
 
         if (directSpecifiers.length) {
           for (const specifier of directSpecifiers) {
@@ -222,17 +225,14 @@ export class ModuleStyleImportCollector {
     )) {
       const dependencyPaths = isArray(dependency.components)
         ? dependency.components
-        : [dependency.components].filter((value): value is string =>
-            Boolean(value),
-          );
+        : dependency.components
+        ? [dependency.components]
+        : [];
 
       for (const dependencyPath of dependencyPaths) {
         rules.push({
           packageName,
-          outputPattern: this.joinDependencySpecifier(
-            packageName,
-            dependencyPath,
-          ),
+          outputPattern: joinDependencySpecifier(packageName, dependencyPath),
         });
       }
     }
@@ -303,14 +303,6 @@ export class ModuleStyleImportCollector {
       return null;
     }
     return `${importPath}${suffix}`;
-  }
-
-  private joinDependencySpecifier(packageName: string, dependencyPath: string) {
-    if (!dependencyPath) return packageName;
-    if (dependencyPath.startsWith(POSIX_SEPARATOR)) {
-      return `${packageName}${dependencyPath}`;
-    }
-    return `${packageName}${POSIX_SEPARATOR}${dependencyPath}`;
   }
 
   private getImportedNames(file: string, item: SourceImportDeclaration) {

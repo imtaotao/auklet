@@ -1,17 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import postcss, { type AtRule, type Root } from 'postcss';
-import {
-  IMPORT_AT_RULE,
-  LINE_SEPARATOR,
-  RELATIVE_IMPORT_PREFIX,
-} from '#auklet/css/core/constants';
-import type { ModuleCssBuildConfig } from '#auklet/types';
+import type { ModuleStyleBuildConfig } from '#auklet/types';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 
 export class StyleProcessor {
   constructor(
-    private readonly config: ModuleCssBuildConfig,
+    private readonly config: ModuleStyleBuildConfig,
     private readonly resolver: WorkspaceStyleResolver,
   ) {}
 
@@ -21,40 +16,40 @@ export class StyleProcessor {
 
   appendImportRule(root: Root, specifier: string) {
     const rule = postcss.atRule({
-      name: IMPORT_AT_RULE,
+      name: 'import',
       params: `"${specifier}"`,
     });
-    if (root.nodes?.length) rule.raws.before = LINE_SEPARATOR;
+    if (root.nodes?.length) rule.raws.before = '\n';
     root.append(rule);
     root.raws.semicolon = true;
   }
 
   stringify(root: Root) {
     root.raws.semicolon = true;
-    return `${root}${LINE_SEPARATOR}`;
+    return `${root}\n`;
   }
 
   appendStyleContent(target: Root, content: string, from: string) {
     const root = this.parse(content, from);
     if (target.nodes?.length && root.nodes?.[0]) {
-      root.nodes[0].raws.before = LINE_SEPARATOR;
+      root.nodes[0].raws.before = '\n';
     }
     target.append(...(root.nodes ?? []));
   }
 
-  readStyleFile(cssPath: string, seen = new Set<string>()): string {
-    if (!fs.existsSync(cssPath)) {
+  readStyleFile(stylePath: string, seen = new Set<string>()) {
+    if (!fs.existsSync(stylePath)) {
       return '';
     }
-    const normalizedPath = path.resolve(cssPath);
+    const normalizedPath = path.resolve(stylePath);
     if (seen.has(normalizedPath)) return '';
     seen.add(normalizedPath);
 
-    const css = fs.readFileSync(cssPath, 'utf8');
-    const root = this.parse(css, cssPath);
+    const css = fs.readFileSync(stylePath, 'utf8');
+    const root = this.parse(css, stylePath);
     const imports: Array<{ rule: AtRule; specifier: string }> = [];
 
-    root.walkAtRules(IMPORT_AT_RULE, (rule) => {
+    root.walkAtRules('import', (rule) => {
       const specifier = this.parseImportSpecifier(rule.params);
       if (specifier) imports.push({ rule, specifier });
     });
@@ -62,7 +57,7 @@ export class StyleProcessor {
     for (const { rule, specifier } of imports) {
       const importedPath = this.resolver.resolveStyleDependency(
         specifier,
-        path.dirname(cssPath),
+        path.dirname(stylePath),
       );
       if (!importedPath) continue;
       const content = this.readStyleFile(importedPath, seen);
@@ -81,10 +76,10 @@ export class StyleProcessor {
       const css = fs.readFileSync(styleFile, 'utf8');
       const root = this.parse(css, styleFile);
 
-      root.walkAtRules(IMPORT_AT_RULE, (rule) => {
+      root.walkAtRules('import', (rule) => {
         const specifier = this.parseImportSpecifier(rule.params);
         if (
-          !specifier?.startsWith(RELATIVE_IMPORT_PREFIX) ||
+          !specifier?.startsWith('.') ||
           !this.config.styleExtensions.includes(path.extname(specifier))
         ) {
           return;

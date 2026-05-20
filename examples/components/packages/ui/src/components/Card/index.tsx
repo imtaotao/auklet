@@ -4,6 +4,6 @@ export type CardProps = {
   title: string;
 };
 
-export const Card = ({ title }: CardProps) => {
+export function Card({ title }: CardProps) {
   return Button({ label: title });
-};
+}

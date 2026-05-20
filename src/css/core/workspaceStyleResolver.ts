@@ -1,21 +1,19 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { NODE_MODULES_DIR, STYLE_ENTRY } from '#auklet/css/constants';
 import { POSIX_SEPARATOR } from '#auklet/utils';
-import { parsePackageStyleSpecifier } from '#auklet/css/core/styleEntry';
+import { parsePackageStyleSpecifier } from '#auklet/css/core/style/specifier';
 import type {
-  ModuleCssBuildConfig,
-  ResolvedModuleCssBuildContext,
+  ModuleStyleBuildConfig,
+  ResolvedModuleStyleBuildContext,
 } from '#auklet/types';
-
-const NODE_MODULES_DIR = 'node_modules';
-const PACKAGE_STYLE_FILE = 'style.css';
 
 export class WorkspaceStyleResolver {
   private readonly require: ReturnType<typeof createRequire>;
 
   constructor(
-    private readonly config: ModuleCssBuildConfig,
-    private readonly context: ResolvedModuleCssBuildContext,
+    private readonly config: ModuleStyleBuildConfig,
+    private readonly context: ResolvedModuleStyleBuildContext,
   ) {
     this.require = createRequire(
       path.join(this.context.packageRoot, 'package.json'),
@@ -66,8 +64,8 @@ export class WorkspaceStyleResolver {
     const currentOutputFormat = path.basename(outRoot);
     const outputFormat = this.getStylePathOutputFormat(stylePath);
 
-    if (stylePath === PACKAGE_STYLE_FILE) {
-      return [packageName, this.config.output.externalCssFile].join(
+    if (stylePath === STYLE_ENTRY) {
+      return [packageName, this.config.output.externalStyleFile].join(
         POSIX_SEPARATOR,
       );
     }
@@ -75,7 +73,7 @@ export class WorkspaceStyleResolver {
     if (
       outputFormat &&
       outputFormat.path ===
-        [this.config.output.styleDir, this.config.output.indexCssFile].join(
+        [this.config.output.styleDir, this.config.output.indexStyleFile].join(
           POSIX_SEPARATOR,
         )
     ) {
@@ -83,7 +81,7 @@ export class WorkspaceStyleResolver {
         packageName,
         currentOutputFormat,
         this.config.output.styleDir,
-        this.config.output.externalCssFile,
+        this.config.output.externalStyleFile,
       ].join(POSIX_SEPARATOR);
     }
 

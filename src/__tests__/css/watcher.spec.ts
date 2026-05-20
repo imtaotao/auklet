@@ -33,8 +33,8 @@ vi.mock('chokidar', () => ({
   },
 }));
 
-vi.mock('#auklet/css/production/moduleCssBuilder', () => ({
-  ModuleCssBuilder: vi.fn((context: Record<string, unknown>) => {
+vi.mock('#auklet/css/production/builder', () => ({
+  ModuleStyleBuilder: vi.fn((context: Record<string, unknown>) => {
     mocks.builderContexts.push(context);
     return {
       build: mocks.build,
@@ -42,10 +42,10 @@ vi.mock('#auklet/css/production/moduleCssBuilder', () => ({
   }),
 }));
 
-import { ModuleCssWatcher } from '#auklet/css/watch/moduleCssWatcher';
+import { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
 import type { AukletConfig, AukletLogger } from '#auklet/types';
 
-describe('ModuleCssWatcher', () => {
+describe('ModuleStyleWatcher', () => {
   let project: VirtualProject;
   let logger: Required<AukletLogger>;
 
@@ -76,7 +76,7 @@ describe('ModuleCssWatcher', () => {
     project.writeFile('source/index.tsx', 'export const value = 1;');
     project.writeFile('auklet.config.ts', 'export const config = {};');
 
-    const watcher = new ModuleCssWatcher({
+    const watcher = new ModuleStyleWatcher({
       packageRoot: project.root,
       aukletConfig,
       logger,
@@ -107,7 +107,7 @@ describe('ModuleCssWatcher', () => {
 
   test('debounces file events into a rebuild', async () => {
     project.writeFile('src/index.tsx', 'export const value = 1;');
-    const watcher = new ModuleCssWatcher({
+    const watcher = new ModuleStyleWatcher({
       packageRoot: project.root,
       logger,
     });

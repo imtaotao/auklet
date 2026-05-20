@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { AukletCssHmr } from '#auklet/css/vite/hmr';
-import type { ModuleCssGraph } from '#auklet/css/core/moduleCssGraph';
+import { AukletStyleHmr } from '#auklet/css/vite/hmr';
+import type { ModuleStyleGraph } from '#auklet/css/core/moduleGraph';
 import type { HotUpdateOptions, ViteDevServer } from 'vite';
 
 type MockModule = {
@@ -19,7 +19,11 @@ const fixture = {
   outsideFile: '/workspace/README.md',
 };
 
-const packageCssEntries = ['style.css', 'external.css', 'module.css'] as const;
+const packageStyleEntries = [
+  'style.css',
+  'external.css',
+  'module.css',
+] as const;
 
 const packageVirtualId = (entry: string) => {
   return `\0auklet-css:${fixture.packageName}/${entry}`;
@@ -33,7 +37,7 @@ const browserVirtualPath = (id: string) => {
   return `/@id/${id.replace('\0', '__x00__')}`;
 };
 
-const createModule = (id: string): MockModule => ({ id });
+const createModule = (id: string) => ({ id } satisfies MockModule);
 
 const registerModule = (context: HmrTestContext, id: string) => {
   const module = createModule(id);
@@ -41,18 +45,18 @@ const registerModule = (context: HmrTestContext, id: string) => {
   return module;
 };
 
-const registerPackageCssModules = (context: HmrTestContext) => {
-  return packageCssEntries.map((entry) =>
+const registerPackageStyleModules = (context: HmrTestContext) => {
+  return packageStyleEntries.map((entry) =>
     registerModule(context, packageVirtualId(entry)),
   );
 };
 
-const trackVirtualCssDependency = (
+const trackVirtualStyleDependency = (
   context: HmrTestContext,
   virtualId = componentVirtualId(fixture.componentName),
 ) => {
   const module = registerModule(context, virtualId);
-  context.hmr.trackVirtualCssDependency(fixture.styleFile, virtualId);
+  context.hmr.trackVirtualStyleDependency(fixture.styleFile, virtualId);
   return { id: virtualId, module };
 };
 
@@ -90,7 +94,7 @@ const createGraph = () => {
       file.startsWith(`${fixture.workspaceRoot}/packages/`),
     ),
     isStyleFile: vi.fn((file: string) => file.endsWith('.css')),
-  } as unknown as ModuleCssGraph;
+  } as unknown as ModuleStyleGraph;
 };
 
 const createServer = () => {
@@ -127,9 +131,9 @@ const createContext = (server: ViteDevServer, file = fixture.styleFile) => {
   } as unknown as HotUpdateOptions;
 };
 
-const createHmrTestContext = (graph: ModuleCssGraph) => {
+const createHmrTestContext = (graph: ModuleStyleGraph) => {
   const server = createServer();
-  const hmr = new AukletCssHmr(() => graph);
+  const hmr = new AukletStyleHmr(() => graph);
 
   return {
     hmr,
@@ -137,8 +141,8 @@ const createHmrTestContext = (graph: ModuleCssGraph) => {
   };
 };
 
-describe('AukletCssHmr', () => {
-  let graph: ModuleCssGraph;
+describe('AukletStyleHmr', () => {
+  let graph: ModuleStyleGraph;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -154,8 +158,8 @@ describe('AukletCssHmr', () => {
 
   test('sends js updates for tracked virtual css dependencies', () => {
     const context = createHmrTestContext(graph);
-    const trackedDependency = trackVirtualCssDependency(context);
-    const packageModules = registerPackageCssModules(context);
+    const trackedDependency = trackVirtualStyleDependency(context);
+    const packageModules = registerPackageStyleModules(context);
 
     const result = handleStyleUpdate(context);
 
@@ -192,7 +196,7 @@ describe('AukletCssHmr', () => {
   test('ignores duplicate updates in a short time window', () => {
     const context = createHmrTestContext(graph);
 
-    trackVirtualCssDependency(context);
+    trackVirtualStyleDependency(context);
     handleStyleUpdate(context);
     context.send.mockClear();
 
@@ -205,7 +209,7 @@ describe('AukletCssHmr', () => {
   test('does not send updates when no virtual dependency is tracked', () => {
     const context = createHmrTestContext(graph);
 
-    const [packageModule] = registerPackageCssModules(context);
+    const [packageModule] = registerPackageStyleModules(context);
 
     const result = handleStyleUpdate(context);
 

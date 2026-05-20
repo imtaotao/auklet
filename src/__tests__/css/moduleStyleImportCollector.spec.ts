@@ -42,7 +42,7 @@ const writeStyleDependency = (project: VirtualProject, specifier: string) => {
   project.writeFile(path.join('styles', specifier), '');
 };
 
-const writeSourceCss = (project: VirtualProject, relativePath: string) => {
+const writeSourceStyle = (project: VirtualProject, relativePath: string) => {
   project.writeFile(path.join('src', relativePath), '');
 };
 
@@ -238,15 +238,15 @@ describe('ModuleStyleImportCollector', () => {
     writeSourceFile(
       project,
       'components/CodeBlock/index.tsx',
-      'export const CodeBlock = () => null;',
+      'export function CodeBlock() { return null; }',
     );
     writeSourceFile(
       project,
       'components/Heading.ts',
       'export type Heading = { title: string };',
     );
-    writeSourceCss(project, 'components/Renderer/index.css');
-    writeSourceCss(project, 'components/CodeBlock/index.css');
+    writeSourceStyle(project, 'components/Renderer/index.css');
+    writeSourceStyle(project, 'components/CodeBlock/index.css');
 
     const entries = collector.collect([file], normalizedConfig);
 
@@ -255,7 +255,7 @@ describe('ModuleStyleImportCollector', () => {
     ]);
   });
 
-  test('collects same-package styles without cssDependencies', () => {
+  test('collects same-package styles without dependency config', () => {
     const file = writeSourceFile(
       project,
       'components/Renderer/index.tsx',
@@ -264,10 +264,10 @@ describe('ModuleStyleImportCollector', () => {
     writeSourceFile(
       project,
       'components/CodeBlock/index.tsx',
-      'export const CodeBlock = () => null;',
+      'export function CodeBlock() { return null; }',
     );
-    writeSourceCss(project, 'components/Renderer/index.css');
-    writeSourceCss(project, 'components/CodeBlock/index.css');
+    writeSourceStyle(project, 'components/Renderer/index.css');
+    writeSourceStyle(project, 'components/CodeBlock/index.css');
 
     const entries = collector.collect([file], emptyOptions);
 
@@ -285,10 +285,10 @@ describe('ModuleStyleImportCollector', () => {
     writeSourceFile(
       project,
       'components/DetailsBlock/index.tsx',
-      'export const DetailsBlock = () => null;',
+      'export function DetailsBlock() { return null; }',
     );
-    writeSourceCss(project, 'components/Chat/index.css');
-    writeSourceCss(project, 'components/DetailsBlock/index.css');
+    writeSourceStyle(project, 'components/Chat/index.css');
+    writeSourceStyle(project, 'components/DetailsBlock/index.css');
 
     const entries = collector.collect([file], normalizedConfig);
 
@@ -306,9 +306,9 @@ describe('ModuleStyleImportCollector', () => {
     writeSourceFile(
       project,
       'components/Button.tsx',
-      'export const Button = () => null;',
+      'export function Button() { return null; }',
     );
-    writeSourceCss(project, 'components/Button.css');
+    writeSourceStyle(project, 'components/Button.css');
 
     const entries = collector.collect([file], emptyOptions);
 

@@ -29,8 +29,9 @@ type BuildContext = {
   runtimeDependencyNames: Array<string>;
   packageExternal: Array<string>;
   peerExternal: Array<string>;
-  globalName: string;
   banner: string;
+  globalName: string;
+  target: NonNullable<PackageBuildOptions['target']>;
   platform: NonNullable<PackageBuildOptions['platform']>;
 };
 
@@ -207,7 +208,8 @@ const createBuildContext = (
     packageExternal: getPackageExternal(pkg, options),
     peerExternal: getPeerExternal(pkg, options),
     globalName: getGlobalName(pkg),
-    platform: options.platform ?? 'neutral',
+    platform: options.platform!,
+    target: options.target!,
     tsconfig: options.tsconfig
       ? path.resolve(packageRoot, options.tsconfig)
       : findWorkspaceTsconfig(packageRoot),
@@ -224,7 +226,7 @@ const createCommonConfig = (
     clean: false,
     sourcemap: false,
     tsconfig: context.tsconfig,
-    target: 'es2018',
+    target: context.target,
     platform: context.platform,
     deps,
     define: {
@@ -336,9 +338,9 @@ export function defineKernelPackageConfigFromOptions(
   packageRoot = process.cwd(),
   config: AukletConfig = {},
 ) {
-  const buildOptions = config.build ?? {};
   const normalizedConfig = normalizeAukletConfig(config);
-  const formats = buildOptions.formats ?? ['cjs', 'esm', 'iife'];
+  const buildOptions = normalizedConfig.build;
+  const formats = buildOptions.formats;
   const context = createBuildContext(
     packageRoot,
     buildOptions,

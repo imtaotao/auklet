@@ -3,18 +3,25 @@ import * as auklet from '#auklet/index';
 
 describe('auklet public api', () => {
   test('exports runtime APIs from the root entry', () => {
-    expect(auklet.aukletDefaultCssOptions).toEqual({
-      themes: {},
-    });
     expect(auklet.aukletDefaultOptions).toEqual({
       source: 'src',
       output: 'dist',
+      modules: false,
+      build: {
+        formats: ['cjs', 'esm', 'iife'],
+        target: 'es2020',
+        platform: 'neutral',
+      },
+      styles: {
+        themes: {},
+        dependencies: {},
+      },
     });
-    expect(auklet.aukletDefaultCssDependencyConfig.entry).toBe('/style.css');
+    expect(auklet.aukletDefaultStyleDependencyConfig.entry).toBe('/style.css');
     expect(auklet.normalizeAukletConfig).toEqual(expect.any(Function));
-    expect(auklet.aukletCssPlugin).toEqual(expect.any(Function));
-    expect(auklet.ModuleCssBuilder).toEqual(expect.any(Function));
-    expect(auklet.ModuleCssWatcher).toEqual(expect.any(Function));
+    expect(auklet.aukletStylePlugin).toEqual(expect.any(Function));
+    expect(auklet.ModuleStyleBuilder).toEqual(expect.any(Function));
+    expect(auklet.ModuleStyleWatcher).toEqual(expect.any(Function));
     expect(auklet.createTsdownArgs).toEqual(expect.any(Function));
     expect(auklet.runTsdown).toEqual(expect.any(Function));
     expect(auklet.loadAukletConfig).toEqual(expect.any(Function));

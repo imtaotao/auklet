@@ -1,23 +1,29 @@
 import type {
   AukletConfig,
-  CssDependencyGroup,
-  CssOptions,
   NormalizedAukletConfig,
   StyleDependencyGroup,
 } from '#auklet/types';
 
 export const aukletConfigFile = 'auklet.config.ts';
 
-export const aukletDefaultCssOptions = {
-  themes: {},
-} satisfies Required<Pick<CssOptions, 'themes'>>;
-
 export const aukletDefaultOptions = {
   source: 'src',
   output: 'dist',
-} satisfies Required<Pick<AukletConfig, 'source' | 'output'>>;
+  modules: false,
+  build: {
+    formats: ['cjs', 'esm', 'iife'],
+    target: 'es2020',
+    platform: 'neutral',
+  },
+  styles: {
+    themes: {},
+    dependencies: {},
+  },
+} satisfies Required<
+  Pick<AukletConfig, 'source' | 'output' | 'modules' | 'build' | 'styles'>
+>;
 
-export const aukletDefaultCssDependencyConfig: CssDependencyGroup = {
+export const aukletDefaultStyleDependencyConfig: StyleDependencyGroup = {
   entry: '/style.css',
   components: ['/pages/**.css', '/components/**.css'],
   themes: {
@@ -27,29 +33,29 @@ export const aukletDefaultCssDependencyConfig: CssDependencyGroup = {
 };
 
 const normalizeStyleDependency = (dependency: StyleDependencyGroup) => ({
-  entry: dependency.entry ?? dependency.global,
+  entry: dependency.entry,
   themes: dependency.themes,
-  components: dependency.components ?? dependency.component,
+  components: dependency.components,
 });
 
-export const normalizeAukletConfig = (config: AukletConfig = {}) => {
-  const dependencies =
-    config.styles?.dependencies ?? config.cssDependencies ?? {};
+export function normalizeAukletConfig(config: AukletConfig = {}) {
+  const dependencies: Record<string, StyleDependencyGroup> =
+    config.styles?.dependencies ?? aukletDefaultOptions.styles.dependencies;
 
   return {
     source: config.source ?? aukletDefaultOptions.source,
 
     output: config.output ?? aukletDefaultOptions.output,
 
-    build: config.build,
+    modules: config.modules ?? aukletDefaultOptions.modules,
 
-    modules: config.modules ?? config.build?.modules ?? false,
+    build: {
+      ...aukletDefaultOptions.build,
+      ...config.build,
+    },
 
     styles: {
-      themes:
-        config.styles?.themes ??
-        config.themes ??
-        aukletDefaultCssOptions.themes,
+      themes: config.styles?.themes ?? aukletDefaultOptions.styles.themes,
 
       dependencies: Object.fromEntries(
         Object.entries(dependencies).map(([packageName, dependency]) => [
@@ -59,4 +65,4 @@ export const normalizeAukletConfig = (config: AukletConfig = {}) => {
       ),
     },
   } satisfies NormalizedAukletConfig;
-};
+}

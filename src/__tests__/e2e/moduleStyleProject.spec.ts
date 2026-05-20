@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { loadAukletConfig } from '#auklet/configLoader';
-import { ModuleCssGraph } from '#auklet/css/core/moduleCssGraph';
-import { ModuleCssBuilder } from '#auklet/css/production/moduleCssBuilder';
+import { ModuleStyleGraph } from '#auklet/css/core/moduleGraph';
+import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import {
   createStyleProject,
   type StyleProjectTemplate,
@@ -12,7 +12,7 @@ import {
   type StyleStructure,
 } from '../fixtures/styleStructure';
 
-const graphCssEntries = [
+const graphStyleEntries = [
   'style.css',
   'external.css',
   'module.css',
@@ -120,7 +120,7 @@ describe('module style project output', () => {
       cacheBust: true,
     });
 
-    await new ModuleCssBuilder({
+    await new ModuleStyleBuilder({
       packageRoot: fixture.packageRoot,
       aukletConfig,
     }).build();
@@ -129,14 +129,14 @@ describe('module style project output', () => {
       fixture.packageRoot,
       fixture.outputDir,
     );
-    const graph = new ModuleCssGraph({
+    const graph = new ModuleStyleGraph({
       workspaceRoot: fixture.workspaceRoot,
     });
     const graphStructure = await normalizeGraphStyleStructure(
       graph,
       fixture.packageName,
       fixture.packageRoot,
-      graphCssEntries,
+      graphStyleEntries,
     );
 
     expect(fixture.outputFiles()).toEqual(expectedOutputFiles);

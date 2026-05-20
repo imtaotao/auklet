@@ -46,7 +46,8 @@ describe('defineKernelPackageConfigFromOptions', () => {
   test('maps auk build options to bundle and module tsdown configs', () => {
     project.writeFiles({
       'src/index.ts': 'export const value = 1;',
-      'src/components/Button/index.tsx': 'export const Button = () => null;',
+      'src/components/Button/index.tsx':
+        'export function Button() { return null; }',
       'src/components/Button/index.spec.tsx': 'export const ignored = true;',
       'src/types.d.ts': 'export type Ignored = string;',
       'src/__tests__/fixture.ts': 'export const ignored = true;',
@@ -72,6 +73,7 @@ describe('defineKernelPackageConfigFromOptions', () => {
       outDir: 'dist',
       dts: true,
       platform: 'neutral',
+      target: 'es2020',
       tsconfig: path.join(project.root, 'tsconfig.package.json'),
       deps: {
         neverBundle: [
@@ -106,6 +108,7 @@ describe('defineKernelPackageConfigFromOptions', () => {
       format: 'esm',
       outDir: 'dist/es',
       dts: true,
+      target: 'es2020',
       deps: {
         neverBundle: [
           'aidly',
@@ -126,8 +129,25 @@ describe('defineKernelPackageConfigFromOptions', () => {
       format: 'cjs',
       outDir: 'dist/lib',
       dts: true,
+      target: 'es2020',
       unbundle: true,
     });
+  });
+
+  test('uses custom build target for bundle and module configs', () => {
+    const configs = defineKernelPackageConfigFromOptions(project.root, {
+      modules: true,
+      build: {
+        formats: ['iife'],
+        target: 'es2022',
+      },
+    });
+
+    expect(configs.map((config) => config.target)).toEqual([
+      'es2022',
+      'es2022',
+      'es2022',
+    ]);
   });
 
   test('omits the banner author line when package author is missing', () => {
@@ -194,7 +214,10 @@ describe('defineKernelPackageConfigFromOptions', () => {
   });
 
   test('uses tsx package entry when ts entry is missing', () => {
-    project.writeFile('src/index.tsx', 'export const Component = () => null;');
+    project.writeFile(
+      'src/index.tsx',
+      'export function Component() { return null; }',
+    );
 
     const configs = defineKernelPackageConfigFromOptions(project.root, {
       build: {

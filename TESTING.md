@@ -24,9 +24,9 @@ src/__tests__/
     styleProcessor.spec.ts
     workspaceStyleResolver.spec.ts
     moduleStyleImportCollector.spec.ts
-    moduleCssGraph.spec.ts
-    moduleCssBuilder.spec.ts
-    moduleCssWatcher.spec.ts
+    moduleGraph.spec.ts
+    builder.spec.ts
+    watcher.spec.ts
     path.spec.ts
   build/
     runTsdown.spec.ts
@@ -69,7 +69,7 @@ const aukletConfig = await loadAukletConfig(fixture.packageRoot, {
   cacheBust: true,
 });
 
-await new ModuleCssBuilder({
+await new ModuleStyleBuilder({
   packageRoot: fixture.packageRoot,
   aukletConfig,
 }).build();
@@ -80,7 +80,7 @@ e2e 重点断言：
 - `fixture.outputFiles()` 是否包含完整产物结构。
 - 包级 `index.css` 是否包含关键样式内容。
 - `style/index.css`、`style/external.css`、主题入口、组件 style 入口的 `@import` 顺序和路径是否正确。
-- `ModuleCssGraph` 生成的 Vite/dev 虚拟入口是否具备同样语义结构。
+- `ModuleStyleGraph` 生成的 Vite/dev 虚拟入口是否具备同样语义结构。
 - `buildStructure` 和 `graphStructure` 的 components/themes 语义 key 是否一致。
 
 新增 e2e 场景时优先复用现有主场景，只有当场景会让主测试变得难读时才新建 test。不要为每个小分支都建 e2e。
@@ -90,9 +90,9 @@ e2e 重点断言：
 - `StyleProcessor`：style import 展开、内容合并、重复处理、循环 import、支持的 style 扩展名。
 - `WorkspaceStyleResolver`：相对路径、包路径、package exports、node_modules fallback、output format rewrite、external style specifier。
 - `ModuleStyleImportCollector`：从源码 import 推导 style import，包括 package entry、deep import、namespace import、alias、relative import、type-only/declaration skip。
-- `ModuleCssGraph`：Vite/dev 虚拟入口、图结构、递归 workspace 依赖、主题顺序、source graph 判断、watch roots、模块依赖顺序。
-- `ModuleCssBuilder`：构建器自己的分支和产物边界，例如 legacy output-format rewrite、无 CSS 模块、空 style 入口、默认 cwd。
-- `ModuleCssWatcher`：watch roots、debounce、logger、builder 调用参数。
+- `ModuleStyleGraph`：Vite/dev 虚拟入口、图结构、递归 workspace 依赖、主题顺序、source graph 判断、watch roots、模块依赖顺序。
+- `ModuleStyleBuilder`：构建器自己的分支和产物边界，例如 legacy output-format rewrite、无 CSS 模块、空 style 入口、默认 cwd。
+- `ModuleStyleWatcher`：watch roots、debounce、logger、builder 调用参数。
 - `configLoader`：配置模块形态、TypeScript 配置加载、缺失配置、临时文件清理。
 - `tsdownConfig`：build 选项映射、package 元数据、banner、externals、配置加载。
 - `index.spec.ts`：根公开 API smoke test，不扩展成行为测试。
@@ -172,7 +172,7 @@ type StyleStructure = {
 使用规则：
 
 - 真实构建产物用 `normalizeBuildStyleStructure(packageRoot, outputDir)`。
-- Vite/dev 图结构用 `normalizeGraphStyleStructure(graph, packageName, packageRoot, cssPaths)`。
+- Vite/dev 图结构用 `normalizeGraphStyleStructure(graph, packageName, packageRoot, stylePaths)`。
 - 断言优先看 `entries[id].imports`、`entries[id].content`、`components`、`themes`。
 - Vite 虚拟 id 在 `StyleStructure` 中只保留语义 id，不把 `\0auklet-css:` 这类内部前缀放进项目级断言。
 - 所有路径相关断言使用 posix `/` 语义，不把绝对临时目录写进快照。
@@ -289,7 +289,7 @@ CLI 后续如果补测试，单独建测试文件，只做命令入口层 smoke 
 - 已新增高层 style 项目模板 `fixtures/styleProjectTemplate.ts`。
 - 已新增 `StyleStructure` normalize/helper `fixtures/styleStructure.ts`。
 - 已新增项目级 e2e `e2e/moduleStyleProject.spec.ts`。
-- 已将 `ModuleCssBuilder` 中完整项目大场景迁到 e2e。
+- 已将 `ModuleStyleBuilder` 中完整项目大场景迁到 e2e。
 - 已让 CSS 相关单测保留模块边界职责，不再承载完整项目场景。
 - 已删除旧的 CSS 专用 `cssTestFixture.ts`。
 - 已将 `configLoader`、`tsdownConfig` 等非 CSS 临时项目测试也迁到通用 fixture。

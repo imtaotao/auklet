@@ -2,6 +2,6 @@ export type ButtonProps = {
   label: string;
 };
 
-export const Button = ({ label }: ButtonProps) => {
+export function Button({ label }: ButtonProps) {
   return label;
-};
+}

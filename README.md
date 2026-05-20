@@ -76,6 +76,7 @@ export const config: AukletConfig = {
   modules: true,
   build: {
     formats: ['esm', 'cjs'],
+    target: 'es2020',
     tsconfig: 'tsconfig.json',
   },
 };
@@ -85,8 +86,8 @@ export const config: AukletConfig = {
 
 - `source`: source directory relative to the package root. Defaults to `src`.
 - `output`: build output directory relative to the package root. Defaults to `dist`.
-- `styles.themes`: package theme style entries. Defaults to no themes.
-- `styles.dependencies`: external package style dependencies.
+- `styles.themes`: package theme style entries. Defaults to `{}`.
+- `styles.dependencies`: external package style dependencies. Defaults to `{}`.
 
 Each `styles.dependencies` entry may define:
 
@@ -94,7 +95,7 @@ Each `styles.dependencies` entry may define:
 - `themes`: theme style dependency map.
 - `components`: glob-like component style rules used to infer style imports from source imports.
 
-Legacy `themes` and `cssDependencies` fields are still supported, but new config should use `styles`.
+Style configuration should use the grouped `styles` field.
 
 ```ts
 export const config: AukletConfig = {
@@ -111,12 +112,13 @@ export const config: AukletConfig = {
 
 ### Build Options
 
-- `modules`: whether to generate unbundled `dist/es` and `dist/lib` output. CSS module style entries also follow this flag.
-- `formats`: package bundle formats: `esm`, `cjs`, or `iife`.
-- `platform`: build target runtime platform: `neutral`, `node`, or `browser`. Defaults to `neutral`.
-- `banner`: custom bundle banner.
-- `externals`: additional external packages.
-- `tsconfig`: TypeScript config path relative to the package root.
+- `modules`: whether to generate unbundled `dist/es` and `dist/lib` output. Defaults to `false`. CSS module style entries also follow this flag.
+- `build.formats`: package bundle formats: `esm`, `cjs`, or `iife`. Defaults to `['cjs', 'esm', 'iife']`.
+- `build.target`: JavaScript compilation target passed to tsdown. Defaults to `es2020` and is shared by bundle, global, and module output.
+- `build.platform`: build target runtime platform: `neutral`, `node`, or `browser`. Defaults to `neutral`.
+- `build.banner`: custom bundle banner. Defaults to a package name/version banner.
+- `build.externals`: additional external packages. Defaults to `[]`.
+- `build.tsconfig`: TypeScript config path relative to the package root. Defaults to the nearest `tsconfig.json` found from the package root upward.
 
 ### Build Constants
 
@@ -166,13 +168,13 @@ Important entry semantics:
 
 ## Vite Plugin
 
-Use `aukletCssPlugin` in Vite dev mode to load virtual package CSS entries.
+Use `aukletStylePlugin` in Vite dev mode to load virtual package CSS entries.
 
 ```ts
-import { aukletCssPlugin } from 'auklet';
+import { aukletStylePlugin } from 'auklet';
 
 export default {
-  plugins: [aukletCssPlugin()],
+  plugins: [aukletStylePlugin()],
 };
 ```
 
@@ -188,16 +190,16 @@ import '@scope/app/themes/light.css';
 
 ```ts
 import {
-  ModuleCssBuilder,
-  ModuleCssWatcher,
-  aukletCssPlugin,
+  ModuleStyleBuilder,
+  ModuleStyleWatcher,
+  aukletStylePlugin,
   loadAukletConfig,
   runTsdown,
 } from 'auklet';
 
 const aukletConfig = await loadAukletConfig(process.cwd());
 
-await new ModuleCssBuilder({
+await new ModuleStyleBuilder({
   packageRoot: process.cwd(),
   aukletConfig,
 }).build();
@@ -205,9 +207,9 @@ await new ModuleCssBuilder({
 
 Public exports include:
 
-- `ModuleCssBuilder`
-- `ModuleCssWatcher`
-- `aukletCssPlugin`
+- `ModuleStyleBuilder`
+- `ModuleStyleWatcher`
+- `aukletStylePlugin`
 - `loadAukletConfig`
 - `resolveAukletConfigModule`
 - `createTsdownArgs`

@@ -138,6 +138,11 @@ describe('normalizeAukletConfig', () => {
       source: 'source',
       output: 'output',
       modules: true,
+      build: {
+        formats: ['cjs', 'esm', 'iife'],
+        target: 'es2020',
+        platform: 'neutral',
+      },
       styles: {
         themes: {
           light: './source/themes/light.css',
@@ -152,47 +157,25 @@ describe('normalizeAukletConfig', () => {
     });
   });
 
-  test('normalizes legacy style fields', () => {
+  test('uses default options when fields are missing', () => {
     expect(
       normalizeAukletConfig({
         source: 'source',
         output: 'output',
-        themes: {
-          dark: './source/themes/dark.css',
-        },
-        cssDependencies: {
-          '@scope/ui': {
-            global: '/style.css',
-            component: '/components/**.css',
-          },
-        },
       }),
     ).toMatchObject({
       source: 'source',
       output: 'output',
-      styles: {
-        themes: {
-          dark: './source/themes/dark.css',
-        },
-        dependencies: {
-          '@scope/ui': {
-            entry: '/style.css',
-            components: '/components/**.css',
-          },
-        },
+      modules: false,
+      build: {
+        formats: ['cjs', 'esm', 'iife'],
+        target: 'es2020',
+        platform: 'neutral',
       },
-    });
-  });
-
-  test('normalizes legacy build modules field', () => {
-    expect(
-      normalizeAukletConfig({
-        build: {
-          modules: true,
-        },
-      }),
-    ).toMatchObject({
-      modules: true,
+      styles: {
+        themes: {},
+        dependencies: {},
+      },
     });
   });
 });

@@ -2,16 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { aukletConfigFile, aukletDefaultOptions } from '#auklet/config';
-import { moduleCssBuildConfig } from '#auklet/css/core/config';
-import { ModuleCssBuilder } from '#auklet/css/production/moduleCssBuilder';
+import { moduleStyleBuildConfig } from '#auklet/css/config';
+import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import type {
   AukletLogger,
-  ModuleCssBuildConfig,
-  ModuleCssBuildContext,
+  ModuleStyleBuildConfig,
+  ModuleStyleBuildContext,
 } from '#auklet/types';
 
-export class ModuleCssWatcher {
-  private readonly context: ModuleCssBuildContext & { packageRoot: string };
+export class ModuleStyleWatcher {
+  private readonly context: ModuleStyleBuildContext & { packageRoot: string };
   private readonly logger?: AukletLogger;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private isBuilding = false;
@@ -19,8 +19,8 @@ export class ModuleCssWatcher {
   private watcher: FSWatcher | null = null;
 
   constructor(
-    context: ModuleCssBuildContext = {},
-    private readonly config: ModuleCssBuildConfig = moduleCssBuildConfig,
+    context: ModuleStyleBuildContext = {},
+    private readonly config: ModuleStyleBuildConfig = moduleStyleBuildConfig,
   ) {
     this.context = {
       packageRoot: process.cwd(),
@@ -41,7 +41,7 @@ export class ModuleCssWatcher {
     }
     this.isBuilding = true;
     try {
-      const builder = new ModuleCssBuilder(this.context, this.config);
+      const builder = new ModuleStyleBuilder(this.context, this.config);
       await builder.build();
       await this.refreshWatcher();
     } catch (error) {

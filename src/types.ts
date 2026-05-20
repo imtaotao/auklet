@@ -5,13 +5,7 @@ export type StyleDependencyGroup = {
   themes?: Record<string, string>;
   // 模块样式自动引用规则，用于从 import 推导对应样式入口。
   components?: string | Array<string>;
-  // 兼容旧配置：请使用 entry。
-  global?: string | Array<string>;
-  // 兼容旧配置：请使用 components。
-  component?: string | Array<string>;
 };
-
-export type CssDependencyGroup = StyleDependencyGroup;
 
 export type StyleOptions = {
   // 当前包主题样式入口，key 是主题名，value 是相对于当前包根目录的样式文件路径。
@@ -19,15 +13,6 @@ export type StyleOptions = {
   // 外部包样式依赖配置，key 是包名前缀，value 是该包的样式依赖规则。
   dependencies?: Record<string, StyleDependencyGroup>;
 };
-
-export interface CssOptions {
-  // 样式构建配置。
-  styles?: StyleOptions;
-  // 兼容旧配置：请使用 styles.dependencies。
-  cssDependencies?: Record<string, CssDependencyGroup>;
-  // 兼容旧配置：请使用 styles.themes。
-  themes?: Record<string, string>;
-}
 
 export type NormalizedStyleDependencyGroup = {
   // 全局 CSS 依赖，会被合并进包级 dist/index.css。
@@ -46,34 +31,37 @@ export interface NormalizedAukletConfig {
     themes: Record<string, string>;
     dependencies: Record<string, NormalizedStyleDependencyGroup>;
   };
-  build?: PackageBuildOptions;
+  build: Required<Pick<PackageBuildOptions, 'formats' | 'target' | 'platform'>>;
 }
 
 export type PackageBuildFormat = 'cjs' | 'esm' | 'iife';
 export type PackageBuildPlatform = 'node' | 'neutral' | 'browser';
+export type PackageBuildTarget = string | Array<string> | false;
 
 export type PackageBuildOptions = {
   // 包级 bundle 产物格式，例如 cjs、esm、iife。
   formats?: Array<PackageBuildFormat>;
+  // JavaScript 编译目标，传给 tsdown；bundle、global 和 module 产物会保持一致，默认 es2020。
+  target?: PackageBuildTarget;
   // 构建目标运行平台，默认 neutral，不假设 Node 或浏览器环境。
   platform?: PackageBuildPlatform;
   // 自定义 bundle banner；未传入时根据 package.json 自动生成。
   banner?: string;
   // 额外标记为外部依赖的包名；会和 package.json dependencies、peerDependencies 一起传给 tsdown。
   externals?: Array<string>;
-  // 兼容旧配置：请使用顶层 modules。
-  modules?: boolean;
   // TypeScript 配置文件路径，相对于当前包根目录；默认向上查找 tsconfig.json。
   tsconfig?: string;
 };
 
-export interface AukletConfig extends CssOptions {
+export interface AukletConfig {
   // 源码目录，相对于当前包根目录。
   source?: string;
   // 构建产物目录，相对于当前包根目录。
   output?: string;
   // 是否生成 dist/es 和 dist/lib 下的模块产物；CSS 组件级产物也依赖该行为。
   modules?: boolean;
+  // 样式构建配置。
+  styles?: StyleOptions;
   // JavaScript/TypeScript 构建配置。
   build?: PackageBuildOptions;
 }
@@ -91,7 +79,7 @@ export type LoadAukletConfigOptions = {
   cacheBust?: boolean;
 };
 
-export interface ModuleCssBuildContext {
+export interface ModuleStyleBuildContext {
   // 当前执行 CSS 构建的包根目录，默认使用 process.cwd()。
   packageRoot?: string;
   // 已加载的 auklet 配置；未传入时核心 API 使用空配置。
@@ -104,7 +92,7 @@ export interface ModuleCssBuildContext {
   output?: string;
 }
 
-export interface ResolvedModuleCssBuildContext {
+export interface ResolvedModuleStyleBuildContext {
   // 当前执行 CSS 构建的包根目录。
   packageRoot: string;
   // 已解析后的源码目录，使用绝对路径。
@@ -113,27 +101,27 @@ export interface ResolvedModuleCssBuildContext {
   outputDir: string;
 }
 
-export type ModuleCssBuildOptions = {
+export type ModuleStyleBuildOptions = {
   aukletConfig?: AukletConfig;
   logger?: AukletLogger;
 };
 
-export interface ModuleCssBuildOutputConfig {
+export interface ModuleStyleBuildOutputConfig {
   // 需要同步生成 CSS 产物的模块格式目录，例如 es、lib。
   outputFormats: Array<string>;
   // 组件级 CSS 入口目录名，例如 style/index.css 里的 style。
   styleDir: string;
   // CSS 入口文件名，例如 style/index.css 和 dist/index.css。
-  indexCssFile: string;
+  indexStyleFile: string;
   // 外部 CSS 入口文件名，例如 style/external.css。
-  externalCssFile: string;
+  externalStyleFile: string;
   // 当前包 CSS 入口文件名，例如 style/module.css。
-  moduleCssFile: string;
+  moduleStyleFile: string;
 }
 
-export interface ModuleCssBuildConfig {
+export interface ModuleStyleBuildConfig {
   // CSS 产物结构配置。
-  output: ModuleCssBuildOutputConfig;
+  output: ModuleStyleBuildOutputConfig;
   // 支持处理的样式文件后缀。
   styleExtensions: Array<string>;
 }

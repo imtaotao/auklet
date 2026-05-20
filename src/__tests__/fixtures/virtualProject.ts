@@ -25,7 +25,7 @@ export type VirtualProject = {
 
 const virtualProjectsRoot = path.join(__dirname, '..', '.tmp');
 
-export const createVirtualProject = (prefix = 'auklet-project-') => {
+export function createVirtualProject(prefix = 'auklet-project-') {
   fs.mkdirSync(virtualProjectsRoot, { recursive: true });
 
   const root = fs.mkdtempSync(path.join(virtualProjectsRoot, prefix));
@@ -104,4 +104,4 @@ export const createVirtualProject = (prefix = 'auklet-project-') => {
     exists,
     cleanup,
   } satisfies VirtualProject;
-};
+}

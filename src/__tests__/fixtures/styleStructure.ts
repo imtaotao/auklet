@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import postcss from 'postcss';
 import type {
-  ModuleCssGraph,
-  PackageCssLoadResult,
-} from '#auklet/css/core/moduleCssGraph';
+  ModuleStyleGraph,
+  PackageStyleLoadResult,
+} from '#auklet/css/core/moduleGraph';
 
 export type StyleStructure = {
   packageEntry: StyleEntry | null;
@@ -26,11 +26,11 @@ export type StyleEntry = {
   watchFiles?: Array<string>;
 };
 
-export const toPosixTestPath = (file: string) => {
+export function toPosixTestPath(file: string) {
   return file.split(path.sep).join('/');
-};
+}
 
-export const collectStyleImports = (code: string) => {
+export function collectStyleImports(code: string) {
   const imports: Array<string> = [];
   const root = postcss.parse(code);
 
@@ -40,7 +40,7 @@ export const collectStyleImports = (code: string) => {
   });
 
   return imports;
-};
+}
 
 const createStyleEntry = (
   id: string,
@@ -59,13 +59,15 @@ const createStyleEntry = (
   } satisfies StyleEntry;
 };
 
-const createEmptyStyleStructure = (): StyleStructure => {
-  return {
+const createEmptyStyleStructure = () => {
+  const structure: StyleStructure = {
     packageEntry: null,
     entries: {},
     themes: {},
     components: {},
-  } satisfies StyleStructure;
+  };
+
+  return structure;
 };
 
 const ensureComponent = (structure: StyleStructure, componentId: string) => {
@@ -85,10 +87,10 @@ const readEntry = (root: string, relativePath: string, id = relativePath) => {
   });
 };
 
-export const normalizeBuildStyleStructure = (
+export function normalizeBuildStyleStructure(
   packageRoot: string,
   outputDir: string,
-) => {
+) {
   const outputRoot = path.join(packageRoot, outputDir);
   const structure = createEmptyStyleStructure();
   const packageEntry = readEntry(outputRoot, 'index.css');
@@ -140,51 +142,54 @@ export const normalizeBuildStyleStructure = (
 
   walk(outputRoot);
   return structure;
-};
+}
 
 const normalizeGraphEntry = (
-  cssPath: string,
-  result: PackageCssLoadResult,
+  stylePath: string,
+  result: PackageStyleLoadResult,
   packageRoot: string,
 ) => {
-  return createStyleEntry(cssPath, result.code, {
+  return createStyleEntry(stylePath, result.code, {
     watchFiles: result.watchFiles.map((file) =>
       toPosixTestPath(path.relative(packageRoot, file)),
     ),
   });
 };
 
-export const normalizeGraphStyleStructure = async (
-  graph: ModuleCssGraph,
+export async function normalizeGraphStyleStructure(
+  graph: ModuleStyleGraph,
   packageName: string,
   packageRoot: string,
-  cssPaths: Array<string>,
-) => {
+  stylePaths: Array<string>,
+) {
   const structure = createEmptyStyleStructure();
 
-  for (const cssPath of cssPaths) {
-    const result = await graph.createPackageCssCode({ packageName, cssPath });
-    const entry = normalizeGraphEntry(cssPath, result, packageRoot);
+  for (const stylePath of stylePaths) {
+    const result = await graph.createPackageStyleCode({
+      packageName,
+      stylePath,
+    });
+    const entry = normalizeGraphEntry(stylePath, result, packageRoot);
 
-    structure.entries[cssPath] = entry;
-    if (cssPath === 'style.css') {
+    structure.entries[stylePath] = entry;
+    if (stylePath === 'style.css') {
       structure.packageEntry = entry;
     }
 
-    const themeMatch = cssPath.match(/^themes\/([^/]+)\.css$/);
+    const themeMatch = stylePath.match(/^themes\/([^/]+)\.css$/);
     if (themeMatch) {
       structure.themes[themeMatch[1]] = entry;
     }
 
-    const componentMatch = cssPath.match(/^(.+)\.css$/);
+    const componentMatch = stylePath.match(/^(.+)\.css$/);
     if (
       componentMatch &&
-      !['style.css', 'external.css', 'module.css'].includes(cssPath) &&
-      !cssPath.startsWith('themes/')
+      !['style.css', 'external.css', 'module.css'].includes(stylePath) &&
+      !stylePath.startsWith('themes/')
     ) {
       ensureComponent(structure, componentMatch[1]).styleEntry = entry;
     }
   }
 
   return structure;
-};
+}

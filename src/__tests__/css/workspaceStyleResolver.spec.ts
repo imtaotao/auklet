@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { moduleCssBuildConfig } from '#auklet/css/core/config';
+import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import {
   createVirtualProject,
@@ -16,7 +16,7 @@ describe('WorkspaceStyleResolver', () => {
     project = createVirtualProject('auklet-resolver-');
     project.writePackageJson({ name: 'fixture-package' });
 
-    resolver = new WorkspaceStyleResolver(moduleCssBuildConfig, {
+    resolver = new WorkspaceStyleResolver(moduleStyleBuildConfig, {
       packageRoot: project.root,
       sourceDir: project.resolve('src'),
       outputDir: project.resolve('dist'),

@@ -6,19 +6,21 @@ import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver'
 import {
   createStyleFileKey,
   createStyleFileKeySet,
+} from '#auklet/css/core/style/files';
+import {
   getThemeNames,
   resolveThemeStyleFiles,
-} from '#auklet/css/core/styleEntry';
+} from '#auklet/css/core/style/dependencies';
 import { fileWalker } from '#auklet/utils';
 import type {
-  ModuleCssBuildConfig,
+  ModuleStyleBuildConfig,
   NormalizedAukletConfig,
-  ResolvedModuleCssBuildContext,
+  ResolvedModuleStyleBuildContext,
 } from '#auklet/types';
 
 export type StylePackageContextOptions = {
-  config: ModuleCssBuildConfig;
-  context: ResolvedModuleCssBuildContext;
+  config: ModuleStyleBuildConfig;
+  context: ResolvedModuleStyleBuildContext;
   normalizedConfig: NormalizedAukletConfig;
 };
 
