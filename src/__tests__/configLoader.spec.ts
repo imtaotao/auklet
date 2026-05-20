@@ -121,6 +121,7 @@ describe('normalizeAukletConfig', () => {
       normalizeAukletConfig({
         source: 'source',
         output: 'output',
+        modules: true,
         styles: {
           themes: {
             light: './source/themes/light.css',
@@ -136,6 +137,7 @@ describe('normalizeAukletConfig', () => {
     ).toMatchObject({
       source: 'source',
       output: 'output',
+      modules: true,
       styles: {
         themes: {
           light: './source/themes/light.css',
@@ -179,6 +181,18 @@ describe('normalizeAukletConfig', () => {
           },
         },
       },
+    });
+  });
+
+  test('normalizes legacy build modules field', () => {
+    expect(
+      normalizeAukletConfig({
+        build: {
+          modules: true,
+        },
+      }),
+    ).toMatchObject({
+      modules: true,
     });
   });
 });

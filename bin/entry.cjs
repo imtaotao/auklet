@@ -4,6 +4,18 @@ const fs = require('node:fs');
 const path = require('node:path');
 const minimist = require('minimist');
 
+const getPackageVersion = () => {
+  const packageJson = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'),
+  );
+  return packageJson.version;
+};
+
+const runVersion = async () => {
+  console.log(getPackageVersion());
+  return 0;
+};
+
 const runBuildCss = async (args) => {
   const shouldWatch = args.includes('--watch') || args.includes('-w');
   const { loadAukletConfig } = await import('../dist/configLoader.js');
@@ -90,15 +102,21 @@ const runDev = async () => {
 };
 
 const argv = minimist(process.argv.slice(2), {
-  boolean: ['help'],
+  boolean: ['help', 'version'],
   alias: {
     h: 'help',
+    v: 'version',
   },
 });
 const [command, ...args] = argv._;
 const commandIndex = process.argv.indexOf(command);
 const commandArgs =
   commandIndex >= 0 ? process.argv.slice(commandIndex + 1) : args;
+
+if (argv.version) {
+  console.log(getPackageVersion());
+  process.exit(0);
+}
 
 if (argv.help || !command) {
   console.log('Usage: auk <command>');
@@ -108,6 +126,11 @@ if (argv.help || !command) {
   console.log('  build-js  Build package JavaScript output with tsdown');
   console.log('  build-css  Build package module CSS output, supports --watch');
   console.log('  dev       Watch package JavaScript and CSS output');
+  console.log('  version   Print auklet version');
+  console.log('');
+  console.log('Options:');
+  console.log('  -v, --version  Print auklet version');
+  console.log('  -h, --help     Print help');
   process.exit(argv.help ? 0 : 1);
 }
 
@@ -116,6 +139,7 @@ const runners = {
   'build-js': runBuildJs,
   'build-css': runBuildCss,
   dev: runDev,
+  version: runVersion,
 };
 
 const runner = runners[command];

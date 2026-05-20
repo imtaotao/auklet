@@ -1,0 +1,8 @@
+{
+  "name": "@demo/components",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter './packages/*' build"
+  }
+}

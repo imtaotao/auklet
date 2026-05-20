@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -8,8 +7,6 @@ export default defineConfig({
     __VERSION__: `'unknown'`,
   },
   resolve: {
-    alias: {
-      '#auklet': path.resolve(__dirname, './src'),
-    },
+    conditions: ['source'],
   },
 });

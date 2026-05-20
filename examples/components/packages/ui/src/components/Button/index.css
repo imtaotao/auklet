@@ -1,0 +1,4 @@
+.demo-button {
+  border-radius: var(--demo-radius);
+  color: var(--demo-color-primary);
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@demo/string",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "auk build"
+  },
+  "devDependencies": {
+    "auklet": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}

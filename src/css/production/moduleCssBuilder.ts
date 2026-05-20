@@ -80,7 +80,7 @@ export class ModuleCssBuilder {
     );
     if (packageStyle) outputs.push(packageStyle);
 
-    if (!cssOptions.build?.modules) {
+    if (!cssOptions.modules) {
       this.logOutputs(context, styleFiles, outputs, logger);
       return;
     }

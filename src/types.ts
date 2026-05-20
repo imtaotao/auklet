@@ -49,6 +49,7 @@ export type NormalizedStyleDependencyGroup = {
 export interface NormalizedAukletConfig {
   source: string;
   output: string;
+  modules: boolean;
   styles: {
     themes: Record<string, string>;
     dependencies: Record<string, NormalizedStyleDependencyGroup>;
@@ -65,13 +66,15 @@ export type PackageBuildOptions = {
   banner?: string;
   // 额外标记为外部依赖的包名；会和 package.json dependencies、peerDependencies 一起传给 tsdown。
   externals?: Array<string>;
-  // 是否生成 dist/es 和 dist/lib 下的 unbundle 模块产物。
+  // 兼容旧配置：请使用顶层 modules。
   modules?: boolean;
   // TypeScript 配置文件路径，相对于当前包根目录；默认向上查找 tsconfig.json。
   tsconfig?: string;
 };
 
 export interface AukletConfig extends CssOptions {
+  // 是否生成 dist/es 和 dist/lib 下的模块产物；CSS 组件级产物也依赖该行为。
+  modules?: boolean;
   // JavaScript/TypeScript 构建配置。
   build?: PackageBuildOptions;
 }

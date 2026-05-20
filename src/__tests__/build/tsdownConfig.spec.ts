@@ -39,10 +39,10 @@ describe('defineKernelPackageConfigFromOptions', () => {
 
   test('maps auk build options to bundle and module tsdown configs', () => {
     const configs = defineKernelPackageConfigFromOptions(project.root, {
+      modules: true,
       build: {
         formats: ['esm'],
         externals: ['@scope/external'],
-        modules: true,
         tsconfig: 'tsconfig.package.json',
       },
     });

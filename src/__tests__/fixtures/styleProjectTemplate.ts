@@ -41,9 +41,7 @@ const createAukletConfig = () => `
         },
       },
     },
-    build: {
-      modules: true,
-    },
+    modules: true,
   };
 `;
 

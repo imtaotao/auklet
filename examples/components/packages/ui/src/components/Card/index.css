@@ -1,0 +1,6 @@
+@import './tokens.css';
+
+.demo-card {
+  background: var(--demo-bg);
+  color: var(--demo-text);
+}

@@ -66,9 +66,9 @@ export const config: AukletConfig = {
       },
     },
   },
+  modules: true,
   build: {
     formats: ['esm', 'cjs'],
-    modules: true,
     tsconfig: 'tsconfig.json',
   },
 };
@@ -104,17 +104,27 @@ export const config: AukletConfig = {
 
 ### Build Options
 
+- `modules`: whether to generate unbundled `dist/es` and `dist/lib` output. CSS module style entries also follow this flag.
 - `formats`: package bundle formats: `esm`, `cjs`, or `iife`.
 - `banner`: custom bundle banner.
 - `externals`: additional external packages.
-- `modules`: whether to generate unbundled `dist/es` and `dist/lib` output.
 - `tsconfig`: TypeScript config path relative to the package root.
+
+### Build Constants
+
+`auk build` injects these compile-time constants into bundled output:
+
+- `__DEV__`: `true` when `process.env.NODE_ENV !== 'production'`, otherwise `false`.
+- `__TEST__`: always `false` in package builds.
+- `__VERSION__`: current package version from `package.json`.
+
+Vitest uses the same names with test-friendly values: `__DEV__` is `true`, `__TEST__` is `true`, and `__VERSION__` is `'unknown'`.
 
 ## CSS Output
 
 `build-css` always generates the package-level `index.css` when source styles exist.
 
-Module style entries under `dist/es` and `dist/lib` are generated only when `build.modules` is `true`, matching the JavaScript module output.
+Module style entries under `dist/es` and `dist/lib` are generated only when `modules` is `true`, matching the JavaScript module output.
 
 Typical module output includes:
 

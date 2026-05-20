@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig, type UserConfig } from 'tsdown/config';
 import { loadAukletConfig } from '#auklet/configLoader';
+import { normalizeAukletConfig } from '#auklet/config';
 import type {
   AukletConfig,
   PackageBuildFormat,
@@ -254,10 +255,11 @@ export function defineKernelPackageConfigFromOptions(
   config: AukletConfig = {},
 ): Array<UserConfig> {
   const buildOptions = config.build ?? {};
+  const normalizedConfig = normalizeAukletConfig(config);
   const formats = buildOptions.formats ?? ['cjs', 'esm', 'iife'];
   const context = createBuildContext(packageRoot, buildOptions);
   const bundleConfigs = createBundleConfigs(context, formats);
-  const moduleConfigs = buildOptions.modules
+  const moduleConfigs = normalizedConfig.modules
     ? createModuleConfigs(context)
     : [];
 

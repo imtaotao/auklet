@@ -1,0 +1,19 @@
+{
+  "name": "@demo/theme",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "auk build-css"
+  },
+  "devDependencies": {
+    "auklet": "workspace:*"
+  },
+  "exports": {
+    "./style.css": "./dist/index.css",
+    "./themes/*.css": {
+      "import": "./dist/es/themes/*.css",
+      "require": "./dist/lib/themes/*.css",
+      "default": "./dist/es/themes/*.css"
+    }
+  }
+}

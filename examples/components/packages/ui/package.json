@@ -1,0 +1,23 @@
+{
+  "name": "@demo/ui",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "auk build"
+  },
+  "dependencies": {
+    "@demo/theme": "workspace:*"
+  },
+  "devDependencies": {
+    "auklet": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./style.css": "./dist/index.css",
+    "./components/*.css": "./dist/es/components/*/style/index.css",
+    "./themes/*.css": "./dist/es/themes/*.css"
+  }
+}

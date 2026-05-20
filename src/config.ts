@@ -40,6 +40,8 @@ export const normalizeAukletConfig = (config: AukletConfig = {}) => {
 
     build: config.build,
 
+    modules: config.modules ?? config.build?.modules ?? false,
+
     styles: {
       themes:
         config.styles?.themes ??

@@ -16,9 +16,7 @@ const sourceBuildConfig = {
 
 const sourceModuleBuildConfig = {
   ...sourceBuildConfig,
-  build: {
-    modules: true,
-  },
+  modules: true,
 } satisfies AukletConfig;
 
 const createBuilder = (fixture: VirtualProject, aukletConfig: AukletConfig) => {
@@ -62,9 +60,7 @@ describe('ModuleCssBuilder', () => {
           },
         },
       },
-      build: {
-        modules: true,
-      },
+      modules: true,
     };
     fixture.writeFile('node_modules/@scope/ui/es/style/index.css', '.esm {}');
     fixture.writeFile('node_modules/@scope/ui/lib/style/index.css', '.cjs {}');

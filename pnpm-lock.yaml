@@ -61,6 +61,38 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0(@types/node@22.17.0)(lightningcss@1.32.0)
 
+  examples/components: {}
+
+  examples/components/packages/theme:
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
+  examples/components/packages/ui:
+    dependencies:
+      '@demo/theme':
+        specifier: workspace:*
+        version: link:../theme
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
+  examples/libs: {}
+
+  examples/libs/packages/math:
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
+  examples/libs/packages/string:
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
 packages:
 
   '@ampproject/remapping@2.3.0':

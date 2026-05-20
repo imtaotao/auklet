@@ -1,0 +1,5 @@
+@import './tokens.css';
+
+.demo-theme {
+  font-family: system-ui, sans-serif;
+}
