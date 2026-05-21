@@ -21,7 +21,6 @@ Build utilities for TypeScript packages and module CSS output.
 ## Requirements
 
 - Node.js `>=22`
-- pnpm `10.27.0`
 
 ## CLI
 
@@ -38,7 +37,7 @@ pnpm auk dev
 
 Commands:
 
-- `build` removes `dist`, builds JavaScript output, then builds CSS output.
+- `build` removes the configured `output` directory, builds JavaScript output, then builds CSS output.
 - `build-js` runs tsdown with the default auklet tsdown config unless a config flag is passed.
 - `build-css` generates module CSS output.
 - `build-css --watch` watches source/config files and rebuilds CSS.
@@ -85,7 +84,7 @@ export const config: AukletConfig = {
 ### Style Options
 
 - `source`: source directory relative to the package root. Defaults to `src`.
-- `output`: build output directory relative to the package root. Defaults to `dist`.
+- `output`: build output directory relative to the package root. Defaults to `dist`. `auk build` removes this directory before writing JavaScript and CSS output.
 - `styles.themes`: package theme style entries. Defaults to `{}`.
 - `styles.dependencies`: external package style dependencies. Defaults to `{}`.
 

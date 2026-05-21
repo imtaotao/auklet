@@ -178,15 +178,17 @@ flowchart TD
   Command --> Dev["auk dev"]
   Command --> Version["auk version / --version"]
 
-  Build --> CleanDist["删除当前包 dist"]
-  CleanDist --> BuildJs
+  Build --> LoadBuildConfig["loadAukletConfig"]
+  LoadBuildConfig --> CleanOutput["删除配置的 output 目录"]
+  CleanOutput --> BuildJs
   BuildJs --> RunTsdown["runTsdown"]
   RunTsdown --> TsdownConfig["createTsdownArgs / tsdownConfig"]
   TsdownConfig --> Tsdown["tsdown"]
 
   Build --> BuildStyle
-  BuildStyle --> LoadConfig["loadAukletConfig"]
-  LoadConfig --> StyleBuilder["ModuleStyleBuilder"]
+  LoadBuildConfig --> BuildStyle
+  BuildStyle --> ResolveStyleConfig["复用或读取 auklet config"]
+  ResolveStyleConfig --> StyleBuilder["ModuleStyleBuilder"]
   StyleBuilder --> PackageWriter["PackageStyleEntryWriter"]
   StyleBuilder --> FormatWriter["ModuleStyleOutputWriter"]
 

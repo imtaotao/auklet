@@ -1,6 +1,6 @@
 {
   "name": "auklet",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "type": "module",
   "author": "chentao.arthur",
   "packageManager": "pnpm@10.27.0",
@@ -52,6 +52,15 @@
     "bin",
     "dist",
     "!dist/__tests__"
+  ],
+  "keywords": [
+    "build",
+    "typescript",
+    "css",
+    "vite",
+    "components",
+    "monorepo",
+    "tsdown"
   ],
   "dependencies": {
     "unrun": "^0.3.0",

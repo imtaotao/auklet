@@ -16,12 +16,18 @@ const runVersion = async () => {
   return 0;
 };
 
-const runBuildStyle = async (args) => {
-  const shouldWatch = args.includes('--watch') || args.includes('-w');
+const loadCurrentAukletConfig = async (options) => {
   const { loadAukletConfig } = await import('../dist/configLoader.js');
-  const aukletConfig = await loadAukletConfig(process.cwd(), {
-    cacheBust: shouldWatch,
-  });
+  return loadAukletConfig(process.cwd(), options);
+};
+
+const runBuildStyle = async (args, options = {}) => {
+  const shouldWatch = args.includes('--watch') || args.includes('-w');
+  const aukletConfig =
+    options.aukletConfig ??
+    (await loadCurrentAukletConfig({
+      cacheBust: shouldWatch,
+    }));
 
   if (shouldWatch) {
     const { ModuleStyleWatcher } = await import('../dist/css/watch/watcher.js');
@@ -53,15 +59,16 @@ const runBuildJs = async (args) => {
 };
 
 const runBuild = async (args) => {
-  fs.rmSync(path.join(process.cwd(), 'dist'), {
-    recursive: true,
-    force: true,
-  });
+  const aukletConfig = await loadCurrentAukletConfig();
+  const { cleanAukletOutputByConfig } = await import(
+    '../dist/build/cleanOutput.js'
+  );
+  cleanAukletOutputByConfig(process.cwd(), aukletConfig);
 
   const jsExitCode = await runBuildJs(args);
   if (jsExitCode) return jsExitCode;
 
-  return runBuildStyle([]);
+  return runBuildStyle([], { aukletConfig });
 };
 
 const runDev = async () => {

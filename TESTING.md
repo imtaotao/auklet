@@ -94,6 +94,7 @@ e2e 重点断言：
 - `ModuleStyleBuilder`：构建器自己的分支和产物边界，例如 legacy output-format rewrite、无 CSS 模块、空 style 入口、默认 cwd。
 - `ModuleStyleWatcher`：watch roots、debounce、logger、builder 调用参数。
 - `configLoader`：配置模块形态、TypeScript 配置加载、缺失配置、临时文件清理。
+- `cleanOutput`：`auk build` 清理目录边界，包括默认 `dist` 和自定义 `output`。
 - `tsdownConfig`：build 选项映射、package 元数据、banner、externals、配置加载。
 - `index.spec.ts`：根公开 API smoke test，不扩展成行为测试。
 
