@@ -102,6 +102,7 @@ describe('defineKernelPackageConfigFromOptions', () => {
         entryFileNames: '[name].mjs',
       },
     });
+    expect(configs[1].inputOptions).toBeUndefined();
     expect(configs[2]).toMatchObject({
       entry: {
         'components/Button/index': 'src/components/Button/index.tsx',
@@ -130,6 +131,7 @@ describe('defineKernelPackageConfigFromOptions', () => {
       },
       unbundle: true,
     });
+    expect(configs[2].inputOptions).toBeUndefined();
     expect(configs[3]).toMatchObject({
       format: 'cjs',
       outDir: 'dist/lib',
@@ -237,17 +239,19 @@ describe('defineKernelPackageConfigFromOptions', () => {
     });
   });
 
-  test('merges manual externals into iife peer externals', () => {
+  test('merges manual externals into iife peer externals', async () => {
     const configs = defineKernelPackageConfigFromOptions(project.root, {
       build: {
         formats: ['iife'],
         externals: ['react-dom'],
+        mainFields: ['module', 'main'],
         globals: {
           react: 'ReactRuntime',
           'react-dom': 'ReactDOM',
         },
       },
     });
+    const inputOptions = configs[0].inputOptions;
 
     expect(configs).toHaveLength(1);
     expect(configs[0]).toMatchObject({
@@ -262,6 +266,56 @@ describe('defineKernelPackageConfigFromOptions', () => {
           react: 'ReactRuntime',
           'react-dom': 'ReactDOM',
         },
+      },
+    });
+    expect(inputOptions).toEqual(expect.any(Function));
+    if (typeof inputOptions !== 'function') {
+      throw new Error('Expected bundle config to define inputOptions');
+    }
+    await expect(
+      Promise.resolve(
+        inputOptions(
+          {
+            resolve: {
+              alias: {
+                react: 'preact/compat',
+              },
+              conditionNames: ['import', 'default'],
+            },
+          },
+          'iife',
+          { cjsDts: false },
+        ),
+      ),
+    ).resolves.toMatchObject({
+      resolve: {
+        alias: {
+          react: 'preact/compat',
+        },
+        conditionNames: ['import', 'default'],
+        mainFields: ['module', 'main'],
+      },
+    });
+  });
+
+  test('uses custom main fields for non-iife bundle configs', async () => {
+    const configs = defineKernelPackageConfigFromOptions(project.root, {
+      build: {
+        formats: ['esm'],
+        mainFields: ['module', 'main'],
+      },
+    });
+    const inputOptions = configs[0].inputOptions;
+
+    expect(inputOptions).toEqual(expect.any(Function));
+    if (typeof inputOptions !== 'function') {
+      throw new Error('Expected bundle config to define inputOptions');
+    }
+    await expect(
+      Promise.resolve(inputOptions({ resolve: {} }, 'es', { cjsDts: false })),
+    ).resolves.toMatchObject({
+      resolve: {
+        mainFields: ['module', 'main'],
       },
     });
   });

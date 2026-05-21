@@ -31,6 +31,7 @@ type BuildContext = {
   packageExternal: Array<string>;
   peerExternal: Array<string>;
   alias: Record<string, string>;
+  mainFields?: Array<string>;
   globals: Record<string, string>;
   banner: string;
   globalName: string;
@@ -215,6 +216,7 @@ const createBuildContext = (
     packageExternal: getPackageExternal(pkg, options),
     peerExternal: getPeerExternal(pkg, options),
     alias: options.alias ?? {},
+    mainFields: options.mainFields,
     globals: options.globals ?? {},
     globalName: getGlobalName(pkg),
     platform: options.platform!,
@@ -247,6 +249,26 @@ const createCommonConfig = (
         '(typeof process !== "undefined" ? (process.env?.NODE_ENV !== "production") : false)',
     },
   } satisfies UserConfig;
+};
+
+const createBundleInputOptions = (
+  context: BuildContext,
+  format: TsdownFormat,
+): NonNullable<UserConfig['inputOptions']> => {
+  const mainFields =
+    context.mainFields ??
+    (format === 'iife' ? ['browser', 'module', 'main'] : undefined);
+
+  return (options) => {
+    if (!mainFields) return options;
+    return {
+      ...options,
+      resolve: {
+        ...options.resolve,
+        mainFields,
+      },
+    };
+  };
 };
 
 const configureTsdown = (
@@ -297,6 +319,11 @@ const createBundleConfigs = (
             neverBundle: context.packageExternal,
           };
 
+    const inputOptions =
+      context.mainFields || format === 'iife'
+        ? createBundleInputOptions(context, format)
+        : undefined;
+
     return configureTsdown(
       context,
       {
@@ -316,6 +343,7 @@ const createBundleConfigs = (
           chunkFileNames: `[name]-[hash]${extname}`,
           globals: format === 'iife' ? getIifeGlobals(context) : {},
         },
+        inputOptions,
       },
       { kind: 'bundle', format },
     );

@@ -79,6 +79,7 @@ export const config: AukletConfig = {
     alias: {
       '@shared': './src/shared',
     },
+    mainFields: ['browser', 'module', 'main'],
     globals: {
       react: 'React',
     },
@@ -149,6 +150,7 @@ export const config: AukletConfig = {
 - `build.banner`: custom bundle banner. Defaults to a package name/version banner.
 - `build.externals`: additional external packages. Defaults to `[]`.
 - `build.alias`: path aliases passed to tsdown `alias`. Defaults to `{}`.
+- `build.mainFields`: bundle package entry resolution order passed to rolldown `resolve.mainFields`. When omitted, auklet only sets `['browser', 'module', 'main']` for IIFE bundles.
 - `build.globals`: IIFE external global names passed to tsdown `output.globals`. Values override auklet's generated global names.
 - `build.configureTsdown`: final customization hook for each generated tsdown config. It receives `(config, context)` and should return a tsdown config.
 - `build.tsconfig`: TypeScript config path relative to the package root. Defaults to the nearest `tsconfig.json` found from the package root upward.

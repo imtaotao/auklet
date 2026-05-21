@@ -71,6 +71,8 @@ export type PackageBuildOptions = {
   externals?: Array<string>;
   // 路径别名配置，会传给 tsdown alias。
   alias?: Record<string, string>;
+  // bundle 产物解析 package.json 入口字段的顺序，会传给 rolldown resolve.mainFields。
+  mainFields?: Array<string>;
   // IIFE 产物的外部依赖全局变量名，会传给 tsdown output.globals。
   globals?: Record<string, string>;
   // 高级钩子：在 auklet 生成 tsdown config 后允许用户做最终调整。
