@@ -69,6 +69,8 @@ export type PackageBuildOptions = {
   banner?: string;
   // 额外标记为外部依赖的包名；会和 package.json dependencies、peerDependencies 一起传给 tsdown。
   externals?: Array<string>;
+  // 路径别名配置，会传给 tsdown alias。
+  alias?: Record<string, string>;
   // IIFE 产物的外部依赖全局变量名，会传给 tsdown output.globals。
   globals?: Record<string, string>;
   // 高级钩子：在 auklet 生成 tsdown config 后允许用户做最终调整。

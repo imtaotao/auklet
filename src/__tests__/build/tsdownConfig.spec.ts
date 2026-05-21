@@ -53,6 +53,9 @@ describe('defineKernelPackageConfigFromOptions', () => {
       modules: true,
       build: {
         formats: ['esm'],
+        alias: {
+          '@fixture/shared': './src/shared',
+        },
         externals: ['@scope/external'],
         tsconfig: 'tsconfig.package.json',
       },
@@ -71,6 +74,9 @@ describe('defineKernelPackageConfigFromOptions', () => {
       platform: 'neutral',
       target: 'es2020',
       tsconfig: path.join(project.root, 'tsconfig.package.json'),
+      alias: {
+        '@fixture/shared': './src/shared',
+      },
       deps: {
         neverBundle: [
           'aidly',
@@ -105,6 +111,9 @@ describe('defineKernelPackageConfigFromOptions', () => {
       outDir: 'dist/es',
       dts: true,
       target: 'es2020',
+      alias: {
+        '@fixture/shared': './src/shared',
+      },
       deps: {
         neverBundle: [
           'aidly',

@@ -30,6 +30,7 @@ type BuildContext = {
   runtimeDependencyNames: Array<string>;
   packageExternal: Array<string>;
   peerExternal: Array<string>;
+  alias: Record<string, string>;
   globals: Record<string, string>;
   banner: string;
   globalName: string;
@@ -213,6 +214,7 @@ const createBuildContext = (
     runtimeDependencyNames: Object.keys(pkg.dependencies ?? {}),
     packageExternal: getPackageExternal(pkg, options),
     peerExternal: getPeerExternal(pkg, options),
+    alias: options.alias ?? {},
     globals: options.globals ?? {},
     globalName: getGlobalName(pkg),
     platform: options.platform!,
@@ -236,6 +238,7 @@ const createCommonConfig = (
     tsconfig: context.tsconfig,
     target: context.target,
     platform: context.platform,
+    alias: context.alias,
     deps,
     define: {
       __TEST__: 'false',
