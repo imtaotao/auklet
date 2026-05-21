@@ -1,10 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import postcss from 'postcss';
-import type {
-  ModuleStyleGraph,
-  PackageStyleLoadResult,
-} from '#auklet/css/core/moduleGraph';
+import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
+import type { PackageStyleLoadResult } from '#auklet/css/vite/moduleGraph/types';
 
 export type StyleStructure = {
   packageEntry: StyleEntry | null;

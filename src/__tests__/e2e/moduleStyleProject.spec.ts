@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { toFsSpecifier } from '#auklet/utils';
 import { loadAukletConfig } from '#auklet/configLoader';
-import { ModuleStyleGraph } from '#auklet/css/core/moduleGraph';
+import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import {
   createStyleProject,
@@ -104,6 +105,13 @@ const expectStyleKeys = (structure: StyleStructure) => {
   expect(Object.keys(structure.themes).sort()).toEqual(expectedThemes);
 };
 
+const nodeModuleStyleSpecifier = (
+  fixture: StyleProjectTemplate,
+  specifier: string,
+) => {
+  return toFsSpecifier(`${fixture.packageRoot}/node_modules/${specifier}`);
+};
+
 describe('module style project output', () => {
   let fixture: StyleProjectTemplate;
 
@@ -167,18 +175,18 @@ describe('module style project output', () => {
     ]);
 
     expectEntryImports(graphStructure, 'external.css', [
-      '@scope/theme/style.css',
-      '@scope/ui/style.css',
+      nodeModuleStyleSpecifier(fixture, '@scope/theme/style.css'),
+      nodeModuleStyleSpecifier(fixture, '@scope/ui/style.css'),
     ]);
     expectEntryImports(graphStructure, 'themes/light.css', [
-      '@scope/theme/themes/light.css',
+      nodeModuleStyleSpecifier(fixture, '@scope/theme/themes/light.css'),
     ]);
     expectEntryContent(graphStructure, 'style.css', [
       '.button { color: green; }',
       '.card { color: red; }',
     ]);
     expectEntryImports(graphStructure, 'components/Card.css', [
-      '@scope/ui/components/Button.css',
+      nodeModuleStyleSpecifier(fixture, '@scope/ui/components/Button.css'),
     ]);
     expectEntryContent(graphStructure, 'components/Card.css', [
       '.button { color: green; }',

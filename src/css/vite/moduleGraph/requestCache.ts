@@ -4,14 +4,16 @@ import { aukletConfigFile, normalizeAukletConfig } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import type {
-  AukletConfig,
   ModuleStyleBuildConfig,
   NormalizedAukletConfig,
   ResolvedModuleStyleBuildContext,
 } from '#auklet/types';
 import type { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
-import type { PackageStyleId } from '#auklet/css/core/moduleGraph';
+import type {
+  LoadAukletConfig,
+  PackageStyleId,
+} from '#auklet/css/vite/moduleGraph/types';
 
 export type PackageStyleContext = {
   normalizedConfig: NormalizedAukletConfig;
@@ -29,11 +31,7 @@ type WorkspacePackage = {
   packageRoot: string;
 };
 
-export type LoadAukletConfig = (
-  packageRoot: string,
-  options?: { cacheBust?: boolean },
-) => Promise<AukletConfig>;
-
+// 单次虚拟 CSS 请求内的上下文缓存；每次请求新建，确保跨请求能看到配置和源码变化。
 export type ModuleStyleGraphRequestCacheOptions = {
   workspaceRoot: string;
   packagesDir: string;

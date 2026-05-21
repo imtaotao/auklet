@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { ModuleStyleGraph } from '#auklet/css/core/moduleGraph';
-import { normalizeFileKey } from '#auklet/utils';
+import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
+import { normalizeFileKey, toFsSpecifier } from '#auklet/utils';
 import { normalizeGraphStyleStructure } from '../fixtures/styleStructure';
 import {
   createVirtualProject,
@@ -23,6 +23,18 @@ const packagePath = (
   relativePath: string,
 ) => {
   return path.join(fixture.root, packageRoot, relativePath);
+};
+
+const getKatexStylePath = (fixture: VirtualProject) => {
+  return packagePath(
+    fixture,
+    uiPackageRoot,
+    'node_modules/katex/dist/katex.min.css',
+  );
+};
+
+const getKatexStyleSpecifier = (fixture: VirtualProject) => {
+  return toFsSpecifier(getKatexStylePath(fixture));
 };
 
 const expectWatchFile = (
@@ -52,6 +64,10 @@ describe('ModuleStyleGraph', () => {
     fixture.writeJson(path.join(uiPackageRoot, 'package.json'), {
       name: '@scope/ui',
     });
+    fixture.writeFile(
+      path.join(uiPackageRoot, 'node_modules/katex/dist/katex.min.css'),
+      '',
+    );
   });
 
   afterEach(() => {
@@ -105,7 +121,7 @@ describe('ModuleStyleGraph', () => {
 
     const result = await graph.createPackageStyleCode(parsed!);
 
-    expect(result.code).toBe('@import "katex/dist/katex.min.css";');
+    expect(result.code).toBe(`@import "${getKatexStyleSpecifier(fixture)}";`);
     expectWatchFile(
       result.watchFiles,
       fixture,
@@ -117,6 +133,9 @@ describe('ModuleStyleGraph', () => {
       fixture,
       uiPackageRoot,
       'auklet.config.ts',
+    );
+    expect(result.watchFiles).toContain(
+      normalizeFileKey(getKatexStylePath(fixture)),
     );
   });
 
@@ -199,7 +218,9 @@ describe('ModuleStyleGraph', () => {
 
     const result = await graph.createPackageStyleCode(parsed!);
 
-    expect(result.code.indexOf('@import "katex/dist/katex.min.css";')).toBe(0);
+    expect(
+      result.code.indexOf(`@import "${getKatexStyleSpecifier(fixture)}";`),
+    ).toBe(0);
     expectContentOrder(
       result.code,
       '.markdown-shell',
@@ -227,7 +248,7 @@ describe('ModuleStyleGraph', () => {
     );
 
     expect(structure.entries['style.css']?.imports).toEqual([
-      'katex/dist/katex.min.css',
+      getKatexStyleSpecifier(fixture),
     ]);
     expect(Object.keys(structure.themes).sort()).toEqual(['dark', 'light']);
     expectWatchFile(

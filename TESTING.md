@@ -90,7 +90,7 @@ e2e 重点断言：
 - `StyleProcessor`：style import 展开、内容合并、重复处理、循环 import、支持的 style 扩展名。
 - `WorkspaceStyleResolver`：相对路径、包路径、package exports、node_modules fallback、output format rewrite、external style specifier。
 - `ModuleStyleImportCollector` / `styleImports`：从 `.tsx` 源码 import 和 named re-export 推导 style import，包括 package entry、deep import、namespace import、alias、relative import、local re-export binding、type-only skip、`.ts` 文件 skip，以及不支持 `export * from '...'` 的报错。
-- `ModuleStyleGraph`：Vite/dev 虚拟入口、图结构、递归 workspace 依赖、主题顺序、source graph 判断、watch roots、模块依赖顺序。
+- `ModuleStyleGraph`：Vite/dev 虚拟入口、图结构、递归 workspace 依赖、第三方 CSS dependency 的 `/@fs` dev 解析、主题顺序、source graph 判断、watch roots、模块依赖顺序。
 - `ModuleStyleBuilder`：构建器自己的分支和产物边界，例如 legacy output-format rewrite、无 CSS 模块、空 style 入口、默认 cwd。
 - `ModuleStyleWatcher`：watch roots、debounce、logger、builder 调用参数。
 - `configLoader`：配置模块形态、TypeScript 配置加载、缺失配置、临时文件清理。
@@ -175,6 +175,7 @@ type StyleStructure = {
 - Vite/dev 图结构用 `normalizeGraphStyleStructure(graph, packageName, packageRoot, stylePaths)`。
 - 断言优先看 `entries[id].imports`、`entries[id].content`、`components`、`themes`。
 - Vite 虚拟 id 在 `StyleStructure` 中只保留语义 id，不把 `\0auklet-css:` 这类内部前缀放进项目级断言。
+- dev 图中的第三方 CSS dependency 需要断言为 Vite `/@fs/...` import，workspace style dependency 仍应保持虚拟递归语义。
 - 所有路径相关断言使用 posix `/` 语义，不把绝对临时目录写进快照。
 
 ## 断言风格

@@ -204,6 +204,12 @@ import '@scope/app/components/Button.css';
 import '@scope/app/themes/light.css';
 ```
 
+In dev mode, workspace package style dependencies keep using auklet virtual CSS
+entries so changes can be tracked recursively. Third-party CSS dependencies are
+resolved from the package that declares the dependency and emitted as Vite
+`/@fs/...` imports, so packages such as `katex/dist/katex.min.css` do not need
+to be installed by the consuming app.
+
 ## Programmatic API
 
 ```ts

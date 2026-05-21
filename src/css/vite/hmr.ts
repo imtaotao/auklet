@@ -5,7 +5,7 @@ import type {
   ModuleNode,
   ViteDevServer,
 } from 'vite';
-import type { ModuleStyleGraph } from '#auklet/css/core/moduleGraph';
+import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { normalizeFileKey } from '#auklet/utils';
 
 // package CSS 的 HMR 不能直接走 Vite 原生 CSS 文件链路：

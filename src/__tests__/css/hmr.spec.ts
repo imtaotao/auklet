@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AukletStyleHmr } from '#auklet/css/vite/hmr';
-import type { ModuleStyleGraph } from '#auklet/css/core/moduleGraph';
+import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import type { HotUpdateOptions, ViteDevServer } from 'vite';
 
 type MockModule = {

@@ -1,17 +1,20 @@
 import path from 'node:path';
-import { aukletConfigFile } from '#auklet/config';
-import { loadAukletConfig } from '#auklet/configLoader';
-import { moduleStyleBuildConfig } from '#auklet/css/config';
-import {
+import type { ModuleStyleBuildConfig } from '#auklet/types';
+import type {
   ModuleStyleGraphRequestCache,
-  type LoadAukletConfig,
-  type PackageStyleContext,
-} from '#auklet/css/core/moduleGraphRequestCache';
+  PackageStyleContext,
+} from '#auklet/css/vite/moduleGraph/requestCache';
+import { toDevDependencyImportSpecifier } from '#auklet/css/vite/moduleGraph/devDependency';
+import { mergeLoadResults } from '#auklet/css/vite/moduleGraph/loadResult';
+import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
+import type {
+  PackageStyleId,
+  PackageStyleLoadResult,
+} from '#auklet/css/vite/moduleGraph/types';
 import { StyleModuleEntryPlanner } from '#auklet/css/core/styleModuleEntryPlanner';
 import {
   EXTERNAL_ENTRY,
   MODULE_ENTRY,
-  SOURCE_COMPONENT_MODULE_RE,
   STYLE_ENTRY,
   THEMES_ENTRY_PREFIX,
 } from '#auklet/css/constants';
@@ -25,107 +28,13 @@ import {
   parsePackageStyleSpecifier,
   removeStyleExtension,
 } from '#auklet/css/core/style/specifier';
-import type { ModuleStyleBuildConfig } from '#auklet/types';
-import {
-  normalizeFileKey,
-  toFsSpecifier,
-  toPosixPath,
-  toWatchPath,
-} from '#auklet/utils';
+import { toFsSpecifier, toPosixPath } from '#auklet/utils';
 
-const mergeLoadResults = (...results: Array<PackageStyleLoadResult>) => {
-  return {
-    code: results
-      .map((result) => result.code)
-      .filter((code) => code.trim())
-      .join('\n'),
+// 生成 Vite/dev 虚拟 CSS；production writer 共享入口语义，但写入真实文件。
+export class StyleCodeFactory {
+  constructor(private readonly config: ModuleStyleBuildConfig) {}
 
-    watchFiles: Array.from(
-      new Set(results.flatMap((result) => result.watchFiles)),
-    ),
-  };
-};
-
-export interface ModuleStyleGraphOptions {
-  workspaceRoot: string;
-  packagesDir?: string;
-  config?: ModuleStyleBuildConfig;
-  loadAukletConfig?: LoadAukletConfig;
-}
-
-export type PackageStyleId = {
-  packageName: string;
-  stylePath: string;
-};
-
-export type PackageStyleLoadResult = {
-  code: string;
-  watchFiles: Array<string>;
-};
-
-export class ModuleStyleGraph {
-  private readonly config: ModuleStyleBuildConfig;
-  private readonly workspaceRoot: string;
-  private readonly packagesDir: string;
-  private readonly loadAukletConfig: LoadAukletConfig;
-
-  constructor(options: ModuleStyleGraphOptions) {
-    this.config = options.config ?? moduleStyleBuildConfig;
-    this.workspaceRoot = normalizeFileKey(options.workspaceRoot);
-    this.packagesDir = options.packagesDir ?? 'packages';
-    this.loadAukletConfig = options.loadAukletConfig ?? loadAukletConfig;
-  }
-
-  parsePackageStyleId(id: string) {
-    return parsePackageStyleId(id, this.getWorkspacePackageNames());
-  }
-
-  isWorkspaceSourceGraphFile(file: string) {
-    const normalizedFile = normalizeFileKey(file);
-    const packagesRoot = normalizeFileKey(
-      path.join(this.workspaceRoot, this.packagesDir),
-    );
-    if (!normalizedFile.startsWith(`${packagesRoot}/`)) {
-      return false;
-    }
-    if (normalizedFile.endsWith(aukletConfigFile)) return true;
-    if (SOURCE_COMPONENT_MODULE_RE.test(normalizedFile)) {
-      return true;
-    }
-
-    return this.config.styleExtensions.some((extension) =>
-      normalizedFile.endsWith(extension),
-    );
-  }
-
-  isStyleConfigFile(file: string) {
-    return normalizeFileKey(file).endsWith(aukletConfigFile);
-  }
-
-  isStyleFile(file: string) {
-    return this.config.styleExtensions.includes(path.extname(file));
-  }
-
-  getWorkspacePackageNames() {
-    return this.createRequestCache().getWorkspacePackageNames();
-  }
-
-  getWatchRoots() {
-    const packagesRoot = path.join(this.workspaceRoot, this.packagesDir);
-    return [
-      toWatchPath(packagesRoot, '*', 'src'),
-      toWatchPath(packagesRoot, '*', aukletConfigFile),
-    ];
-  }
-
-  async createPackageStyleCode(parsed: PackageStyleId) {
-    return this.createPackageStyleCodeWithCache(
-      parsed,
-      this.createRequestCache(),
-    );
-  }
-
-  private async createPackageStyleCodeWithCache(
+  async createPackageStyleCode(
     parsed: PackageStyleId,
     cache: ModuleStyleGraphRequestCache,
   ) {
@@ -194,21 +103,29 @@ export class ModuleStyleGraph {
   ) {
     const results: Array<PackageStyleLoadResult> = [];
     const imports: Array<string> = [];
+    const watchFiles: Array<string> = [context.configPath];
 
     for (const specifier of specifiers) {
       const outputSpecifier = mapSpecifier(specifier);
       const parsed = this.parsePackageStyleIdInRequest(outputSpecifier, cache);
       if (parsed) {
-        results.push(await this.createPackageStyleCodeWithCache(parsed, cache));
+        results.push(await this.createPackageStyleCode(parsed, cache));
         continue;
       }
-      imports.push(outputSpecifier);
+      const resolvedSpecifier = toDevDependencyImportSpecifier(
+        context,
+        outputSpecifier,
+      );
+      imports.push(resolvedSpecifier.specifier);
+      if (resolvedSpecifier.watchFile) {
+        watchFiles.push(resolvedSpecifier.watchFile);
+      }
     }
 
     return mergeLoadResults(
       {
         code: createImportCode(imports),
-        watchFiles: [context.configPath],
+        watchFiles,
       },
       ...results,
     );
@@ -328,6 +245,7 @@ export class ModuleStyleGraph {
     );
     const moduleStyleResults: Array<PackageStyleLoadResult> = [];
     const moduleStyleSpecifiers: Array<string> = [];
+    const moduleStyleWatchFiles: Array<string> = [];
 
     for (const specifier of entry.moduleStyleImports) {
       const result = this.toDevModuleImportSpecifier(
@@ -339,11 +257,15 @@ export class ModuleStyleGraph {
       const parsed = this.parsePackageStyleIdInRequest(result, cache);
       if (parsed) {
         moduleStyleResults.push(
-          await this.createPackageStyleCodeWithCache(parsed, cache),
+          await this.createPackageStyleCode(parsed, cache),
         );
         continue;
       }
-      moduleStyleSpecifiers.push(result);
+      const resolvedSpecifier = toDevDependencyImportSpecifier(context, result);
+      moduleStyleSpecifiers.push(resolvedSpecifier.specifier);
+      if (resolvedSpecifier.watchFile) {
+        moduleStyleWatchFiles.push(resolvedSpecifier.watchFile);
+      }
     }
 
     const root = context.styleProcessor.createRoot();
@@ -366,6 +288,7 @@ export class ModuleStyleGraph {
       watchFiles: [
         context.configPath,
         ...styleFiles,
+        ...moduleStyleWatchFiles,
         ...sourceFiles.filter((file) => /\.(ts|tsx)$/.test(file)),
       ],
     });
@@ -401,7 +324,7 @@ export class ModuleStyleGraph {
     const parsed = parsePackageStyleSpecifier(specifier);
     if (!parsed) return specifier;
 
-    if (this.isWorkspacePackageName(parsed.packageName, cache)) {
+    if (cache.isWorkspacePackageName(parsed.packageName)) {
       if (parsed.stylePath === STYLE_ENTRY) {
         return `${parsed.packageName}/${EXTERNAL_ENTRY}`;
       }
@@ -423,36 +346,4 @@ export class ModuleStyleGraph {
   ) {
     return parsePackageStyleId(id, cache.getWorkspacePackageNames());
   }
-
-  private isWorkspacePackageName(
-    packageName: string,
-    cache: ModuleStyleGraphRequestCache,
-  ) {
-    return cache.isWorkspacePackageName(packageName);
-  }
-
-  private createRequestCache() {
-    return new ModuleStyleGraphRequestCache({
-      workspaceRoot: this.workspaceRoot,
-      packagesDir: this.packagesDir,
-      config: this.config,
-      loadAukletConfig: this.loadAukletConfig,
-    });
-  }
-}
-
-export function parsePackageStyleId(id: string, packageNames: Array<string>) {
-  if (!id.endsWith('.css')) {
-    return null;
-  }
-
-  const packageName = [...packageNames]
-    .sort((left, right) => right.length - left.length)
-    .find((name) => id.startsWith(`${name}/`));
-  if (!packageName) return null;
-
-  return {
-    packageName,
-    stylePath: id.slice(packageName.length + 1),
-  } satisfies PackageStyleId;
 }
