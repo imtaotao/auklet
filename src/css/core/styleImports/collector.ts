@@ -16,29 +16,26 @@ import {
   isTypeOnlySourceReference,
   type ModuleStyleSourceReference,
 } from '#auklet/css/core/styleImports/sourceReference';
+import { resolveRelativeSourceImport } from '#auklet/css/core/resolvers/relative';
+import { resolvePackageImportsSourceImport } from '#auklet/css/core/resolvers/packageImports';
+import { resolveTsconfigPathsSourceImport } from '#auklet/css/core/resolvers/tsconfigPaths';
 
 const GLOBSTAR_TOKEN = '**';
+const SOURCE_EXTENSION_RE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+const SOURCE_INDEX_RE = new RegExp(`[/\\\\]index${SOURCE_EXTENSION_RE.source}`);
 
 type AutoImportRule = {
   packageName: string;
   outputPattern: string;
 };
 
-type SourceImportAliasRule = {
-  prefix: string;
-};
-
 export class ModuleStyleImportCollector {
-  private readonly sourceImportAliasRules: Array<SourceImportAliasRule>;
-
   constructor(
     private readonly srcRoot: string,
     private readonly packageRoot: string,
     private readonly resolver: WorkspaceStyleResolver,
     private readonly styleExtensions: Array<string> = ['.css'],
-  ) {
-    this.sourceImportAliasRules = this.createSourceImportAliasRules();
-  }
+  ) {}
 
   collect(files: Array<string>, config: NormalizedAukletConfig) {
     const entries = new Map<string, Array<string>>();
@@ -131,62 +128,58 @@ export class ModuleStyleImportCollector {
   }
 
   private resolveSourceImportStyleEntry(sourceDir: string, importPath: string) {
-    const sourceRelativePath = this.resolveSourceImportPath(
+    const sourceRelativePaths = this.resolveSourceImportPaths(
       sourceDir,
       importPath,
     );
-    if (!sourceRelativePath) return null;
 
-    const sourceBase = path.join(this.srcRoot, sourceRelativePath);
-    const directoryStyleEntry = path.join(sourceBase, 'style', 'index.css');
+    for (const sourceRelativePath of sourceRelativePaths) {
+      const sourceBase = this.toSourceBase(sourceRelativePath);
+      if (!this.isInsideSourceRoot(sourceBase)) continue;
 
-    for (const extension of this.styleExtensions) {
-      const directorySourceStyle = path.join(sourceBase, `index${extension}`);
-      if (fs.existsSync(directorySourceStyle)) return directoryStyleEntry;
-    }
+      const directoryStyleEntry = path.join(sourceBase, 'style', 'index.css');
 
-    const hasFileSourceStyle = this.styleExtensions.some((extension) =>
-      fs.existsSync(`${sourceBase}${extension}`),
-    );
-    if (!hasFileSourceStyle) return null;
-    return path.join(sourceBase, 'style', 'index.css');
-  }
+      for (const extension of this.styleExtensions) {
+        const directorySourceStyle = path.join(sourceBase, `index${extension}`);
+        if (fs.existsSync(directorySourceStyle)) return directoryStyleEntry;
+      }
 
-  private resolveSourceImportPath(sourceDir: string, importPath: string) {
-    if (importPath.startsWith('.')) {
-      return path.normalize(path.join(sourceDir, importPath));
-    }
-    for (const rule of this.sourceImportAliasRules) {
-      if (!importPath.startsWith(rule.prefix)) continue;
-      return importPath.slice(rule.prefix.length);
+      const hasFileSourceStyle = this.styleExtensions.some((extension) =>
+        fs.existsSync(`${sourceBase}${extension}`),
+      );
+      if (hasFileSourceStyle)
+        return path.join(sourceBase, 'style', 'index.css');
     }
     return null;
   }
 
-  private createSourceImportAliasRules() {
-    const packageJsonPath = path.join(this.packageRoot, 'package.json');
-    if (!fs.existsSync(packageJsonPath)) return [];
+  private isInsideSourceRoot(file: string) {
+    const relative = path.relative(this.srcRoot, file);
+    return !relative.startsWith('..') && !path.isAbsolute(relative);
+  }
 
-    const packageJson = JSON.parse(
-      fs.readFileSync(packageJsonPath, 'utf8'),
-    ) as {
-      imports?: Record<string, string | unknown>;
-    };
-    const rules: Array<SourceImportAliasRule> = [];
+  private resolveSourceImportPaths(sourceDir: string, importPath: string) {
+    return [
+      ...resolveRelativeSourceImport(sourceDir, importPath),
+      ...resolvePackageImportsSourceImport(
+        this.packageRoot,
+        this.srcRoot,
+        importPath,
+      ),
+      ...resolveTsconfigPathsSourceImport(
+        this.packageRoot,
+        this.srcRoot,
+        importPath,
+      ),
+    ];
+  }
 
-    for (const [name, target] of Object.entries(packageJson.imports ?? {})) {
-      if (
-        !name.endsWith(`${POSIX_SEPARATOR}*`) ||
-        typeof target !== 'string' ||
-        !target.includes('*')
-      ) {
-        continue;
-      }
-      rules.push({
-        prefix: name.slice(0, -1),
-      });
+  private toSourceBase(sourceRelativePath: string) {
+    const sourceBase = path.join(this.srcRoot, sourceRelativePath);
+    if (SOURCE_INDEX_RE.test(sourceBase)) {
+      return path.dirname(sourceBase);
     }
-    return rules;
+    return sourceBase.replace(SOURCE_EXTENSION_RE, '');
   }
 
   private toRelativeSpecifier(fromDir: string, file: string) {

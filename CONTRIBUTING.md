@@ -80,6 +80,10 @@ src/css/core/
 ├── styleImports/                 # 从 TSX import/re-export 推导 style 依赖
 │   ├── collector.ts              # 根据 source reference 和配置生成组件 style import
 │   └── sourceReference.ts        # 解析 TSX import/re-export 语法
+├── resolvers/                    # 同包源码 import 候选路径解析
+│   ├── relative.ts               # 相对路径 import
+│   ├── packageImports.ts         # package.json#imports，优先 source 条件
+│   └── tsconfigPaths.ts          # tsconfig compilerOptions.paths
 ├── styleModuleEntryPlanner.ts    # 规划组件级 style 入口
 └── style/
     ├── dependencies.ts           # 从配置读取 global/theme/external 依赖
@@ -93,7 +97,8 @@ src/css/core/
 - `StylePackageContext`：把包根目录、source/output、主题文件、样式文件、resolver、processor 等聚合起来，是 production 和 dev 两边的共享上下文。
 - `StyleProcessor`：负责 CSS 内容层面的处理，例如读取文件、展开 `@import`、合并 PostCSS root。
 - `WorkspaceStyleResolver`：负责把配置里的 style 依赖解析到真实文件或输出路径，处理 workspace 包和外部包差异。
-- `styleImports/collector.ts`：只扫描 `.tsx` 组件源码，根据 import / named re-export 和 `styles.dependencies.*.components` 推导组件级 style import。`.ts` 文件不会参与 CSS auto import；`export * from '...'` 不支持，因为无法可靠推断组件名。
+- `styleImports/collector.ts`：只扫描 `.tsx` 组件源码，根据 import / named re-export 和 `styles.dependencies.*.components` 推导组件级 style import。`.ts` 文件不会参与 CSS auto import；`export * from '...'` 不支持，因为无法可靠推断组件名。同包源码依赖会通过 `resolvers/` 解析候选路径，并统一限制在当前包 `sourceRoot` 内。
+- `resolvers/`：只负责把源码 import specifier 转成当前包源码内的候选相对路径，不负责判断 style 文件是否存在，也不反推出 output 目录。`packageImports` 使用 `conditional-export` 解析 `package.json#imports`，优先 `source` 条件；`tsconfigPaths` 通过 TypeScript 读取 `compilerOptions.paths`，支持 `extends` 和更具体的 pattern 优先。
 - `StyleModuleEntryPlanner`：根据源码目录和 import 收集结果，生成组件级 style entry plan。
 - `style/entries.ts`：环境无关的 style graph 入口，统一暴露 package、theme、external、component 的入口语义。Production writer 和 Vite/dev renderer 都消费它。
 

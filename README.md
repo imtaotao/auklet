@@ -53,6 +53,8 @@ import type { AukletConfig } from 'auklet';
 export const config: AukletConfig = {
   source: 'src',
   output: 'dist',
+  modules: true,
+  tsconfig: 'tsconfig.json',
   styles: {
     themes: {
       light: './src/themes/light.css',
@@ -72,17 +74,12 @@ export const config: AukletConfig = {
       },
     },
   },
-  modules: true,
   build: {
-    formats: ['esm', 'cjs'],
+    alias: { ... },
+    globals: { ... },
     target: 'es2020',
-    alias: {
-      '@shared': './src/shared',
-    },
+    formats: ['esm', 'cjs'],
     mainFields: ['browser', 'module', 'main'],
-    globals: {
-      react: 'React',
-    },
     configureTsdown(config, context) {
       if (context.kind !== 'bundle') return config;
       return {
@@ -90,7 +87,6 @@ export const config: AukletConfig = {
         sourcemap: true,
       };
     },
-    tsconfig: 'tsconfig.json',
   },
 };
 ```
@@ -111,6 +107,12 @@ Each `styles.dependencies` entry may define:
 Component style inference only scans source `.tsx` files. Component imports or
 re-exports in `.ts` files are ignored for CSS auto import, so component barrel
 files that should drive component CSS must be `.tsx`.
+
+Same-package component style inference resolves relative imports,
+`package.json#imports` mappings, and `tsconfig.json` `compilerOptions.paths`.
+For `package.json#imports`, the `source` condition is preferred when present.
+Only aliases that resolve into the current package source directory are treated
+as same-package CSS dependencies.
 
 Supported value forms include named imports, named re-exports, and local
 re-exports that can be traced back to an import binding:

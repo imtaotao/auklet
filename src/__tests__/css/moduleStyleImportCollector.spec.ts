@@ -54,6 +54,16 @@ const expectCollectedStyles = (
   expect(entries.get(moduleId)).toEqual(styles);
 };
 
+type CollectCase = {
+  name: string;
+  sourcePath: string;
+  code: string;
+  dependencies: Array<string>;
+  moduleId: string;
+  expected: Array<string>;
+  config?: typeof normalizedConfig;
+};
+
 describe('ModuleStyleImportCollector', () => {
   let project: VirtualProject;
   let srcRoot: string;
@@ -83,184 +93,172 @@ describe('ModuleStyleImportCollector', () => {
     project.cleanup();
   });
 
-  test('collects component styles from package entry named imports', () => {
-    const file = writeSourceFile(
+  const writeStyleDependencies = (...specifiers: Array<string>) => {
+    for (const specifier of specifiers) {
+      writeStyleDependency(project, specifier);
+    }
+  };
+
+  const writeSourceStyles = (...relativePaths: Array<string>) => {
+    for (const relativePath of relativePaths) {
+      writeSourceStyle(project, relativePath);
+    }
+  };
+
+  const writeComponent = (sourceDir: string) => {
+    const componentName = path.basename(sourceDir);
+    writeSourceFile(
       project,
-      'pages/Article.tsx',
-      `
-        import {
-          Button,
-          Dialog,
-        } from '@scope/ui';
-      `,
+      `${sourceDir}/index.tsx`,
+      `export function ${componentName}() { return null; }`,
     );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
-    writeStyleDependency(project, '@scope/ui/components/Dialog.css');
+    writeSourceStyles(`${sourceDir}/index.css`);
+  };
 
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'pages/Article', [
-      '@scope/ui/components/Button.css',
-      '@scope/ui/components/Dialog.css',
-    ]);
-  });
-
-  test('collects styles from a single string rule', () => {
-    const file = writeSourceFile(
+  const writeFileModule = (sourcePath: string) => {
+    const moduleName = path.basename(sourcePath, path.extname(sourcePath));
+    writeSourceFile(
       project,
-      'pages/Article.tsx',
-      "import { Button } from '@scope/ui';",
+      sourcePath,
+      `export function ${moduleName}() { return null; }`,
     );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
+    writeSourceStyles(sourcePath.replace(/\.[^.]+$/, '.css'));
+  };
 
-    const entries = collector.collect([file], singleComponentRuleOptions);
+  const collectSource = (
+    sourcePath: string,
+    code: string,
+    config = normalizedConfig,
+  ) => {
+    const file = writeSourceFile(project, sourcePath, code);
+    return collectFile(file, config);
+  };
 
-    expectCollectedStyles(entries, 'pages/Article', [
-      '@scope/ui/components/Button.css',
-    ]);
-  });
+  const collectFile = (file: string, config = normalizedConfig) => {
+    return collector.collect([file], config);
+  };
 
-  test('uses exported component names when named imports are aliased', () => {
-    const file = writeSourceFile(
-      project,
-      'pages/Article.tsx',
-      `
-        import {
-          Button as PrimaryButton,
-        } from '@scope/ui';
-      `,
+  const expectNoStyles = (entries: Map<string, Array<string>>) => {
+    expect(entries.size).toBe(0);
+  };
+
+  const expectCollectCase = (item: CollectCase) => {
+    writeStyleDependencies(...item.dependencies);
+    const entries = collectSource(
+      item.sourcePath,
+      item.code,
+      item.config ?? normalizedConfig,
     );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
 
-    const entries = collector.collect([file], normalizedConfig);
+    expectCollectedStyles(entries, item.moduleId, item.expected);
+  };
 
-    expectCollectedStyles(entries, 'pages/Article', [
-      '@scope/ui/components/Button.css',
-    ]);
-  });
-
-  test('collects component styles directly from deep component imports', () => {
-    const file = writeSourceFile(
-      project,
-      'pages/Article.tsx',
-      "import { Button as PrimaryButton } from '@scope/ui/components/Button';",
-    );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
-
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'pages/Article', [
-      '@scope/ui/components/Button.css',
-    ]);
-  });
-
-  test('collects page styles from package entry named imports', () => {
-    const file = writeSourceFile(
-      project,
-      'routes/App.tsx',
-      "import { DashboardPage } from '@scope/ui';",
-    );
-    writeStyleDependency(project, '@scope/ui/pages/DashboardPage.css');
-
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'routes/App', [
-      '@scope/ui/pages/DashboardPage.css',
-    ]);
-  });
-
-  test('collects page styles directly from deep page imports', () => {
-    const file = writeSourceFile(
-      project,
-      'routes/App.tsx',
-      "import { DashboardPage } from '@scope/ui/pages/DashboardPage';",
-    );
-    writeStyleDependency(project, '@scope/ui/pages/DashboardPage.css');
-
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'routes/App', [
-      '@scope/ui/pages/DashboardPage.css',
-    ]);
-  });
-
-  test('collects direct styles from deep namespace imports', () => {
-    const file = writeSourceFile(
-      project,
-      'routes/App.tsx',
-      "import * as DashboardPage from '@scope/ui/pages/DashboardPage';",
-    );
-    writeStyleDependency(project, '@scope/ui/pages/DashboardPage.css');
-
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'routes/App', [
-      '@scope/ui/pages/DashboardPage.css',
-    ]);
-  });
-
-  test('collects direct styles from deep namespace imports regardless of rule order', () => {
-    const file = writeSourceFile(
-      project,
-      'pages/Article.tsx',
-      "import * as Button from '@scope/ui/components/Button';",
-    );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
-
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'pages/Article', [
-      '@scope/ui/components/Button.css',
-    ]);
-  });
-
-  test('collects component styles from package entry named re-exports', () => {
-    const file = writeSourceFile(
-      project,
-      'pages/Article.tsx',
-      "export { Button as PrimaryButton } from '@scope/ui';",
-    );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
-
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'pages/Article', [
-      '@scope/ui/components/Button.css',
-    ]);
-  });
-
-  test('collects direct styles from deep named re-exports', () => {
-    const file = writeSourceFile(
-      project,
-      'pages/Article.tsx',
-      "export { Button } from '@scope/ui/components/Button';",
-    );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
-
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'pages/Article', [
-      '@scope/ui/components/Button.css',
-    ]);
-  });
-
-  test('resolves local re-exports through import bindings', () => {
-    const file = writeSourceFile(
-      project,
-      'pages/Article.tsx',
-      `
+  const externalStyleCases: Array<CollectCase> = [
+    {
+      name: 'collects component styles from package entry named imports',
+      sourcePath: 'pages/Article.tsx',
+      code: "import { Button, Dialog } from '@scope/ui';",
+      dependencies: [
+        '@scope/ui/components/Button.css',
+        '@scope/ui/components/Dialog.css',
+      ],
+      moduleId: 'pages/Article',
+      expected: [
+        '@scope/ui/components/Button.css',
+        '@scope/ui/components/Dialog.css',
+      ],
+    },
+    {
+      name: 'collects styles from a single string rule',
+      sourcePath: 'pages/Article.tsx',
+      code: "import { Button } from '@scope/ui';",
+      dependencies: ['@scope/ui/components/Button.css'],
+      moduleId: 'pages/Article',
+      expected: ['@scope/ui/components/Button.css'],
+      config: singleComponentRuleOptions,
+    },
+    {
+      name: 'uses exported component names when named imports are aliased',
+      sourcePath: 'pages/Article.tsx',
+      code: "import { Button as PrimaryButton } from '@scope/ui';",
+      dependencies: ['@scope/ui/components/Button.css'],
+      moduleId: 'pages/Article',
+      expected: ['@scope/ui/components/Button.css'],
+    },
+    {
+      name: 'collects component styles directly from deep component imports',
+      sourcePath: 'pages/Article.tsx',
+      code: "import { Button as PrimaryButton } from '@scope/ui/components/Button';",
+      dependencies: ['@scope/ui/components/Button.css'],
+      moduleId: 'pages/Article',
+      expected: ['@scope/ui/components/Button.css'],
+    },
+    {
+      name: 'collects page styles from package entry named imports',
+      sourcePath: 'routes/App.tsx',
+      code: "import { DashboardPage } from '@scope/ui';",
+      dependencies: ['@scope/ui/pages/DashboardPage.css'],
+      moduleId: 'routes/App',
+      expected: ['@scope/ui/pages/DashboardPage.css'],
+    },
+    {
+      name: 'collects page styles directly from deep page imports',
+      sourcePath: 'routes/App.tsx',
+      code: "import { DashboardPage } from '@scope/ui/pages/DashboardPage';",
+      dependencies: ['@scope/ui/pages/DashboardPage.css'],
+      moduleId: 'routes/App',
+      expected: ['@scope/ui/pages/DashboardPage.css'],
+    },
+    {
+      name: 'collects direct styles from deep namespace imports',
+      sourcePath: 'routes/App.tsx',
+      code: "import * as DashboardPage from '@scope/ui/pages/DashboardPage';",
+      dependencies: ['@scope/ui/pages/DashboardPage.css'],
+      moduleId: 'routes/App',
+      expected: ['@scope/ui/pages/DashboardPage.css'],
+    },
+    {
+      name: 'collects direct styles from deep namespace imports regardless of rule order',
+      sourcePath: 'pages/Article.tsx',
+      code: "import * as Button from '@scope/ui/components/Button';",
+      dependencies: ['@scope/ui/components/Button.css'],
+      moduleId: 'pages/Article',
+      expected: ['@scope/ui/components/Button.css'],
+    },
+    {
+      name: 'collects component styles from package entry named re-exports',
+      sourcePath: 'pages/Article.tsx',
+      code: "export { Button as PrimaryButton } from '@scope/ui';",
+      dependencies: ['@scope/ui/components/Button.css'],
+      moduleId: 'pages/Article',
+      expected: ['@scope/ui/components/Button.css'],
+    },
+    {
+      name: 'collects direct styles from deep named re-exports',
+      sourcePath: 'pages/Article.tsx',
+      code: "export { Button } from '@scope/ui/components/Button';",
+      dependencies: ['@scope/ui/components/Button.css'],
+      moduleId: 'pages/Article',
+      expected: ['@scope/ui/components/Button.css'],
+    },
+    {
+      name: 'resolves local re-exports through import bindings',
+      sourcePath: 'pages/Article.tsx',
+      code: `
         import { Button as BaseButton } from '@scope/ui';
         export { BaseButton as Button };
       `,
-    );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
+      dependencies: ['@scope/ui/components/Button.css'],
+      moduleId: 'pages/Article',
+      expected: ['@scope/ui/components/Button.css'],
+    },
+  ];
 
-    const entries = collector.collect([file], normalizedConfig);
-
-    expectCollectedStyles(entries, 'pages/Article', [
-      '@scope/ui/components/Button.css',
-    ]);
-  });
+  for (const item of externalStyleCases) {
+    test(item.name, () => {
+      expectCollectCase(item);
+    });
+  }
 
   test('throws when a local re-export cannot be resolved', () => {
     const file = writeSourceFile(
@@ -280,7 +278,7 @@ describe('ModuleStyleImportCollector', () => {
       'pages/Article.tsx',
       "export * from '@scope/ui/components/Button';",
     );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
+    writeStyleDependencies('@scope/ui/components/Button.css');
 
     expect(() => collector.collect([file], normalizedConfig)).toThrow(
       'Export-all declarations are not supported for CSS auto import: @scope/ui/components/Button',
@@ -308,23 +306,67 @@ describe('ModuleStyleImportCollector', () => {
         import type { Heading } from '#fixture/components/Heading';
       `,
     );
-    writeSourceFile(
-      project,
-      'components/CodeBlock/index.tsx',
-      'export function CodeBlock() { return null; }',
-    );
+    writeComponent('components/CodeBlock');
     writeSourceFile(
       project,
       'components/Heading.ts',
       'export type Heading = { title: string };',
     );
-    writeSourceStyle(project, 'components/Renderer/index.css');
-    writeSourceStyle(project, 'components/CodeBlock/index.css');
+    writeSourceStyles('components/Renderer/index.css');
 
-    const entries = collector.collect([file], normalizedConfig);
+    const entries = collectFile(file);
 
     expectCollectedStyles(entries, 'components/Renderer', [
       '../../CodeBlock/style/index.css',
+    ]);
+  });
+
+  test('maps package imports targets to source aliases', () => {
+    project.writePackageJson({
+      imports: {
+        '#widgets/*': {
+          source: './src/widgets/*',
+          import: './dist/es/widgets/*.js',
+          default: './dist/es/widgets/*.js',
+        },
+      },
+    });
+    const file = writeSourceFile(
+      project,
+      'components/Mdx/index.tsx',
+      "import { EnglishCards } from '#widgets/components/EnglishCards';",
+    );
+    writeComponent('widgets/components/EnglishCards');
+
+    const entries = collectFile(file, emptyOptions);
+
+    expectCollectedStyles(entries, 'components/Mdx', [
+      '../../../widgets/components/EnglishCards/style/index.css',
+    ]);
+  });
+
+  test('collects styles from tsconfig paths in the same package', () => {
+    project.writeJson('tsconfig.json', {
+      compilerOptions: {
+        baseUrl: '.',
+        paths: {
+          '#widgets/*': ['./src/*'],
+          '#content/*': ['../content/src/*'],
+        },
+      },
+    });
+    const file = writeSourceFile(
+      project,
+      'components/Mdx/index.tsx',
+      "import { EnglishCards } from '#widgets/components/EnglishCards';\n" +
+        "import { CodeBlock } from '#content/components/CodeBlock';",
+    );
+    writeComponent('components/EnglishCards');
+
+    const entries = collectFile(file, emptyOptions);
+
+    expectCollectedStyles(entries, 'components/Mdx', [
+      '../../EnglishCards/style/index.css',
     ]);
   });
 
@@ -334,15 +376,10 @@ describe('ModuleStyleImportCollector', () => {
       'components/Renderer/index.tsx',
       "import { CodeBlock } from '#fixture/components/CodeBlock';",
     );
-    writeSourceFile(
-      project,
-      'components/CodeBlock/index.tsx',
-      'export function CodeBlock() { return null; }',
-    );
-    writeSourceStyle(project, 'components/Renderer/index.css');
-    writeSourceStyle(project, 'components/CodeBlock/index.css');
+    writeComponent('components/CodeBlock');
+    writeSourceStyles('components/Renderer/index.css');
 
-    const entries = collector.collect([file], emptyOptions);
+    const entries = collectFile(file, emptyOptions);
 
     expectCollectedStyles(entries, 'components/Renderer', [
       '../../CodeBlock/style/index.css',
@@ -355,19 +392,31 @@ describe('ModuleStyleImportCollector', () => {
       'components/Chat/index.tsx',
       "import { DetailsBlock } from '../DetailsBlock';",
     );
-    writeSourceFile(
-      project,
-      'components/DetailsBlock/index.tsx',
-      'export function DetailsBlock() { return null; }',
-    );
-    writeSourceStyle(project, 'components/Chat/index.css');
-    writeSourceStyle(project, 'components/DetailsBlock/index.css');
+    writeComponent('components/DetailsBlock');
+    writeSourceStyles('components/Chat/index.css');
 
-    const entries = collector.collect([file], normalizedConfig);
+    const entries = collectFile(file);
 
     expectCollectedStyles(entries, 'components/Chat', [
       '../../DetailsBlock/style/index.css',
     ]);
+  });
+
+  test('ignores relative source imports outside the source root', () => {
+    const file = writeSourceFile(
+      project,
+      'components/Renderer/index.tsx',
+      "import { CodeBlock } from '../../shared/CodeBlock';",
+    );
+    project.writeFile(
+      path.join('shared', 'CodeBlock.tsx'),
+      'export function CodeBlock() { return null; }',
+    );
+    project.writeFile(path.join('shared', 'CodeBlock.css'), '');
+
+    const entries = collectFile(file, emptyOptions);
+
+    expect(entries.get('components/Renderer')).toBeUndefined();
   });
 
   test('collects styles from same-package file modules with sibling CSS', () => {
@@ -376,14 +425,9 @@ describe('ModuleStyleImportCollector', () => {
       'components/Renderer/index.tsx',
       "import { Button } from '#fixture/components/Button';",
     );
-    writeSourceFile(
-      project,
-      'components/Button.tsx',
-      'export function Button() { return null; }',
-    );
-    writeSourceStyle(project, 'components/Button.css');
+    writeFileModule('components/Button.tsx');
 
-    const entries = collector.collect([file], emptyOptions);
+    const entries = collectFile(file, emptyOptions);
 
     expectCollectedStyles(entries, 'components/Renderer', [
       '../../Button/style/index.css',
@@ -397,9 +441,9 @@ describe('ModuleStyleImportCollector', () => {
       "import { MissingComponent } from '@scope/ui';",
     );
 
-    const entries = collector.collect([file], normalizedConfig);
+    const entries = collectFile(file);
 
-    expect(entries.size).toBe(0);
+    expectNoStyles(entries);
   });
 
   test('does not infer styles from package entry side-effect imports', () => {
@@ -408,11 +452,11 @@ describe('ModuleStyleImportCollector', () => {
       'pages/Article.tsx',
       "import '@scope/ui';",
     );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
+    writeStyleDependencies('@scope/ui/components/Button.css');
 
-    const entries = collector.collect([file], normalizedConfig);
+    const entries = collectFile(file);
 
-    expect(entries.size).toBe(0);
+    expectNoStyles(entries);
   });
 
   test('skips type-only imports and non-tsx files', () => {
@@ -431,14 +475,16 @@ describe('ModuleStyleImportCollector', () => {
       'pages/Article.d.ts',
       "import { Dialog } from '@scope/ui';",
     );
-    writeStyleDependency(project, '@scope/ui/components/Button.css');
-    writeStyleDependency(project, '@scope/ui/components/Dialog.css');
+    writeStyleDependencies(
+      '@scope/ui/components/Button.css',
+      '@scope/ui/components/Dialog.css',
+    );
 
     const entries = collector.collect(
       [sourceFile, tsFile, declarationFile],
       normalizedConfig,
     );
 
-    expect(entries.size).toBe(0);
+    expectNoStyles(entries);
   });
 });
