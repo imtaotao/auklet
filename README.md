@@ -76,6 +76,16 @@ export const config: AukletConfig = {
   build: {
     formats: ['esm', 'cjs'],
     target: 'es2020',
+    globals: {
+      react: 'React',
+    },
+    configureTsdown(config, context) {
+      if (context.kind !== 'bundle') return config;
+      return {
+        ...config,
+        sourcemap: true,
+      };
+    },
     tsconfig: 'tsconfig.json',
   },
 };
@@ -135,6 +145,8 @@ export const config: AukletConfig = {
 - `build.platform`: build target runtime platform: `neutral`, `node`, or `browser`. Defaults to `neutral`.
 - `build.banner`: custom bundle banner. Defaults to a package name/version banner.
 - `build.externals`: additional external packages. Defaults to `[]`.
+- `build.globals`: IIFE external global names passed to tsdown `output.globals`. Values override auklet's generated global names.
+- `build.configureTsdown`: final customization hook for each generated tsdown config. It receives `(config, context)` and should return a tsdown config.
 - `build.tsconfig`: TypeScript config path relative to the package root. Defaults to the nearest `tsconfig.json` found from the package root upward.
 
 ### Build Constants

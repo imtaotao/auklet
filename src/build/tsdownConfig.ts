@@ -5,6 +5,7 @@ import { loadAukletConfig } from '#auklet/configLoader';
 import { normalizeAukletConfig } from '#auklet/config';
 import type {
   AukletConfig,
+  ConfigureTsdownContext,
   PackageBuildFormat,
   PackageBuildOptions,
 } from '#auklet/types';
@@ -29,10 +30,12 @@ type BuildContext = {
   runtimeDependencyNames: Array<string>;
   packageExternal: Array<string>;
   peerExternal: Array<string>;
+  globals: Record<string, string>;
   banner: string;
   globalName: string;
   target: NonNullable<PackageBuildOptions['target']>;
   platform: NonNullable<PackageBuildOptions['platform']>;
+  configureTsdown?: PackageBuildOptions['configureTsdown'];
 };
 
 const formatMap = {
@@ -86,9 +89,12 @@ const getDependencyGlobalName = (name: string) => {
 };
 
 const getIifeGlobals = (context: BuildContext) => {
-  return Object.fromEntries(
-    context.peerExternal.map((name) => [name, getDependencyGlobalName(name)]),
-  );
+  return {
+    ...Object.fromEntries(
+      context.peerExternal.map((name) => [name, getDependencyGlobalName(name)]),
+    ),
+    ...context.globals,
+  };
 };
 
 const getIifeAlwaysBundle = (context: BuildContext) => {
@@ -207,9 +213,11 @@ const createBuildContext = (
     runtimeDependencyNames: Object.keys(pkg.dependencies ?? {}),
     packageExternal: getPackageExternal(pkg, options),
     peerExternal: getPeerExternal(pkg, options),
+    globals: options.globals ?? {},
     globalName: getGlobalName(pkg),
     platform: options.platform!,
     target: options.target!,
+    configureTsdown: options.configureTsdown,
     tsconfig: options.tsconfig
       ? path.resolve(packageRoot, options.tsconfig)
       : findWorkspaceTsconfig(packageRoot),
@@ -236,6 +244,21 @@ const createCommonConfig = (
         '(typeof process !== "undefined" ? (process.env?.NODE_ENV !== "production") : false)',
     },
   } satisfies UserConfig;
+};
+
+const configureTsdown = (
+  context: BuildContext,
+  config: UserConfig,
+  options: Pick<ConfigureTsdownContext, 'kind' | 'format'>,
+) => {
+  return (
+    context.configureTsdown?.(config, {
+      ...options,
+      packageRoot: context.packageRoot,
+      output: context.output,
+      packageName: context.pkg.name,
+    }) ?? config
+  );
 };
 
 const createBundleConfigs = (
@@ -271,45 +294,54 @@ const createBundleConfigs = (
             neverBundle: context.packageExternal,
           };
 
-    return {
-      ...createCommonConfig(context, deps),
-      entry: getBundleEntry(context.packageRoot),
-      format,
-      globalName: context.globalName,
-      outDir: context.output,
-      dts,
-      treeshake: true,
-      banner: context.banner,
-      outExtensions: () => ({
-        js: extname,
-      }),
-      outputOptions: {
-        entryFileNames: `[name]${extname}`,
-        chunkFileNames: `[name]-[hash]${extname}`,
-        globals: format === 'iife' ? getIifeGlobals(context) : {},
+    return configureTsdown(
+      context,
+      {
+        ...createCommonConfig(context, deps),
+        entry: getBundleEntry(context.packageRoot),
+        format,
+        globalName: context.globalName,
+        outDir: context.output,
+        dts,
+        treeshake: true,
+        banner: context.banner,
+        outExtensions: () => ({
+          js: extname,
+        }),
+        outputOptions: {
+          entryFileNames: `[name]${extname}`,
+          chunkFileNames: `[name]-[hash]${extname}`,
+          globals: format === 'iife' ? getIifeGlobals(context) : {},
+        },
       },
-    };
+      { kind: 'bundle', format },
+    );
   }) satisfies Array<UserConfig>;
 };
 
 const createModuleConfig = (
+  context: BuildContext,
   commonConfig: ReturnType<typeof createCommonConfig>,
   entry: Record<string, string>,
   format: Extract<TsdownFormat, 'cjs' | 'esm'>,
   outDir: string,
 ) => {
-  return {
-    ...commonConfig,
-    entry,
-    format,
-    outDir,
-    dts: true,
-    unbundle: true,
-    outExtensions: () => ({
-      js: '.js',
-      dts: '.d.ts',
-    }),
-  } satisfies UserConfig;
+  return configureTsdown(
+    context,
+    {
+      ...commonConfig,
+      entry,
+      format,
+      outDir,
+      dts: true,
+      unbundle: true,
+      outExtensions: () => ({
+        js: '.js',
+        dts: '.d.ts',
+      }),
+    },
+    { kind: 'module', format },
+  ) satisfies UserConfig;
 };
 
 const createModuleConfigs = (context: BuildContext) => {
@@ -320,12 +352,14 @@ const createModuleConfigs = (context: BuildContext) => {
 
   return [
     createModuleConfig(
+      context,
       commonConfig,
       entry,
       'esm',
       path.join(context.output, 'es'),
     ),
     createModuleConfig(
+      context,
       commonConfig,
       entry,
       'cjs',

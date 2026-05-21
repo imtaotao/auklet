@@ -217,6 +217,8 @@ flowchart TD
 - `build.platform` 默认是 `neutral`。
 - `build.tsconfig` 默认从包根目录向上查找最近的 `tsconfig.json`。
 - `dependencies`、`peerDependencies` 和 `build.externals` 会作为 external 的来源。
+- `build.globals` 会合并进 IIFE 产物的 `output.globals`，并覆盖根据 external 包名自动推导的全局变量名。
+- `build.configureTsdown` 是最终 tsdown config 钩子；`kind` 只区分 `bundle` 和 `module`，分别对应包级 bundle 产物和 `modules: true` 下的 unbundled 产物。
 - `modules: true` 时会生成 `dist/es` 和 `dist/lib` 这类模块产物；CSS 组件级产物也跟随这个行为。
 
 ## CSS production 构建链路

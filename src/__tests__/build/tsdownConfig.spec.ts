@@ -233,6 +233,10 @@ describe('defineKernelPackageConfigFromOptions', () => {
       build: {
         formats: ['iife'],
         externals: ['react-dom'],
+        globals: {
+          react: 'ReactRuntime',
+          'react-dom': 'ReactDOM',
+        },
       },
     });
 
@@ -246,10 +250,73 @@ describe('defineKernelPackageConfigFromOptions', () => {
       },
       outputOptions: {
         globals: {
-          react: 'React',
-          'react-dom': 'ReactDom',
+          react: 'ReactRuntime',
+          'react-dom': 'ReactDOM',
         },
       },
+    });
+  });
+
+  test('allows final tsdown config customization', () => {
+    const configureTsdown = vi.fn((config, context) => {
+      return {
+        ...config,
+        name: `${context.kind}:${context.format}:${context.packageName}`,
+        sourcemap: context.kind === 'bundle',
+        outputOptions: {
+          ...config.outputOptions,
+          globals: {
+            ...config.outputOptions?.globals,
+            react: 'CustomReact',
+          },
+        },
+      };
+    });
+
+    const configs = defineKernelPackageConfigFromOptions(project.root, {
+      modules: true,
+      build: {
+        formats: ['iife'],
+        configureTsdown,
+      },
+    });
+
+    expect(configureTsdown).toHaveBeenCalledTimes(3);
+    expect(configureTsdown.mock.calls.map(([, context]) => context)).toEqual([
+      {
+        kind: 'bundle',
+        format: 'iife',
+        packageRoot: project.root,
+        output: 'dist',
+        packageName: '@scope/fixture-package',
+      },
+      {
+        kind: 'module',
+        format: 'esm',
+        packageRoot: project.root,
+        output: 'dist',
+        packageName: '@scope/fixture-package',
+      },
+      {
+        kind: 'module',
+        format: 'cjs',
+        packageRoot: project.root,
+        output: 'dist',
+        packageName: '@scope/fixture-package',
+      },
+    ]);
+    expect(configs[0]).toMatchObject({
+      name: 'bundle:iife:@scope/fixture-package',
+      sourcemap: true,
+      outputOptions: {
+        globals: {
+          react: 'CustomReact',
+        },
+      },
+    });
+    expect(configs[1]).toMatchObject({
+      name: 'module:esm:@scope/fixture-package',
+      sourcemap: false,
     });
   });
 });

@@ -1,3 +1,5 @@
+import type { UserConfig } from 'tsdown/config';
+
 export type StyleDependencyGroup = {
   // 包级样式入口依赖，会被合并进包级 dist/index.css。
   entry?: string | Array<string>;
@@ -38,6 +40,24 @@ export type PackageBuildFormat = 'cjs' | 'esm' | 'iife';
 export type PackageBuildPlatform = 'node' | 'neutral' | 'browser';
 export type PackageBuildTarget = string | Array<string> | false;
 
+export type ConfigureTsdownContext = {
+  // 当前 tsdown 配置对应的构建产物类型。
+  kind: 'bundle' | 'module';
+  // 当前 tsdown 配置对应的输出格式。
+  format: PackageBuildFormat;
+  // 当前包根目录。
+  packageRoot: string;
+  // 当前包构建输出目录。
+  output: string;
+  // 当前 package.json name。
+  packageName?: string;
+};
+
+export type ConfigureTsdown = (
+  config: UserConfig,
+  context: ConfigureTsdownContext,
+) => UserConfig;
+
 export type PackageBuildOptions = {
   // 包级 bundle 产物格式，例如 cjs、esm、iife。
   formats?: Array<PackageBuildFormat>;
@@ -49,6 +69,10 @@ export type PackageBuildOptions = {
   banner?: string;
   // 额外标记为外部依赖的包名；会和 package.json dependencies、peerDependencies 一起传给 tsdown。
   externals?: Array<string>;
+  // IIFE 产物的外部依赖全局变量名，会传给 tsdown output.globals。
+  globals?: Record<string, string>;
+  // 高级钩子：在 auklet 生成 tsdown config 后允许用户做最终调整。
+  configureTsdown?: ConfigureTsdown;
   // TypeScript 配置文件路径，相对于当前包根目录；默认向上查找 tsconfig.json。
   tsconfig?: string;
 };

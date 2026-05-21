@@ -1,5 +1,7 @@
 export type {
   AukletConfig,
+  ConfigureTsdown,
+  ConfigureTsdownContext,
   LoadAukletConfigOptions,
   ModuleStyleBuildConfig,
   ModuleStyleBuildContext,
