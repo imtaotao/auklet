@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { defineConfig, type UserConfig } from 'tsdown/config';
+import type { UserConfig } from 'tsdown/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { normalizeAukletConfig } from '#auklet/config';
 import type {
@@ -361,6 +361,4 @@ export async function defineKernelPackageConfigFromFile(
   return defineKernelPackageConfigFromOptions(packageRoot, config);
 }
 
-export default defineKernelPackageConfigFromFile(process.cwd()).then((config) =>
-  defineConfig(config),
-);
+export default defineKernelPackageConfigFromFile(process.cwd());

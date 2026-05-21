@@ -5,10 +5,6 @@ import {
   type VirtualProject,
 } from '../fixtures/virtualProject';
 
-vi.mock('tsdown/config', () => ({
-  defineConfig: vi.fn((config: unknown) => config),
-}));
-
 import {
   defineKernelPackageConfigFromFile,
   defineKernelPackageConfigFromOptions,

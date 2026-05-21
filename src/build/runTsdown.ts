@@ -1,5 +1,5 @@
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { execa } from 'execa';
 
 const require = createRequire(import.meta.url);
