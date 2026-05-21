@@ -95,6 +95,24 @@ Each `styles.dependencies` entry may define:
 - `themes`: theme style dependency map.
 - `components`: glob-like component style rules used to infer style imports from source imports.
 
+Component style inference only scans source `.tsx` files. Component imports or
+re-exports in `.ts` files are ignored for CSS auto import, so component barrel
+files that should drive component CSS must be `.tsx`.
+
+Supported value forms include named imports, named re-exports, and local
+re-exports that can be traced back to an import binding:
+
+```tsx
+import { Button } from '@scope/ui';
+export { Card } from '@scope/ui/components/Card';
+
+import { Dialog as BaseDialog } from '@scope/ui';
+export { BaseDialog as Dialog };
+```
+
+`export * from '...'` is intentionally not supported for CSS auto import because
+the exported component names cannot be inferred reliably.
+
 Style configuration should use the grouped `styles` field.
 
 ```ts

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { SOURCE_COMPONENT_MODULE_RE } from '#auklet/css/constants';
 import { groupStyleFilesByDir } from '#auklet/css/core/style/files';
 import { getSourceModuleDir, toPosixPath } from '#auklet/utils';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
@@ -53,7 +54,7 @@ export class StyleModuleEntryPlanner {
 
   private getSourceModuleDirs() {
     return this.packageContext.sourceFiles
-      .filter((sourceFile) => sourceFile.endsWith('.tsx'))
+      .filter((sourceFile) => SOURCE_COMPONENT_MODULE_RE.test(sourceFile))
       .map((sourceFile) => {
         return getSourceModuleDir(
           path.relative(this.packageContext.sourceRoot, sourceFile),

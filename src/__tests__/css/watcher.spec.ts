@@ -121,4 +121,36 @@ describe('ModuleStyleWatcher', () => {
 
     await watcher.close();
   });
+
+  test('rebuilds for component, style, and config changes only', async () => {
+    project.writeFile('src/index.tsx', 'export const value = 1;');
+    project.writeFile('src/index.css', '.root {}');
+    project.writeFile('src/data.ts', 'export const value = 1;');
+    project.writeFile('auklet.config.ts', 'export const config = {};');
+    const watcher = new ModuleStyleWatcher({
+      packageRoot: project.root,
+      logger,
+    });
+
+    await watcher.watch();
+    expect(mocks.build).toHaveBeenCalledTimes(1);
+
+    mocks.events.get('all')?.('change', project.resolve('src/data.ts'));
+    await vi.advanceTimersByTimeAsync(80);
+    expect(mocks.build).toHaveBeenCalledTimes(1);
+
+    mocks.events.get('all')?.('change', project.resolve('src/index.tsx'));
+    await vi.advanceTimersByTimeAsync(80);
+    expect(mocks.build).toHaveBeenCalledTimes(2);
+
+    mocks.events.get('all')?.('change', project.resolve('src/index.css'));
+    await vi.advanceTimersByTimeAsync(80);
+    expect(mocks.build).toHaveBeenCalledTimes(3);
+
+    mocks.events.get('all')?.('change', project.resolve('auklet.config.ts'));
+    await vi.advanceTimersByTimeAsync(80);
+    expect(mocks.build).toHaveBeenCalledTimes(4);
+
+    await watcher.close();
+  });
 });

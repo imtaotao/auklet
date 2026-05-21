@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest';
 const math = 'examples/libs/packages/math';
 const ui = 'examples/components/packages/ui';
 const dashboard = 'examples/components/packages/dashboard';
+const reexports = 'examples/components/packages/reexports';
 
 const readDist = (packageDir: string, file: string) => {
   return fs.readFileSync(path.join(process.cwd(), packageDir, 'dist', file), {
@@ -28,6 +29,18 @@ describe('examples JavaScript dependencies', () => {
       importUi,
     );
     expect(readDist(dashboard, 'index.cjs')).toContain('require("@demo/ui")');
+    expect(
+      readDist(reexports, 'es/components/PackageReexport/index.js'),
+    ).toContain('import { Button as ReexportedButton } from "@demo/ui";');
+    expect(
+      readDist(reexports, 'es/components/DeepReexport/index.js'),
+    ).toContain(
+      'import { Card as ReexportedCard } from "@demo/ui/components/Card";',
+    );
+    expect(
+      readDist(reexports, 'es/components/LocalReexport/index.js'),
+    ).toContain('import { Card as ImportedCard } from "@demo/ui";');
+    expect(readDist(reexports, 'index.cjs')).toContain('require("@demo/ui")');
   });
 
   test('uses relative imports inside module output', () => {

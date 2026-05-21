@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest';
 const math = 'examples/libs/packages/math';
 const string = 'examples/libs/packages/string';
 const dashboard = 'examples/components/packages/dashboard';
+const reexports = 'examples/components/packages/reexports';
 const bundleFiles = ['index.cjs', 'index.d.ts', 'index.js', 'index.mjs'];
 
 const listDistFiles = (packageDir: string) => {
@@ -60,6 +61,51 @@ describe('examples build output structure', () => {
       'lib/style/module.css',
       'lib/themes/dark.css',
       'lib/themes/light.css',
+    ]);
+    expect(listDistFiles(reexports)).toEqual([
+      'es/components/DeepReexport/index.css',
+      'es/components/DeepReexport/index.d.ts',
+      'es/components/DeepReexport/index.js',
+      'es/components/DeepReexport/style/index.css',
+      'es/components/LocalReexport/index.css',
+      'es/components/LocalReexport/index.d.ts',
+      'es/components/LocalReexport/index.js',
+      'es/components/LocalReexport/style/index.css',
+      'es/components/LocalReexport/types.d.ts',
+      'es/components/LocalReexport/types.js',
+      'es/components/PackageReexport/index.css',
+      'es/components/PackageReexport/index.d.ts',
+      'es/components/PackageReexport/index.js',
+      'es/components/PackageReexport/style/index.css',
+      'es/index.d.ts',
+      'es/index.js',
+      'es/style/external.css',
+      'es/style/index.css',
+      'es/style/module.css',
+      'index.cjs',
+      'index.css',
+      'index.d.ts',
+      'index.js',
+      'index.mjs',
+      'lib/components/DeepReexport/index.css',
+      'lib/components/DeepReexport/index.d.ts',
+      'lib/components/DeepReexport/index.js',
+      'lib/components/DeepReexport/style/index.css',
+      'lib/components/LocalReexport/index.css',
+      'lib/components/LocalReexport/index.d.ts',
+      'lib/components/LocalReexport/index.js',
+      'lib/components/LocalReexport/style/index.css',
+      'lib/components/LocalReexport/types.d.ts',
+      'lib/components/LocalReexport/types.js',
+      'lib/components/PackageReexport/index.css',
+      'lib/components/PackageReexport/index.d.ts',
+      'lib/components/PackageReexport/index.js',
+      'lib/components/PackageReexport/style/index.css',
+      'lib/index.d.ts',
+      'lib/index.js',
+      'lib/style/external.css',
+      'lib/style/index.css',
+      'lib/style/module.css',
     ]);
   });
 });

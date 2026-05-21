@@ -337,6 +337,11 @@ describe('ModuleStyleGraph', () => {
     for (const file of sourceGraphFiles) {
       expect(graph.isWorkspaceSourceGraphFile(file)).toBe(true);
     }
+    expect(
+      graph.isWorkspaceSourceGraphFile(
+        'C:/repo/workspace/packages/app-package/src/pages/Blog/data.ts',
+      ),
+    ).toBe(false);
 
     expect(graph.getWatchRoots()).toEqual([
       'C:/repo/workspace/packages/*/src',

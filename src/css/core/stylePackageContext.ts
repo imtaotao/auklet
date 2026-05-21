@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
+import { ModuleStyleImportCollector } from '#auklet/css/core/styleImports/collector';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import {

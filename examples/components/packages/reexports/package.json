@@ -1,12 +1,12 @@
 {
-  "name": "@demo/ui",
+  "name": "@demo/reexports",
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "build": "auk build"
   },
   "dependencies": {
-    "@demo/theme": "workspace:*"
+    "@demo/ui": "workspace:*"
   },
   "devDependencies": {
     "auklet": "workspace:*"
@@ -21,7 +21,6 @@
       "default": "./dist/es/components/*/index.js"
     },
     "./style.css": "./dist/index.css",
-    "./components/*.css": "./dist/es/components/*/style/index.css",
-    "./themes/*.css": "./dist/es/themes/*.css"
+    "./components/*.css": "./dist/es/components/*/style/index.css"
   }
 }

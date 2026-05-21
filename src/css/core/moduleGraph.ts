@@ -11,6 +11,7 @@ import { StyleModuleEntryPlanner } from '#auklet/css/core/styleModuleEntryPlanne
 import {
   EXTERNAL_ENTRY,
   MODULE_ENTRY,
+  SOURCE_COMPONENT_MODULE_RE,
   STYLE_ENTRY,
   THEMES_ENTRY_PREFIX,
 } from '#auklet/css/constants';
@@ -88,7 +89,7 @@ export class ModuleStyleGraph {
       return false;
     }
     if (normalizedFile.endsWith(aukletConfigFile)) return true;
-    if (normalizedFile.endsWith('.ts') || normalizedFile.endsWith('.tsx')) {
+    if (SOURCE_COMPONENT_MODULE_RE.test(normalizedFile)) {
       return true;
     }
 

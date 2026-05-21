@@ -76,6 +76,16 @@ importers:
         specifier: workspace:*
         version: link:../../../..
 
+  examples/components/packages/reexports:
+    dependencies:
+      '@demo/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
   examples/components/packages/theme:
     devDependencies:
       auklet:

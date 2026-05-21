@@ -6,6 +6,7 @@ Packages:
 
 - `@demo/theme`: shared theme CSS package.
 - `@demo/ui`: component package with `Button`, `Card`, package themes, and external style dependencies on `@demo/theme`.
+- `@demo/reexports`: component package demonstrating CSS auto import from `.tsx` named re-export syntax. Its `.ts` re-export file is intentionally ignored by CSS auto import.
 
 ```bash
 cd ../../

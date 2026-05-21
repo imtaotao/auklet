@@ -1,17 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import ts from 'typescript';
 import { isArray } from 'aidly';
 import type { NormalizedAukletConfig } from '#auklet/types';
+import { SOURCE_COMPONENT_MODULE_RE } from '#auklet/css/constants';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import { joinDependencySpecifier } from '#auklet/css/core/style/specifier';
 import {
   appendUniqueMapValue,
   getSourceModuleDir,
-  SOURCE_DECLARATION_RE,
   POSIX_SEPARATOR,
-  SOURCE_MODULE_RE,
 } from '#auklet/utils';
+import {
+  collectModuleStyleSourceReferences,
+  getSourceReferenceImportedNames,
+  isTypeOnlySourceReference,
+  type ModuleStyleSourceReference,
+} from '#auklet/css/core/styleImports/sourceReference';
 
 const GLOBSTAR_TOKEN = '**';
 
@@ -22,11 +26,6 @@ type AutoImportRule = {
 
 type SourceImportAliasRule = {
   prefix: string;
-};
-
-type SourceImportDeclaration = {
-  importPath: string;
-  importClause?: ts.ImportClause;
 };
 
 export class ModuleStyleImportCollector {
@@ -46,14 +45,14 @@ export class ModuleStyleImportCollector {
     const rules = this.createAutoImportRules(config);
 
     for (const file of files) {
-      if (!SOURCE_MODULE_RE.test(file) || SOURCE_DECLARATION_RE.test(file)) {
+      if (!SOURCE_COMPONENT_MODULE_RE.test(file)) {
         continue;
       }
       const sourceRelative = path.relative(this.srcRoot, file);
       const sourceDir = path.dirname(sourceRelative);
       const sourceModuleDir = getSourceModuleDir(sourceRelative);
       const code = fs.readFileSync(file, 'utf8');
-      const imports = this.getImportDeclarations(file, code);
+      const imports = collectModuleStyleSourceReferences(file, code);
 
       for (const item of imports) {
         this.collectSourceImportStyle(
@@ -62,6 +61,8 @@ export class ModuleStyleImportCollector {
           sourceModuleDir,
           item,
         );
+
+        if (isTypeOnlySourceReference(item)) continue;
 
         const importPath = item.importPath;
         const ruleMatches = this.matchAutoImportRules(rules, importPath);
@@ -86,7 +87,7 @@ export class ModuleStyleImportCollector {
         }
 
         for (const ruleMatch of ruleMatches) {
-          const importedNames = this.getImportedNames(file, item);
+          const importedNames = getSourceReferenceImportedNames(file, item);
 
           for (const importedName of importedNames) {
             const specifier = this.createStyleSpecifier(
@@ -107,38 +108,13 @@ export class ModuleStyleImportCollector {
     return entries;
   }
 
-  private getImportDeclarations(file: string, code: string) {
-    const imports: Array<SourceImportDeclaration> = [];
-    const sourceFile = ts.createSourceFile(
-      file,
-      code,
-      ts.ScriptTarget.Latest,
-      false,
-      file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-    );
-
-    sourceFile.forEachChild((node) => {
-      if (
-        !ts.isImportDeclaration(node) ||
-        !ts.isStringLiteral(node.moduleSpecifier)
-      ) {
-        return;
-      }
-      imports.push({
-        importPath: node.moduleSpecifier.text,
-        importClause: node.importClause,
-      });
-    });
-    return imports;
-  }
-
   private collectSourceImportStyle(
     entries: Map<string, Array<string>>,
     sourceDir: string,
     sourceModuleDir: string,
-    item: SourceImportDeclaration,
+    item: ModuleStyleSourceReference,
   ) {
-    if (item.importClause?.isTypeOnly) return;
+    if (isTypeOnlySourceReference(item)) return;
 
     const importedStyleEntry = this.resolveSourceImportStyleEntry(
       sourceDir,
@@ -303,33 +279,5 @@ export class ModuleStyleImportCollector {
       return null;
     }
     return `${importPath}${suffix}`;
-  }
-
-  private getImportedNames(file: string, item: SourceImportDeclaration) {
-    const importClause = item.importClause;
-    if (!importClause || importClause.isTypeOnly) {
-      return [];
-    }
-    const names: Array<string> = [];
-    if (importClause.name) {
-      names.push(importClause.name.text);
-    }
-    const namedBindings = importClause.namedBindings;
-
-    if (!namedBindings) {
-      return names;
-    }
-    if (ts.isNamespaceImport(namedBindings)) {
-      throw new Error(
-        `Namespace import is not supported for CSS auto import: ${item.importPath}\n` +
-          `Use named imports instead, for example: import { Component } from '${item.importPath}'.\n` +
-          `File: ${file}`,
-      );
-    }
-    for (const element of namedBindings.elements) {
-      if (element.isTypeOnly) continue;
-      names.push((element.propertyName ?? element.name).text);
-    }
-    return names;
   }
 }

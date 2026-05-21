@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { ModuleStyleImportCollector } from '#auklet/css/core/moduleStyleImportCollector';
+import { ModuleStyleImportCollector } from '#auklet/css/core/styleImports/collector';
 import { normalizeAukletConfig } from '#auklet/config';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import {
@@ -214,6 +214,79 @@ describe('ModuleStyleImportCollector', () => {
     ]);
   });
 
+  test('collects component styles from package entry named re-exports', () => {
+    const file = writeSourceFile(
+      project,
+      'pages/Article.tsx',
+      "export { Button as PrimaryButton } from '@scope/ui';",
+    );
+    writeStyleDependency(project, '@scope/ui/components/Button.css');
+
+    const entries = collector.collect([file], normalizedConfig);
+
+    expectCollectedStyles(entries, 'pages/Article', [
+      '@scope/ui/components/Button.css',
+    ]);
+  });
+
+  test('collects direct styles from deep named re-exports', () => {
+    const file = writeSourceFile(
+      project,
+      'pages/Article.tsx',
+      "export { Button } from '@scope/ui/components/Button';",
+    );
+    writeStyleDependency(project, '@scope/ui/components/Button.css');
+
+    const entries = collector.collect([file], normalizedConfig);
+
+    expectCollectedStyles(entries, 'pages/Article', [
+      '@scope/ui/components/Button.css',
+    ]);
+  });
+
+  test('resolves local re-exports through import bindings', () => {
+    const file = writeSourceFile(
+      project,
+      'pages/Article.tsx',
+      `
+        import { Button as BaseButton } from '@scope/ui';
+        export { BaseButton as Button };
+      `,
+    );
+    writeStyleDependency(project, '@scope/ui/components/Button.css');
+
+    const entries = collector.collect([file], normalizedConfig);
+
+    expectCollectedStyles(entries, 'pages/Article', [
+      '@scope/ui/components/Button.css',
+    ]);
+  });
+
+  test('throws when a local re-export cannot be resolved', () => {
+    const file = writeSourceFile(
+      project,
+      'pages/Article.tsx',
+      'export { MissingButton };',
+    );
+
+    expect(() => collector.collect([file], normalizedConfig)).toThrow(
+      'Unable to resolve exported symbol "MissingButton"',
+    );
+  });
+
+  test('throws for export-all declarations', () => {
+    const file = writeSourceFile(
+      project,
+      'pages/Article.tsx',
+      "export * from '@scope/ui/components/Button';",
+    );
+    writeStyleDependency(project, '@scope/ui/components/Button.css');
+
+    expect(() => collector.collect([file], normalizedConfig)).toThrow(
+      'Export-all declarations are not supported for CSS auto import: @scope/ui/components/Button',
+    );
+  });
+
   test('throws for namespace imports from package entries', () => {
     const file = writeSourceFile(
       project,
@@ -342,11 +415,16 @@ describe('ModuleStyleImportCollector', () => {
     expect(entries.size).toBe(0);
   });
 
-  test('skips type-only imports and declaration files', () => {
+  test('skips type-only imports and non-tsx files', () => {
     const sourceFile = writeSourceFile(
       project,
       'pages/Article.tsx',
       "import type { Button } from '@scope/ui';",
+    );
+    const tsFile = writeSourceFile(
+      project,
+      'pages/Article.ts',
+      "import { Dialog } from '@scope/ui';",
     );
     const declarationFile = writeSourceFile(
       project,
@@ -357,7 +435,7 @@ describe('ModuleStyleImportCollector', () => {
     writeStyleDependency(project, '@scope/ui/components/Dialog.css');
 
     const entries = collector.collect(
-      [sourceFile, declarationFile],
+      [sourceFile, tsFile, declarationFile],
       normalizedConfig,
     );
 

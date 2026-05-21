@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 
 const ui = 'examples/components/packages/ui';
 const dashboard = 'examples/components/packages/dashboard';
+const reexports = 'examples/components/packages/reexports';
 
 const readDist = (packageDir: string, file: string) => {
   return fs.readFileSync(path.join(process.cwd(), packageDir, 'dist', file), {
@@ -26,6 +27,9 @@ describe('examples CSS dependencies', () => {
     expect(readDist(dashboard, 'es/style/index.css')).toBe(
       lines('@import "@demo/ui/style.css";', '@import "./module.css";'),
     );
+    expect(readDist(reexports, 'es/style/index.css')).toBe(
+      lines('@import "@demo/ui/style.css";', '@import "./module.css";'),
+    );
   });
 
   test('keeps external style dependency chains', () => {
@@ -33,6 +37,9 @@ describe('examples CSS dependencies', () => {
       lines('@import "@demo/theme/external.css";'),
     );
     expect(readDist(dashboard, 'es/style/external.css')).toBe(
+      lines('@import "@demo/ui/external.css";'),
+    );
+    expect(readDist(reexports, 'es/style/external.css')).toBe(
       lines('@import "@demo/ui/external.css";'),
     );
   });
@@ -66,6 +73,30 @@ describe('examples CSS dependencies', () => {
         '@import "../index.css";',
       ),
     );
+    expect(
+      readDist(reexports, 'es/components/PackageReexport/style/index.css'),
+    ).toBe(
+      lines(
+        '@import "@demo/ui/components/Button.css";',
+        '@import "../index.css";',
+      ),
+    );
+    expect(
+      readDist(reexports, 'es/components/DeepReexport/style/index.css'),
+    ).toBe(
+      lines(
+        '@import "@demo/ui/components/Card.css";',
+        '@import "../index.css";',
+      ),
+    );
+    expect(
+      readDist(reexports, 'es/components/LocalReexport/style/index.css'),
+    ).toBe(
+      lines(
+        '@import "@demo/ui/components/Card.css";',
+        '@import "../index.css";',
+      ),
+    );
   });
 
   test('bundles local and dependency CSS content', () => {
@@ -74,5 +105,10 @@ describe('examples CSS dependencies', () => {
     expect(css).toContain('.demo-button');
     expect(css).toContain('.demo-card');
     expect(css).toContain('.dashboard');
+    const reexportsCss = readDist(reexports, 'index.css');
+
+    expect(reexportsCss).toContain('.package-reexport');
+    expect(reexportsCss).toContain('.deep-reexport');
+    expect(reexportsCss).toContain('.local-reexport');
   });
 });

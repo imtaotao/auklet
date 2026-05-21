@@ -77,7 +77,9 @@ src/css/core/
 ├── stylePackageContext.ts        # 收集当前包 style 构建上下文
 ├── styleProcessor.ts             # 读取、合并、展开 style 内容
 ├── workspaceStyleResolver.ts     # 解析 workspace/package/node_modules style 依赖
-├── moduleStyleImportCollector.ts # 从 TS/TSX import 推导 style 依赖
+├── styleImports/                 # 从 TSX import/re-export 推导 style 依赖
+│   ├── collector.ts              # 根据 source reference 和配置生成组件 style import
+│   └── sourceReference.ts        # 解析 TSX import/re-export 语法
 ├── styleModuleEntryPlanner.ts    # 规划组件级 style 入口
 ├── moduleGraph.ts                # Vite/dev 虚拟 CSS 图
 ├── moduleGraphRequestCache.ts    # 单次 graph 请求内的上下文缓存
@@ -93,7 +95,7 @@ src/css/core/
 - `StylePackageContext`：把包根目录、source/output、主题文件、样式文件、resolver、processor 等聚合起来，是 production 和 dev 两边的共享上下文。
 - `StyleProcessor`：负责 CSS 内容层面的处理，例如读取文件、展开 `@import`、合并 PostCSS root。
 - `WorkspaceStyleResolver`：负责把配置里的 style 依赖解析到真实文件或输出路径，处理 workspace 包和外部包差异。
-- `ModuleStyleImportCollector`：扫描源码 import，根据 `styles.dependencies.*.components` 推导组件级 style import。
+- `styleImports/collector.ts`：只扫描 `.tsx` 组件源码，根据 import / named re-export 和 `styles.dependencies.*.components` 推导组件级 style import。`.ts` 文件不会参与 CSS auto import；`export * from '...'` 不支持，因为无法可靠推断组件名。
 - `StyleModuleEntryPlanner`：根据源码目录和 import 收集结果，生成组件级 style entry plan。
 - `style/plan.ts`：只描述入口语义顺序，不读写文件。例如 `style/index.css` 是 global dependencies -> themes -> module。Production writer 和 dev graph 都消费它，保证两边核心行为一致。
 - `ModuleStyleGraph`：Vite/dev 模式下根据虚拟 CSS id 生成 CSS 内容，并递归解析 workspace style 依赖。
