@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { THEMES_DIR } from '#auklet/css/constants';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
-import { createThemeEntryParts } from '#auklet/css/core/style/plan';
+import { createThemeEntryParts } from '#auklet/css/core/style/entries';
 import {
   type FormatWriterOptions,
   type ThemeStyleOutput,

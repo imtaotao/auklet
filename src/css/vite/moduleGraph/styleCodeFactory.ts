@@ -4,14 +4,13 @@ import type {
   ModuleStyleGraphRequestCache,
   PackageStyleContext,
 } from '#auklet/css/vite/moduleGraph/requestCache';
-import { toDevDependencyImportSpecifier } from '#auklet/css/vite/moduleGraph/devDependency';
 import { mergeLoadResults } from '#auklet/css/vite/moduleGraph/loadResult';
 import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
+import { toDevDependencyImportSpecifier } from '#auklet/css/vite/moduleGraph/devDependency';
 import type {
   PackageStyleId,
   PackageStyleLoadResult,
 } from '#auklet/css/vite/moduleGraph/types';
-import { StyleModuleEntryPlanner } from '#auklet/css/core/styleModuleEntryPlanner';
 import {
   EXTERNAL_ENTRY,
   MODULE_ENTRY,
@@ -19,10 +18,11 @@ import {
   THEMES_ENTRY_PREFIX,
 } from '#auklet/css/constants';
 import {
+  createComponentStyleEntryPlan,
   createExternalEntryParts,
   createStyleEntryParts,
   createThemeEntryParts,
-} from '#auklet/css/core/style/plan';
+} from '#auklet/css/core/style/entries';
 import {
   createImportCode,
   parsePackageStyleSpecifier,
@@ -138,16 +138,14 @@ export class StyleCodeFactory {
     const results: Array<PackageStyleLoadResult> = [];
 
     for (const part of createExternalEntryParts(context.normalizedConfig)) {
-      if (part.type === 'dependencies') {
-        results.push(
-          await this.createDependencyStyleCode(
-            context,
-            cache,
-            part.specifiers,
-            (specifier) => this.toDevExternalStyleSpecifier(specifier, cache),
-          ),
-        );
-      }
+      results.push(
+        await this.createDependencyStyleCode(
+          context,
+          cache,
+          part.specifiers,
+          (specifier) => this.toDevExternalStyleSpecifier(specifier, cache),
+        ),
+      );
     }
 
     return mergeLoadResults(...results);
@@ -231,13 +229,10 @@ export class StyleCodeFactory {
   ) {
     const sourceModuleDir = removeStyleExtension(stylePath);
     const { styleFiles, sourceFiles } = context.packageContext;
-    const moduleStyleImports = context.packageContext.importCollector.collect(
-      sourceFiles,
-      context.normalizedConfig,
-    );
-    const entry = new StyleModuleEntryPlanner(
+    const entry = createComponentStyleEntryPlan(
       context.packageContext,
-    ).createEntry(sourceModuleDir, moduleStyleImports);
+      sourceModuleDir,
+    );
     const sourceStyleDir = path.join(
       context.sourceRoot,
       sourceModuleDir,

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
-import { createStyleEntryParts } from '#auklet/css/core/style/plan';
+import { createStyleEntryParts } from '#auklet/css/core/style/entries';
 import {
   type FormatWriterOptions,
   toRelativeImportSpecifier,

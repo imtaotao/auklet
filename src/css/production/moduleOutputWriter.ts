@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { StyleModuleEntryPlanner } from '#auklet/css/core/styleModuleEntryPlanner';
 import type { ModuleStyleEntryPlan } from '#auklet/css/core/styleModuleEntryPlanner';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
+import { createComponentStyleEntryPlans } from '#auklet/css/core/style/entries';
 import { ComponentStyleEntryWriter } from '#auklet/css/production/format/componentWriter';
 import { StyleEntryWriter } from '#auklet/css/production/format/entryWriter';
 import { ExternalStyleWriter } from '#auklet/css/production/format/externalWriter';
@@ -59,14 +59,7 @@ export class ModuleStyleOutputWriter {
   }
 
   private createComponentEntries() {
-    const moduleStyleImports = this.packageContext.importCollector.collect(
-      this.packageContext.sourceFiles,
-      this.packageContext.normalizedConfig,
-    );
-
-    return new StyleModuleEntryPlanner(this.packageContext).createEntries(
-      moduleStyleImports,
-    );
+    return createComponentStyleEntryPlans(this.packageContext);
   }
 
   private writeFormat(

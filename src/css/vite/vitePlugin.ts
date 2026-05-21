@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { HotUpdateOptions, ModuleNode, Plugin, ViteDevServer } from 'vite';
-import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import type { ModuleStyleGraphOptions } from '#auklet/css/vite/moduleGraph/types';
+import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { AukletStyleHmr } from '#auklet/css/vite/hmr';
 
 const WORKSPACE_FILE = 'pnpm-workspace.yaml';

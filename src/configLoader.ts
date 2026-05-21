@@ -33,6 +33,7 @@ const importTsOptionsModule = async (href: string) => {
   );
 
   fs.writeFileSync(tempFile, output.outputText);
+
   try {
     return (await import(pathToFileURL(tempFile).href)) as Record<
       string,

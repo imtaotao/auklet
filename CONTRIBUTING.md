@@ -83,8 +83,8 @@ src/css/core/
 ├── styleModuleEntryPlanner.ts    # 规划组件级 style 入口
 └── style/
     ├── dependencies.ts           # 从配置读取 global/theme/external 依赖
+    ├── entries.ts                # package/theme/external/component 入口语义
     ├── files.ts                  # style 文件扫描
-    ├── plan.ts                   # 共享入口语义顺序
     └── specifier.ts              # package style specifier 解析/生成
 ```
 
@@ -95,7 +95,7 @@ src/css/core/
 - `WorkspaceStyleResolver`：负责把配置里的 style 依赖解析到真实文件或输出路径，处理 workspace 包和外部包差异。
 - `styleImports/collector.ts`：只扫描 `.tsx` 组件源码，根据 import / named re-export 和 `styles.dependencies.*.components` 推导组件级 style import。`.ts` 文件不会参与 CSS auto import；`export * from '...'` 不支持，因为无法可靠推断组件名。
 - `StyleModuleEntryPlanner`：根据源码目录和 import 收集结果，生成组件级 style entry plan。
-- `style/plan.ts`：只描述入口语义顺序，不读写文件。例如 `style/index.css` 是 global dependencies -> themes -> module。Production writer 和 dev graph 都消费它，保证两边核心行为一致。
+- `style/entries.ts`：环境无关的 style graph 入口，统一暴露 package、theme、external、component 的入口语义。Production writer 和 Vite/dev renderer 都消费它。
 
 ### Style production 模块
 
@@ -124,14 +124,14 @@ production 文件职责：
 - `packageEntryWriter.ts`：写包级入口 `dist/index.css`。这个文件会把本包主题、全局 style 依赖和本包源码 style 聚合成一个真实 CSS 文件。
 - `moduleOutputWriter.ts`：写 modules 模式下的 format 产物编排器。它遍历 `es`、`lib` 等输出格式，并按顺序调用 `format/` 下的原子 writer。
 - `format/sourceWriter.ts`：复制源码 style 文件到当前 format 输出目录，保持组件源码 style 文件能被组件级入口引用。
-- `format/entryWriter.ts`：写当前 format 的 style 总入口，例如 `dist/es/style/index.css`。入口组合顺序来自 `style/plan.ts`。
+- `format/entryWriter.ts`：写当前 format 的 style 总入口，例如 `dist/es/style/index.css`。入口组合顺序来自 `style/entries.ts`。
 - `format/moduleWriter.ts`：写当前包自身模块样式集合，例如 `dist/es/style/module.css`。
 - `format/externalWriter.ts`：写外部 style 入口，例如 `dist/es/style/external.css`。
 - `format/themeWriter.ts`：写主题相关产物，包括 `dist/es/style/themes/*.css` 和 `dist/es/themes/*.css`。
 - `format/componentWriter.ts`：写组件级 style 入口，例如 `dist/es/components/Button/style/index.css`。
 - `format/shared.ts`：放 format writer 共享类型、空入口注释和相对 import 路径 helper。
 
-production 模块不应该重复实现 dev graph 的入口语义；入口组合顺序应优先来自 `style/plan.ts`。
+production 模块不应该重复实现 dev graph 的入口语义；入口组合顺序应优先来自 `style/entries.ts`。
 
 ### Style dev/Vite 模块
 
@@ -152,7 +152,7 @@ src/css/vite/
 Vite 插件负责把 package CSS import 转成虚拟模块，并调用 `moduleGraph/` 生成 CSS 内容。HMR 模块负责判断源码、配置、style 文件变化后哪些虚拟 CSS 模块需要失效。
 
 - `moduleGraph/graph.ts`：Vite/dev 模式下的 graph facade，根据虚拟 CSS id 创建请求缓存并分发给 CSS 生成器。
-- `moduleGraph/styleCodeFactory.ts`：根据 `style/plan.ts` 生成 dev 虚拟 CSS 内容，并递归解析 workspace style 依赖。
+- `moduleGraph/styleCodeFactory.ts`：根据 `style/entries.ts` 生成 dev 虚拟 CSS 内容，并递归解析 workspace style 依赖。
 - `moduleGraph/requestCache.ts`：缓存一次 graph 请求中的 package context，避免同一次请求重复加载和扫描。
 - `moduleGraph/devDependency.ts`：把 dev 虚拟 CSS 里的第三方 CSS dependency 按声明它的 package root 解析成 Vite `/@fs/...` 路径，避免虚拟模块丢失 node_modules 解析上下文。
 
@@ -229,8 +229,8 @@ flowchart TD
   Modules -->|false| Done["结束"]
   Modules -->|true| ModuleImports["ModuleStyleImportCollector 收集源码 import"]
   ModuleImports --> EntryPlan["StyleModuleEntryPlanner 规划组件 style entry"]
-  EntryPlan --> SharedPlan["style/plan.ts 提供 style/theme/external 顺序"]
-  SharedPlan --> Writer["ModuleStyleOutputWriter 写 dist/es 和 dist/lib"]
+  EntryPlan --> SharedGraph["style/entries.ts 提供 style/theme/external 顺序"]
+  SharedGraph --> Writer["ModuleStyleOutputWriter 写 dist/es 和 dist/lib"]
   Writer --> Outputs["style/index.css / module.css / external.css / themes/*.css / components/*/style/index.css"]
 ```
 
@@ -253,14 +253,14 @@ flowchart TD
   Graph --> Cache["requestCache.ts"]
   Cache --> PackageContext["StylePackageContext"]
   Graph --> Factory["styleCodeFactory.ts"]
-  Factory --> SharedPlan["style/plan.ts"]
-  SharedPlan --> LoadStyle["生成虚拟 CSS 内容"]
+  Factory --> SharedGraph["core/style/entries.ts"]
+  SharedGraph --> LoadStyle["生成虚拟 CSS 内容"]
   LoadStyle --> Vite["返回给 Vite"]
   FileChange["source/config/style 变化"] --> Hmr["hmr.ts"]
   Hmr --> Invalidate["失效相关虚拟模块"]
 ```
 
-dev 链路不写真实产物，而是生成虚拟 CSS 内容。它和 production writer 共享 `style/plan.ts`，确保以下语义一致：
+dev 链路不写真实产物，而是生成虚拟 CSS 内容。它和 production writer 共享 `core/style/entries.ts`，确保以下语义一致：
 
 - style 总入口包含哪些部分，以及顺序。
 - theme 入口是否包含主题依赖，以及当前主题内容。
@@ -307,7 +307,7 @@ pnpm run test:examples
 ## 修改建议
 
 - 配置字段变更时，同步检查 `types.ts`、`config.ts`、`README.md`、测试 fixture 和 examples。
-- CSS 入口顺序变更时，优先改 `src/css/core/style/plan.ts`，再检查 production 和 dev 消费逻辑。
+- CSS 入口顺序变更时，优先改 `src/css/core/style/entries.ts`，再检查 production 和 dev 消费逻辑。
 - 新增 style 依赖类型时，同时检查 `dependencies.ts`、`workspaceStyleResolver.ts`、`styleImports/collector.ts`、`moduleGraph/` 和 `StyleStructure` 测试 helper。
 - 新增 CLI 行为时，同步检查 `bin/entry.cjs`、README CLI 文档和必要的单测。
 - 新增 public API 时，同步检查 `src/index.ts` 和 `README.md` 的 Programmatic API。

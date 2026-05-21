@@ -1,10 +1,12 @@
-import type { NormalizedAukletConfig } from '#auklet/types';
 import {
   getExternalStyleDependencies,
   getGlobalStyleDependencies,
   getThemeNames,
   getThemeStyleDependencies,
 } from '#auklet/css/core/style/dependencies';
+import { StyleModuleEntryPlanner } from '#auklet/css/core/styleModuleEntryPlanner';
+import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
+import type { NormalizedAukletConfig } from '#auklet/types';
 
 type StyleModulePart = { type: 'module' };
 type StyleThemesPart = { type: 'themes'; themeNames: Array<string> };
@@ -21,6 +23,7 @@ export type StyleEntryPart =
 const dependenciesPart = (specifiers: Array<string>) =>
   ({ type: 'dependencies', specifiers } satisfies DependenciesPart);
 
+// 环境无关的 style entry graph。production writer 和 Vite/dev renderer 都从这里取入口语义。
 export function createStyleEntryParts(config: NormalizedAukletConfig) {
   return [
     dependenciesPart(getGlobalStyleDependencies(config)),
@@ -34,20 +37,44 @@ export function createThemeEntryParts(
   themeName: string,
   options: { includeDependencies?: boolean } = {},
 ) {
-  const themePart = { type: 'theme', themeName } satisfies ThemePart;
+  const themePart: ThemePart = { type: 'theme', themeName };
 
   if (options.includeDependencies === false) {
-    return [themePart] satisfies Array<ThemeEntryPart>;
+    return [themePart];
   }
-
   return [
     dependenciesPart(getThemeStyleDependencies(config, themeName)),
     themePart,
-  ] satisfies Array<ThemeEntryPart>;
+  ];
 }
 
 export function createExternalEntryParts(config: NormalizedAukletConfig) {
   return [
     dependenciesPart(getExternalStyleDependencies(config)),
   ] satisfies Array<ExternalEntryPart>;
+}
+
+export function collectModuleStyleImports(packageContext: StylePackageContext) {
+  return packageContext.importCollector.collect(
+    packageContext.sourceFiles,
+    packageContext.normalizedConfig,
+  );
+}
+
+export function createComponentStyleEntryPlan(
+  packageContext: StylePackageContext,
+  sourceDir: string,
+) {
+  return new StyleModuleEntryPlanner(packageContext).createEntry(
+    sourceDir,
+    collectModuleStyleImports(packageContext),
+  );
+}
+
+export function createComponentStyleEntryPlans(
+  packageContext: StylePackageContext,
+) {
+  return new StyleModuleEntryPlanner(packageContext).createEntries(
+    collectModuleStyleImports(packageContext),
+  );
 }

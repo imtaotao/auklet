@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
-import { createExternalEntryParts } from '#auklet/css/core/style/plan';
+import { createExternalEntryParts } from '#auklet/css/core/style/entries';
 import type { FormatWriterOptions } from '#auklet/css/production/format/shared';
 import type { ModuleStyleBuildConfig } from '#auklet/types';
 
