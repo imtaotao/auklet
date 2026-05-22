@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { THEMES_DIR } from '#auklet/css/constants';
+import type { ModuleStyleBuildConfig } from '#auklet/types';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import { createThemeEntryParts } from '#auklet/css/core/style/entries';
 import {
   type FormatWriterOptions,
   type ThemeStyleOutput,
+  writeStyleFile,
   toRelativeImportSpecifier,
 } from '#auklet/css/production/format/shared';
-import type { ModuleStyleBuildConfig } from '#auklet/types';
 
 export class ThemeStyleWriter {
   private readonly config: ModuleStyleBuildConfig;
@@ -48,8 +49,7 @@ export class ThemeStyleWriter {
       }
 
       const target = path.join(themesDir, `${themeName}.css`);
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(
+      writeStyleFile(
         target,
         root.nodes?.length ? this.styleProcessor.stringify(root) : '',
       );
@@ -90,8 +90,7 @@ export class ThemeStyleWriter {
 
       if (!root.nodes?.length) continue;
 
-      fs.mkdirSync(targetDir, { recursive: true });
-      fs.writeFileSync(target, this.styleProcessor.stringify(root));
+      writeStyleFile(target, this.styleProcessor.stringify(root));
       outputs.push(target);
     }
 

@@ -1,12 +1,11 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import type { ModuleStyleEntryPlan } from '#auklet/css/core/styleModuleEntryPlanner';
-import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
-import {
-  emptyModuleEntryComment,
-  type FormatWriterOptions,
-} from '#auklet/css/production/format/shared';
 import type { ModuleStyleBuildConfig } from '#auklet/types';
+import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
+import type { ModuleStyleEntryPlan } from '#auklet/css/core/styleModuleEntryPlanner';
+import {
+  type FormatWriterOptions,
+  writeStyleFile,
+} from '#auklet/css/production/format/shared';
 import { toPosixPath } from '#auklet/utils';
 
 export class ComponentStyleEntryWriter {
@@ -48,12 +47,9 @@ export class ComponentStyleEntryWriter {
         );
       }
 
-      fs.mkdirSync(styleDir, { recursive: true });
-      fs.writeFileSync(
+      writeStyleFile(
         target,
-        root.nodes?.length
-          ? this.styleProcessor.stringify(root)
-          : emptyModuleEntryComment,
+        root.nodes?.length ? this.styleProcessor.stringify(root) : '',
       );
       outputs.push(target);
     }

@@ -1,9 +1,11 @@
-import fs from 'node:fs';
 import path from 'node:path';
+import type { ModuleStyleBuildConfig } from '#auklet/types';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import { createExternalEntryParts } from '#auklet/css/core/style/entries';
-import type { FormatWriterOptions } from '#auklet/css/production/format/shared';
-import type { ModuleStyleBuildConfig } from '#auklet/types';
+import {
+  type FormatWriterOptions,
+  writeStyleFile,
+} from '#auklet/css/production/format/shared';
 
 export class ExternalStyleWriter {
   private readonly config: ModuleStyleBuildConfig;
@@ -37,8 +39,7 @@ export class ExternalStyleWriter {
       }
     }
 
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(
+    writeStyleFile(
       target,
       root.nodes?.length ? this.styleProcessor.stringify(root) : '',
     );

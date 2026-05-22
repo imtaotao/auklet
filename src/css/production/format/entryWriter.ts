@@ -1,9 +1,9 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import { createStyleEntryParts } from '#auklet/css/core/style/entries';
 import {
   type FormatWriterOptions,
+  writeStyleFile,
   toRelativeImportSpecifier,
 } from '#auklet/css/production/format/shared';
 import type { ModuleStyleBuildConfig } from '#auklet/types';
@@ -64,8 +64,7 @@ export class StyleEntryWriter {
 
     if (!root.nodes?.length) return null;
 
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, this.styleProcessor.stringify(root));
+    writeStyleFile(target, this.styleProcessor.stringify(root));
     return target;
   }
 }

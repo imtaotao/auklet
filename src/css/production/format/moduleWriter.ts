@@ -1,8 +1,10 @@
-import fs from 'node:fs';
 import path from 'node:path';
-import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
-import type { FormatWriterOptions } from '#auklet/css/production/format/shared';
 import type { ModuleStyleBuildConfig } from '#auklet/types';
+import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
+import {
+  type FormatWriterOptions,
+  writeStyleFile,
+} from '#auklet/css/production/format/shared';
 
 export class ModuleStyleWriter {
   private readonly config: ModuleStyleBuildConfig;
@@ -33,8 +35,7 @@ export class ModuleStyleWriter {
 
     if (!root.nodes?.length) return null;
 
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, this.styleProcessor.stringify(root));
+    writeStyleFile(target, this.styleProcessor.stringify(root));
     return target;
   }
 }

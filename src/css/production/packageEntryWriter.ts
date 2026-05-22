@@ -1,6 +1,6 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
+import { writeStyleFile } from '#auklet/css/production/format/shared';
 import { getGlobalStyleDependencies } from '#auklet/css/core/style/dependencies';
 import type {
   ModuleStyleBuildConfig,
@@ -60,12 +60,11 @@ export class PackageStyleEntryWriter {
 
     if (!root.nodes?.length) return null;
 
-    fs.mkdirSync(this.outputRoot, { recursive: true });
     const target = path.join(
       this.outputRoot,
       this.config.output.indexStyleFile,
     );
-    fs.writeFileSync(target, this.styleProcessor.stringify(root));
+    writeStyleFile(target, this.styleProcessor.stringify(root));
     return target;
   }
 

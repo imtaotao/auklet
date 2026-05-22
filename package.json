@@ -1,6 +1,6 @@
 {
   "name": "auklet",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "type": "module",
   "author": "chentao.arthur",
   "packageManager": "pnpm@10.27.0",

@@ -1,13 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
+import { emptyStyleFileComment } from '#auklet/css/production/format/shared';
 import type { AukletConfig } from '#auklet/types';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../fixtures/virtualProject';
-
-const emptyStyleEntry =
-  '/* Empty style entry kept so automated tooling can resolve this module CSS path. */\n';
 
 const sourceBuildConfig = {
   source: 'source',
@@ -121,7 +119,7 @@ describe('ModuleStyleBuilder', () => {
       );
     }
 
-    expect(esExternalStyle).toBe('');
+    expect(esExternalStyle).toBe(emptyStyleFileComment);
     expect(esStyleEntry).toBe('@import "./module.css";\n');
   });
 
@@ -190,10 +188,10 @@ describe('ModuleStyleBuilder', () => {
       'output/lib/pages/AboutPage/style/index.css',
     );
 
-    expect(esPlainStyle).toBe(emptyStyleEntry);
-    expect(esAboutPageStyle).toBe(emptyStyleEntry);
-    expect(libPlainStyle).toBe(emptyStyleEntry);
-    expect(libAboutPageStyle).toBe(emptyStyleEntry);
+    expect(esPlainStyle).toBe(emptyStyleFileComment);
+    expect(esAboutPageStyle).toBe(emptyStyleFileComment);
+    expect(libPlainStyle).toBe(emptyStyleFileComment);
+    expect(libAboutPageStyle).toBe(emptyStyleFileComment);
     expect(fixture.exists('output/es/style/index.css')).toBe(false);
     expect(
       fixture.exists('output/es/components/Plain/data/style/index.css'),
@@ -201,6 +199,18 @@ describe('ModuleStyleBuilder', () => {
     expect(
       fixture.exists('output/es/components/Plain/Part/style/index.css'),
     ).toBe(false);
+  });
+
+  test('writes placeholder comments for generated empty CSS files', async () => {
+    aukletConfig = sourceModuleBuildConfig;
+    fixture.writeFile('source/index.css', '');
+
+    await createBuilder(fixture, aukletConfig).build();
+
+    expect(fixture.readFile('output/es/index.css')).toBe(emptyStyleFileComment);
+    expect(fixture.readFile('output/es/style/external.css')).toBe(
+      emptyStyleFileComment,
+    );
   });
 
   test('builds same-name style entries for flat source modules', async () => {
