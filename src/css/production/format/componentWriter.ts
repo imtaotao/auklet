@@ -31,8 +31,16 @@ export class ComponentStyleEntryWriter {
         this.config.output.styleDir,
       );
       const target = path.join(styleDir, this.config.output.indexStyleFile);
+      const ownImports = this.styleProcessor.collectStyleImportSpecifiers(
+        entry.ownStyleFiles,
+      );
       const sourceStyleSpecifiers = [
-        ...this.getModuleStyleSpecifiers(entry.moduleStyleImports, styleDir),
+        ...this.getModuleStyleSpecifiers(
+          entry.moduleStyleImports.filter(
+            (specifier) => !ownImports.has(specifier),
+          ),
+          styleDir,
+        ),
         ...this.getOwnStyleSpecifiers(entry.ownStyleFiles, styleDir, outRoot),
       ];
       const root = this.styleProcessor.createRoot();

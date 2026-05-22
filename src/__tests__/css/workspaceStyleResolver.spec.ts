@@ -27,10 +27,29 @@ describe('WorkspaceStyleResolver', () => {
     project.cleanup();
   });
 
+  const resolve = (specifier: string, fromDir?: string) => {
+    return resolver.resolveStyleDependency(specifier, fromDir);
+  };
+
+  const realResolve = (specifier: string) => {
+    return fs.realpathSync(resolve(specifier));
+  };
+
+  const output = (specifier: string, outRoot = project.resolve('dist/lib')) => {
+    return resolver.toOutputStyleSpecifier(specifier, outRoot);
+  };
+
+  const external = (
+    specifier: string,
+    outRoot = project.resolve('dist/lib'),
+  ) => {
+    return resolver.toExternalStyleSpecifier(specifier, outRoot);
+  };
+
   test('resolves relative style dependencies from the importing directory', () => {
     const fromDir = project.resolve('src/components/Button');
 
-    expect(resolver.resolveStyleDependency('./index.css', fromDir)).toBe(
+    expect(resolve('./index.css', fromDir)).toBe(
       path.join(fromDir, 'index.css'),
     );
   });
@@ -39,9 +58,9 @@ describe('WorkspaceStyleResolver', () => {
     const packageStyle = project.resolve('node_modules/@scope/ui/style.css');
     project.writeFile('node_modules/@scope/ui/style.css', '');
 
-    expect(
-      fs.realpathSync(resolver.resolveStyleDependency('@scope/ui/style.css')),
-    ).toBe(fs.realpathSync(packageStyle));
+    expect(realResolve('@scope/ui/style.css')).toBe(
+      fs.realpathSync(packageStyle),
+    );
   });
 
   test('resolves package exports for stable style entry paths', () => {
@@ -65,55 +84,35 @@ describe('WorkspaceStyleResolver', () => {
       },
     });
 
-    expect(
-      fs.realpathSync(
-        resolver.resolveStyleDependency('@scope/ui/components/Button.css'),
-      ),
-    ).toBe(fs.realpathSync(styleFile));
+    expect(realResolve('@scope/ui/components/Button.css')).toBe(
+      fs.realpathSync(styleFile),
+    );
   });
 
   test('falls back to package node_modules path when Node resolution misses', () => {
-    expect(resolver.resolveStyleDependency('@scope/ui/missing.css')).toBe(
+    expect(resolve('@scope/ui/missing.css')).toBe(
       project.resolve('node_modules/@scope/ui/missing.css'),
     );
   });
 
   test('rewrites package style specifiers to the current output format', () => {
-    const outRoot = project.resolve('dist/lib');
-
-    expect(
-      resolver.toOutputStyleSpecifier(
-        '@scope/ui/es/components/Button/style/index.css',
-        outRoot,
-      ),
-    ).toBe('@scope/ui/lib/components/Button/style/index.css');
+    expect(output('@scope/ui/es/components/Button/style/index.css')).toBe(
+      '@scope/ui/lib/components/Button/style/index.css',
+    );
   });
 
   test('keeps relative and non-output package specifiers unchanged', () => {
-    const outRoot = project.resolve('dist/lib');
-
-    expect(resolver.toOutputStyleSpecifier('../Button.css', outRoot)).toBe(
-      '../Button.css',
-    );
-    expect(
-      resolver.toOutputStyleSpecifier('@scope/ui/style.css', outRoot),
-    ).toBe('@scope/ui/style.css');
+    expect(output('../Button.css')).toBe('../Button.css');
+    expect(output('@scope/ui/style.css')).toBe('@scope/ui/style.css');
   });
 
   test('rewrites package style entry specifiers to external style entries', () => {
-    const outRoot = project.resolve('dist/lib');
-
-    expect(
-      resolver.toExternalStyleSpecifier('@scope/ui/style.css', outRoot),
-    ).toBe('@scope/ui/external.css');
-    expect(
-      resolver.toExternalStyleSpecifier(
-        '@scope/ui/es/style/index.css',
-        outRoot,
-      ),
-    ).toBe('@scope/ui/lib/style/external.css');
-    expect(
-      resolver.toExternalStyleSpecifier('katex/dist/katex.min.css', outRoot),
-    ).toBe('katex/dist/katex.min.css');
+    expect(external('@scope/ui/style.css')).toBe('@scope/ui/external.css');
+    expect(external('@scope/ui/es/style/index.css')).toBe(
+      '@scope/ui/lib/style/external.css',
+    );
+    expect(external('katex/dist/katex.min.css')).toBe(
+      'katex/dist/katex.min.css',
+    );
   });
 });

@@ -36,6 +36,7 @@ describe('defineKernelPackageConfigFromOptions', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     project.cleanup();
   });
 
@@ -174,6 +175,25 @@ describe('defineKernelPackageConfigFromOptions', () => {
     });
   });
 
+  test('uses current build year in the default banner author line', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+
+    const configs = defineKernelPackageConfigFromOptions(project.root, {
+      build: {
+        formats: ['cjs'],
+      },
+    });
+
+    expect(configs[0]).toMatchObject({
+      banner:
+        '/*!\n' +
+        ' * @scope/fixture-package.js v1.2.3\n' +
+        ' * (c) 2030 tester\n' +
+        ' */',
+    });
+  });
+
   test('uses custom banner from auk build options', () => {
     const configs = defineKernelPackageConfigFromOptions(project.root, {
       build: {
@@ -240,6 +260,19 @@ describe('defineKernelPackageConfigFromOptions', () => {
   });
 
   test('merges manual externals into iife peer externals', async () => {
+    project.writePackageJson({
+      name: '@scope/fixture-package',
+      version: '1.2.3',
+      author: 'tester',
+      dependencies: {
+        '@scope/runtime': '^1.0.0',
+        aidly: '^1.0.0',
+      },
+      peerDependencies: {
+        react: '^19.0.0',
+      },
+    });
+
     const configs = defineKernelPackageConfigFromOptions(project.root, {
       build: {
         formats: ['iife'],
@@ -258,7 +291,7 @@ describe('defineKernelPackageConfigFromOptions', () => {
       format: 'iife',
       deps: {
         neverBundle: ['react', 'react-dom'],
-        alwaysBundle: ['aidly', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+        alwaysBundle: expect.any(Function),
         onlyBundle: false,
       },
       outputOptions: {
@@ -268,6 +301,22 @@ describe('defineKernelPackageConfigFromOptions', () => {
         },
       },
     });
+    const alwaysBundle = configs[0].deps?.alwaysBundle;
+
+    if (typeof alwaysBundle !== 'function') {
+      throw new Error('Expected iife deps.alwaysBundle to be a function');
+    }
+    expect(alwaysBundle('aidly', undefined)).toBe(true);
+    expect(alwaysBundle('aidly/subpath', undefined)).toBe(true);
+    expect(alwaysBundle('@scope/runtime', undefined)).toBe(true);
+    expect(alwaysBundle('@scope/runtime/components/Button', undefined)).toBe(
+      true,
+    );
+    expect(alwaysBundle('react', undefined)).toBe(false);
+    expect(alwaysBundle('react-dom/client', undefined)).toBe(false);
+    expect(alwaysBundle('react/jsx-runtime', undefined)).toBe(true);
+    expect(alwaysBundle('react/jsx-dev-runtime', undefined)).toBe(true);
+    expect(alwaysBundle('unknown-package', undefined)).toBe(false);
     expect(inputOptions).toEqual(expect.any(Function));
     if (typeof inputOptions !== 'function') {
       throw new Error('Expected bundle config to define inputOptions');

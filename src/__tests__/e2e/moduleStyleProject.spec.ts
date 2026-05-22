@@ -168,6 +168,7 @@ describe('module style project output', () => {
     expectComponentStyleImports(buildStructure, 'components/Card', [
       '../../Button/style/index.css',
       '@scope/ui/components/Button.css',
+      '@scope/ui/components/Callout.css',
       '../index.css',
     ]);
     expectComponentStyleImports(buildStructure, 'components/Button', [
@@ -187,6 +188,7 @@ describe('module style project output', () => {
     ]);
     expectEntryImports(graphStructure, 'components/Card.css', [
       nodeModuleStyleSpecifier(fixture, '@scope/ui/components/Button.css'),
+      nodeModuleStyleSpecifier(fixture, '@scope/ui/components/Callout.css'),
     ]);
     expectEntryContent(graphStructure, 'components/Card.css', [
       '.button { color: green; }',

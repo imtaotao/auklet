@@ -190,6 +190,7 @@ type StyleStructure = {
 - 多行源码只在确实需要表达多行 import、配置对象或样式结构时使用模板字符串。
 - 通用 helper 放在文件顶部，不放在 `describe` 底部。
 - 纯转发 helper 不要写；有业务语义的 helper 可以写。
+- 当测试对象方法名或调用链过长，导致断言被迫换行时，可以在当前 spec 内包一层短 helper，例如把 `resolver.resolveStyleDependency(...)` 包成 `resolve(...)`。这种 helper 应保持局部、短小，只服务当前测试可读性，不要抽成共享测试工具。
 - 断言 helper 命名应表达测试意图，例如 `expectEntryImports`、`expectCollectedStyles`、`expectWatchFile`。
 - 大段 expected 数据放在文件顶部常量里，让 test 主体保持 arrange、act、assert 清晰。
 - 不使用大快照覆盖所有生成内容。结构用文件列表和 imports 断言，内容只断言关键 CSS。

@@ -81,6 +81,9 @@ export function createStyleProject() {
     [fromPackageRoot('node_modules/@scope/ui/components/Button.css')]:
       '.external-button { border: 0; }',
 
+    [fromPackageRoot('node_modules/@scope/ui/components/Callout.css')]:
+      '.external-callout { padding: 8px; }',
+
     [fromPackageRoot(`${sourceDir}/themes/light.css`)]:
       ':root { --color: white; }',
 
@@ -96,7 +99,8 @@ export function createStyleProject() {
     [fromPackageRoot(`${sourceDir}/components/Card/index.tsx`)]: `
       import { Button } from '#fixture/components/Button';
       import { Button as ExternalButton } from '@scope/ui';
-      export function Card() { return Button ?? ExternalButton ?? null; }
+      import { Callout } from '@scope/ui/components/Callout';
+      export function Card() { return Button ?? ExternalButton ?? Callout ?? null; }
     `,
 
     [fromPackageRoot(`${sourceDir}/components/Card/index.css`)]: `

@@ -90,6 +90,21 @@ export class StyleProcessor {
     return imported;
   }
 
+  collectStyleImportSpecifiers(styleFiles: Array<string>) {
+    const specifiers = new Set<string>();
+
+    for (const styleFile of styleFiles) {
+      const css = fs.readFileSync(styleFile, 'utf8');
+      const root = this.parse(css, styleFile);
+
+      root.walkAtRules('import', (rule) => {
+        const specifier = this.parseImportSpecifier(rule.params);
+        if (specifier) specifiers.add(specifier);
+      });
+    }
+    return specifiers;
+  }
+
   private parse(code: string, from: string) {
     // Keep parsing behind one method so future style languages can transform
     // to CSS before PostCSS reads the final stylesheet.

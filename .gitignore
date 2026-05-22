@@ -11,6 +11,7 @@ src/__tests__/.tmp/
 .corepack
 Microsoft
 dev/
+docs/
 coverage/
 .pnpm-store/
 

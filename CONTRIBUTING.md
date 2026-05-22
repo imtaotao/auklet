@@ -64,8 +64,17 @@ src/
 
 ```text
 src/build/
+├── bundleConfig.ts       # bundle 格式配置
+├── moduleConfig.ts       # unbundle module 配置
 ├── runTsdown.ts          # CLI/API 调用 tsdown 的入口
-└── tsdownConfig.ts       # 根据 auklet 配置和 package.json 生成 tsdown 参数
+├── tsdownConfig.ts       # 兼容入口，转发到 tsdown/define
+└── tsdown/               # 根据 auklet 配置和 package.json 生成 tsdown 参数
+    ├── define.ts         # 对外 defineKernelPackageConfig* 入口
+    ├── context.ts        # 读取 package.json 并生成构建上下文
+    ├── dependencies.ts   # external、alwaysBundle、globals 规则
+    ├── entries.ts        # bundle/module 入口收集
+    ├── common.ts         # tsdown 通用配置和用户回调
+    └── types.ts          # build 配置内部类型
 ```
 
 `runTsdown` 是执行层，负责拼命令、调用 tsdown。`tsdownConfig` 是配置翻译层，负责把 auklet 的 `build` 配置转换成 tsdown 需要的格式。

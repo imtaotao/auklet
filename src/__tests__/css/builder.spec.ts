@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import postcss from 'postcss';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import { emptyStyleFileComment } from '#auklet/css/production/format/shared';
 import type { AukletConfig } from '#auklet/types';
@@ -7,13 +8,13 @@ import {
   type VirtualProject,
 } from '../fixtures/virtualProject';
 
-const sourceBuildConfig = {
+const baseConfig = {
   source: 'source',
   output: 'output',
 } satisfies AukletConfig;
 
-const sourceModuleBuildConfig = {
-  ...sourceBuildConfig,
+const moduleConfig = {
+  ...baseConfig,
   modules: true,
 } satisfies AukletConfig;
 
@@ -24,13 +25,24 @@ const createBuilder = (fixture: VirtualProject, aukletConfig: AukletConfig) => {
   });
 };
 
-const writePackageWithSourceImports = (fixture: VirtualProject) => {
+const writePackageImports = (fixture: VirtualProject) => {
   fixture.writePackageJson({
     name: 'fixture-package',
     imports: {
       '#fixture/*': './source/*.js',
     },
   });
+};
+
+const styleImports = (code: string) => {
+  const imports: Array<string> = [];
+  const root = postcss.parse(code);
+
+  root.walkAtRules('import', (rule) => {
+    const match = rule.params.match(/^["']([^"']+)["']/);
+    if (match) imports.push(match[1]);
+  });
+  return imports;
 };
 
 describe('ModuleStyleBuilder', () => {
@@ -84,8 +96,8 @@ describe('ModuleStyleBuilder', () => {
   });
 
   test('builds same-package module CSS entries without dependency config', async () => {
-    writePackageWithSourceImports(fixture);
-    aukletConfig = sourceModuleBuildConfig;
+    writePackageImports(fixture);
+    aukletConfig = moduleConfig;
     fixture.writeFile(
       'source/components/Renderer/index.tsx',
       `
@@ -124,8 +136,8 @@ describe('ModuleStyleBuilder', () => {
   });
 
   test('builds module CSS entries for source modules without own CSS', async () => {
-    writePackageWithSourceImports(fixture);
-    aukletConfig = sourceModuleBuildConfig;
+    writePackageImports(fixture);
+    aukletConfig = moduleConfig;
     fixture.writeFile(
       'source/components/Renderer/index.tsx',
       `
@@ -154,7 +166,7 @@ describe('ModuleStyleBuilder', () => {
   });
 
   test('builds empty module CSS entries for second-level tsx modules without styles', async () => {
-    aukletConfig = sourceModuleBuildConfig;
+    aukletConfig = moduleConfig;
     fixture.writeFile('source/index.ts', 'export const root = true;');
     fixture.writeFile(
       'source/components/Plain/data.ts',
@@ -202,7 +214,7 @@ describe('ModuleStyleBuilder', () => {
   });
 
   test('writes placeholder comments for generated empty CSS files', async () => {
-    aukletConfig = sourceModuleBuildConfig;
+    aukletConfig = moduleConfig;
     fixture.writeFile('source/index.css', '');
 
     await createBuilder(fixture, aukletConfig).build();
@@ -214,8 +226,8 @@ describe('ModuleStyleBuilder', () => {
   });
 
   test('builds same-name style entries for flat source modules', async () => {
-    writePackageWithSourceImports(fixture);
-    aukletConfig = sourceModuleBuildConfig;
+    writePackageImports(fixture);
+    aukletConfig = moduleConfig;
     fixture.writeFile(
       'source/components/Renderer.tsx',
       `
@@ -242,9 +254,138 @@ describe('ModuleStyleBuilder', () => {
     expect(esButtonStyle).toBe('@import "../../Button.css";\n');
   });
 
+  test('keeps handwritten external component CSS imports in source styles', async () => {
+    aukletConfig = {
+      ...moduleConfig,
+      styles: {
+        dependencies: {
+          '@scope/ui': {
+            components: '/components/**.css',
+          },
+        },
+      },
+    };
+    fixture.writeFile(
+      'source/components/Renderer/index.tsx',
+      'export function Renderer() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/Renderer/index.css',
+      '@import "@scope/ui/components/Skeleton.css";\n.renderer {}',
+    );
+
+    await createBuilder(fixture, aukletConfig).build();
+
+    const sourceStyle = fixture.readFile(
+      'output/es/components/Renderer/index.css',
+    );
+    const componentEntry = fixture.readFile(
+      'output/es/components/Renderer/style/index.css',
+    );
+
+    expect(styleImports(sourceStyle)).toEqual([
+      '@scope/ui/components/Skeleton.css',
+    ]);
+    expect(styleImports(componentEntry)).toEqual(['../index.css']);
+  });
+
+  test('dedupes inferred component CSS when source CSS imports it explicitly', async () => {
+    aukletConfig = {
+      ...moduleConfig,
+      styles: {
+        dependencies: {
+          '@scope/ui': {
+            components: '/components/**.css',
+          },
+        },
+      },
+    };
+    fixture.writeFile(
+      'source/components/Renderer/index.tsx',
+      "import { Skeleton } from '@scope/ui/components/Skeleton';\n" +
+        'export function Renderer() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/Renderer/index.css',
+      '@import "@scope/ui/components/Skeleton.css";\n.renderer {}',
+    );
+    fixture.writeFile('node_modules/@scope/ui/components/Skeleton.css', '');
+
+    await createBuilder(fixture, aukletConfig).build();
+
+    const sourceStyle = fixture.readFile(
+      'output/es/components/Renderer/index.css',
+    );
+    const componentEntry = fixture.readFile(
+      'output/es/components/Renderer/style/index.css',
+    );
+    const imports = [
+      ...styleImports(sourceStyle),
+      ...styleImports(componentEntry),
+    ];
+
+    expect(componentEntry).not.toContain('@scope/ui/components/Skeleton.css');
+    expect(
+      imports.filter(
+        (specifier) => specifier === '@scope/ui/components/Skeleton.css',
+      ),
+    ).toHaveLength(1);
+  });
+
+  test('does not infer external component CSS without components config', async () => {
+    aukletConfig = {
+      ...moduleConfig,
+      styles: {
+        dependencies: {
+          '@scope/ui': {
+            entry: '/style.css',
+          },
+        },
+      },
+    };
+    fixture.writeFile('node_modules/@scope/ui/style.css', '');
+    fixture.writeFile('node_modules/@scope/ui/components/Skeleton.css', '');
+    fixture.writeFile(
+      'source/components/RootImport/index.tsx',
+      "import { Skeleton } from '@scope/ui';\n" +
+        'export function RootImport() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/DeepImport/index.tsx',
+      "import { Skeleton } from '@scope/ui/components/Skeleton';\n" +
+        'export function DeepImport() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/Handwritten/index.tsx',
+      'export function Handwritten() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/Handwritten/index.css',
+      '@import "@scope/ui/components/Skeleton.css";\n.handwritten {}',
+    );
+
+    await createBuilder(fixture, aukletConfig).build();
+
+    const rootImportEntry = fixture.readFile(
+      'output/es/components/RootImport/style/index.css',
+    );
+    const deepImportEntry = fixture.readFile(
+      'output/es/components/DeepImport/style/index.css',
+    );
+    const handwrittenStyle = fixture.readFile(
+      'output/es/components/Handwritten/index.css',
+    );
+
+    expect(rootImportEntry).toBe(emptyStyleFileComment);
+    expect(deepImportEntry).toBe(emptyStyleFileComment);
+    expect(styleImports(handwrittenStyle)).toEqual([
+      '@scope/ui/components/Skeleton.css',
+    ]);
+  });
+
   test('builds theme entries from dependency themes without local theme files', async () => {
     aukletConfig = {
-      ...sourceModuleBuildConfig,
+      ...moduleConfig,
       styles: {
         dependencies: {
           '@scope/ui': {
@@ -288,7 +429,7 @@ describe('ModuleStyleBuilder', () => {
   });
 
   test('builds only package CSS when module output is disabled', async () => {
-    aukletConfig = sourceBuildConfig;
+    aukletConfig = baseConfig;
     fixture.writeFile(
       'source/components/Button/index.tsx',
       'export const Button = null;',
