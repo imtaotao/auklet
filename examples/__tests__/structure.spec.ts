@@ -4,6 +4,8 @@ import { describe, expect, test } from 'vitest';
 
 const math = 'examples/libs/packages/math';
 const string = 'examples/libs/packages/string';
+const singleLib = 'examples/single-lib';
+const singlePackage = 'examples/single-package';
 const dashboard = 'examples/components/packages/dashboard';
 const reexports = 'examples/components/packages/reexports';
 const bundleFiles = ['index.cjs', 'index.d.ts', 'index.js', 'index.mjs'];
@@ -30,6 +32,7 @@ describe('examples build output structure', () => {
   test('pure lib packages emit bundle files only', () => {
     expect(listDistFiles(math)).toEqual(bundleFiles);
     expect(listDistFiles(string)).toEqual(bundleFiles);
+    expect(listDistFiles(singleLib)).toEqual(bundleFiles);
   });
 
   test('component packages emit bundle, module, and style files', () => {
@@ -101,6 +104,45 @@ describe('examples build output structure', () => {
       'lib/components/PackageReexport/index.d.ts',
       'lib/components/PackageReexport/index.js',
       'lib/components/PackageReexport/style/index.css',
+      'lib/index.d.ts',
+      'lib/index.js',
+      'lib/style/external.css',
+      'lib/style/index.css',
+      'lib/style/module.css',
+    ]);
+  });
+
+  test('single package emits bundle, module, and style files', () => {
+    expect(listDistFiles(singlePackage)).toEqual([
+      'es/components/Button/index.css',
+      'es/components/Button/index.d.ts',
+      'es/components/Button/index.js',
+      'es/components/Button/style/index.css',
+      'es/components/Panel/index.css',
+      'es/components/Panel/index.d.ts',
+      'es/components/Panel/index.js',
+      'es/components/Panel/style/index.css',
+      'es/index.css',
+      'es/index.d.ts',
+      'es/index.js',
+      'es/style/external.css',
+      'es/style/index.css',
+      'es/style/module.css',
+      'index.cjs',
+      'index.css',
+      'index.d.cts',
+      'index.global.js',
+      'index.js',
+      'index.mjs',
+      'lib/components/Button/index.css',
+      'lib/components/Button/index.d.ts',
+      'lib/components/Button/index.js',
+      'lib/components/Button/style/index.css',
+      'lib/components/Panel/index.css',
+      'lib/components/Panel/index.d.ts',
+      'lib/components/Panel/index.js',
+      'lib/components/Panel/style/index.css',
+      'lib/index.css',
       'lib/index.d.ts',
       'lib/index.js',
       'lib/style/external.css',

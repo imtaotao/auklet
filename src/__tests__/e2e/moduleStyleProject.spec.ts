@@ -138,7 +138,8 @@ describe('module style project output', () => {
       fixture.outputDir,
     );
     const graph = new ModuleStyleGraph({
-      workspaceRoot: fixture.workspaceRoot,
+      root: fixture.workspaceRoot,
+      mode: 'monorepo',
     });
     const graphStructure = await normalizeGraphStyleStructure(
       graph,

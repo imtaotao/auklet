@@ -1,8 +1,8 @@
 import path from 'node:path';
 import type { ModuleStyleEntryPlan } from '#auklet/css/core/styleModuleEntryPlanner';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
-import { createComponentStyleEntryPlans } from '#auklet/css/core/style/entries';
-import { ComponentStyleEntryWriter } from '#auklet/css/production/format/componentWriter';
+import { createModuleStyleEntryPlans } from '#auklet/css/core/style/entries';
+import { ModuleStyleEntryWriter } from '#auklet/css/production/format/moduleEntryWriter';
 import { StyleEntryWriter } from '#auklet/css/production/format/entryWriter';
 import { ExternalStyleWriter } from '#auklet/css/production/format/externalWriter';
 import { ModuleStyleWriter } from '#auklet/css/production/format/moduleWriter';
@@ -29,7 +29,7 @@ export class ModuleStyleOutputWriter {
   private readonly externalWriter: ExternalStyleWriter;
   private readonly moduleWriter: ModuleStyleWriter;
   private readonly entryWriter: StyleEntryWriter;
-  private readonly componentWriter: ComponentStyleEntryWriter;
+  private readonly moduleEntryWriter: ModuleStyleEntryWriter;
 
   constructor(options: ModuleStyleOutputWriterOptions) {
     this.config = options.config;
@@ -40,15 +40,15 @@ export class ModuleStyleOutputWriter {
     this.externalWriter = new ExternalStyleWriter(options);
     this.moduleWriter = new ModuleStyleWriter(options);
     this.entryWriter = new StyleEntryWriter(options);
-    this.componentWriter = new ComponentStyleEntryWriter(options);
+    this.moduleEntryWriter = new ModuleStyleEntryWriter(options);
   }
 
   write() {
-    const componentEntries = this.createComponentEntries();
+    const moduleEntries = this.createModuleEntries();
     const outputs: Array<string> = [];
 
     for (const format of this.config.output.outputFormats) {
-      outputs.push(...this.writeFormat(format, componentEntries));
+      outputs.push(...this.writeFormat(format, moduleEntries));
     }
 
     return outputs;
@@ -58,13 +58,13 @@ export class ModuleStyleOutputWriter {
     return path.join(this.context.packageRoot, this.context.outputDir);
   }
 
-  private createComponentEntries() {
-    return createComponentStyleEntryPlans(this.packageContext);
+  private createModuleEntries() {
+    return createModuleStyleEntryPlans(this.packageContext);
   }
 
   private writeFormat(
     format: string,
-    componentEntries: Array<ModuleStyleEntryPlan>,
+    moduleEntries: Array<ModuleStyleEntryPlan>,
   ) {
     const outRoot = path.join(this.outputRoot, format);
     const outputs: Array<string> = [];
@@ -87,9 +87,9 @@ export class ModuleStyleOutputWriter {
       themeStyleMap,
       moduleStyle,
     );
-    const componentStyles = this.componentWriter.write(
+    const moduleStyleEntries = this.moduleEntryWriter.write(
       outRoot,
-      componentEntries,
+      moduleEntries,
     );
 
     outputs.push(...themeStyles.map((themeStyle) => themeStyle.file));
@@ -97,7 +97,7 @@ export class ModuleStyleOutputWriter {
     if (externalStyle) outputs.push(externalStyle);
     if (moduleStyle) outputs.push(moduleStyle);
     if (entryStyle) outputs.push(entryStyle);
-    outputs.push(...componentStyles);
+    outputs.push(...moduleStyleEntries);
 
     return outputs;
   }

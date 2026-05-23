@@ -15,7 +15,7 @@ Build utilities for TypeScript packages and module CSS output.
 - Generate package-level and module-level CSS entries.
 - Infer component style dependencies from source imports.
 - Generate theme and external style entry files.
-- Provide a Vite dev plugin for virtual package CSS entries.
+- Provide a Vite dev plugin for virtual package CSS entries in single-package and monorepo projects.
 - Watch source/config changes and rebuild module CSS output.
 
 ## Requirements
@@ -215,6 +215,25 @@ export default {
 };
 ```
 
+The plugin defaults to `mode: 'package'`, where Vite root is treated as the
+current package root. This is the expected setup for a single-package component
+library.
+
+For a workspace demo or app that imports CSS from packages under
+`packages/*`, enable monorepo mode:
+
+```ts
+import { aukletStylePlugin } from 'auklet';
+
+export default {
+  plugins: [aukletStylePlugin({ mode: 'monorepo' })],
+};
+```
+
+`mode: 'monorepo'` automatically walks upward from Vite root to find
+`pnpm-workspace.yaml`. A custom graph root can be passed with `root` when the
+workspace root cannot be inferred.
+
 The plugin resolves package CSS ids such as:
 
 ```ts
@@ -228,6 +247,23 @@ entries so changes can be tracked recursively. Third-party CSS dependencies are
 resolved from the package that declares the dependency and emitted as Vite
 `/@fs/...` imports, so packages such as `katex/dist/katex.min.css` do not need
 to be installed by the consuming app.
+
+## Examples
+
+The repository includes runnable examples for the supported project shapes:
+
+- `examples/components`: monorepo component packages.
+- `examples/libs`: monorepo TypeScript libraries without CSS output.
+- `examples/single-package`: single-package component library with Vite dev mode.
+- `examples/single-lib`: single-package TypeScript library without CSS output.
+
+Useful commands:
+
+```bash
+pnpm run build:examples
+pnpm run test:examples
+pnpm run dev:examples
+```
 
 ## Programmatic API
 

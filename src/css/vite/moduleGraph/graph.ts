@@ -5,7 +5,8 @@ import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
 import { StyleCodeFactory } from '#auklet/css/vite/moduleGraph/styleCodeFactory';
 import { ModuleStyleGraphRequestCache } from '#auklet/css/vite/moduleGraph/requestCache';
-import { createMonorepoPackageSource } from '#auklet/css/vite/moduleGraph/packageSource/monorepo';
+import { MonorepoPackageSource } from '#auklet/css/vite/moduleGraph/packageSource/monorepo';
+import { SinglePackageSource } from '#auklet/css/vite/moduleGraph/packageSource/singlePackage';
 import type { StylePackageSource } from '#auklet/css/vite/moduleGraph/packageSource/types';
 import type {
   ModuleStyleGraphOptions,
@@ -24,17 +25,20 @@ export class ModuleStyleGraph {
 
   constructor(options: ModuleStyleGraphOptions) {
     this.config = options.config ?? moduleStyleBuildConfig;
-    const mode = options.mode ?? 'monorepo';
-    if (mode === 'package') {
-      throw new Error('[auklet:css] package mode is not supported yet.');
-    }
-    this.packageSource = createMonorepoPackageSource({
-      workspaceRoot: normalizeFileKey(options.workspaceRoot),
-      packagesDir: options.packagesDir ?? 'packages',
-      styleExtensions: this.config.styleExtensions,
-    });
-    this.loadAukletConfig = options.loadAukletConfig ?? loadAukletConfig;
     this.styleCodeFactory = new StyleCodeFactory(this.config);
+    this.loadAukletConfig = options.loadAukletConfig ?? loadAukletConfig;
+    this.packageSource =
+      (options.mode ?? 'package') === 'monorepo'
+        ? new MonorepoPackageSource({
+            root: normalizeFileKey(options.root),
+            packagesDir: options.packagesDir ?? 'packages',
+            styleExtensions: this.config.styleExtensions,
+          })
+        : new SinglePackageSource({
+            root: normalizeFileKey(options.root),
+            styleExtensions: this.config.styleExtensions,
+            loadAukletConfig: this.loadAukletConfig,
+          });
   }
 
   parsePackageStyleId(id: string) {

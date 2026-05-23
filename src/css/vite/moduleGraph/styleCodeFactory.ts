@@ -18,17 +18,17 @@ import {
   THEMES_ENTRY_PREFIX,
 } from '#auklet/css/constants';
 import {
-  createComponentStyleEntryPlan,
+  createModuleStyleEntryPlan,
   createExternalEntryParts,
   createStyleEntryParts,
   createThemeEntryParts,
 } from '#auklet/css/core/style/entries';
 import {
+  createDevExternalStyleSpecifier,
+  createDevModuleStyleSpecifier,
   createImportCode,
-  parsePackageStyleSpecifier,
   removeStyleExtension,
 } from '#auklet/css/core/style/specifier';
-import { toFsSpecifier, toPosixPath } from '#auklet/utils';
 
 // 生成 Vite/dev 虚拟 CSS；production writer 共享入口语义，但写入真实文件。
 export class StyleCodeFactory {
@@ -229,7 +229,7 @@ export class StyleCodeFactory {
   ) {
     const sourceModuleDir = removeStyleExtension(stylePath);
     const { styleFiles, sourceFiles } = context.packageContext;
-    const entry = createComponentStyleEntryPlan(
+    const entry = createModuleStyleEntryPlan(
       context.packageContext,
       sourceModuleDir,
     );
@@ -244,10 +244,10 @@ export class StyleCodeFactory {
 
     for (const specifier of entry.moduleStyleImports) {
       const result = this.toDevModuleImportSpecifier(
+        specifier,
         context,
         cache,
         sourceStyleDir,
-        specifier,
       );
       const parsed = this.parsePackageStyleIdInRequest(result, cache);
       if (parsed) {
@@ -290,49 +290,33 @@ export class StyleCodeFactory {
   }
 
   private toDevModuleImportSpecifier(
+    specifier: string,
     context: PackageStyleContext,
     cache: ModuleStyleGraphRequestCache,
     sourceStyleDir: string,
-    specifier: string,
   ) {
-    if (!specifier.startsWith('.')) {
-      return this.toDevExternalStyleSpecifier(specifier, cache);
-    }
-
-    const outputStyleEntry = path.resolve(sourceStyleDir, specifier);
-    const styleEntrySuffix = `${path.sep}${this.config.output.styleDir}${path.sep}${this.config.output.indexStyleFile}`;
-    if (!outputStyleEntry.endsWith(styleEntrySuffix)) {
-      return toFsSpecifier(outputStyleEntry);
-    }
-
-    const sourceModuleDir = path.relative(
-      context.sourceRoot,
-      outputStyleEntry.slice(0, -styleEntrySuffix.length),
-    );
-    return `${context.packageName}/${toPosixPath(sourceModuleDir)}.css`;
+    return createDevModuleStyleSpecifier(specifier, {
+      sourceStyleDir,
+      sourceRoot: context.sourceRoot,
+      packageName: context.packageName,
+      styleDir: this.config.output.styleDir,
+      indexStyleFile: this.config.output.indexStyleFile,
+      mapExternalSpecifier: (externalSpecifier) =>
+        this.toDevExternalStyleSpecifier(externalSpecifier, cache),
+    });
   }
 
   private toDevExternalStyleSpecifier(
     specifier: string,
     cache: ModuleStyleGraphRequestCache,
   ) {
-    const parsed = parsePackageStyleSpecifier(specifier);
-    if (!parsed) return specifier;
-
-    if (cache.isKnownPackageName(parsed.packageName)) {
-      if (parsed.stylePath === STYLE_ENTRY) {
-        return `${parsed.packageName}/${EXTERNAL_ENTRY}`;
-      }
-      if (
-        parsed.stylePath ===
-        [this.config.output.styleDir, this.config.output.indexStyleFile].join(
-          '/',
-        )
-      ) {
-        return `${parsed.packageName}/${EXTERNAL_ENTRY}`;
-      }
-    }
-    return specifier;
+    return createDevExternalStyleSpecifier(specifier, {
+      isKnownPackageName: (packageName) =>
+        cache.isKnownPackageName(packageName),
+      styleDir: this.config.output.styleDir,
+      indexStyleFile: this.config.output.indexStyleFile,
+      externalStyleFile: EXTERNAL_ENTRY,
+    });
   }
 
   private parsePackageStyleIdInRequest(

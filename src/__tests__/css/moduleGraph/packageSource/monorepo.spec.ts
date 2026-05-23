@@ -1,12 +1,12 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { createMonorepoPackageSource } from '#auklet/css/vite/moduleGraph/packageSource/monorepo';
+import { MonorepoPackageSource } from '#auklet/css/vite/moduleGraph/packageSource/monorepo';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../../../fixtures/virtualProject';
 
-describe('createMonorepoPackageSource', () => {
+describe('MonorepoPackageSource', () => {
   let project: VirtualProject;
 
   beforeEach(() => {
@@ -18,8 +18,8 @@ describe('createMonorepoPackageSource', () => {
   });
 
   const createSource = () => {
-    return createMonorepoPackageSource({
-      workspaceRoot: project.root,
+    return new MonorepoPackageSource({
+      root: project.root,
       packagesDir: 'packages',
       styleExtensions: ['.css'],
     });
@@ -59,10 +59,10 @@ describe('createMonorepoPackageSource', () => {
     expect(source.getPackageNames()).toEqual([]);
   });
 
-  test('returns current monorepo watch roots', () => {
+  test('returns current monorepo watch roots', async () => {
     const source = createSource();
 
-    expect(source.getWatchRoots()).toEqual([
+    expect(await source.getWatchRoots()).toEqual([
       path.join(project.root, 'packages/*/src'),
       path.join(project.root, 'packages/*/auklet.config.ts'),
     ]);

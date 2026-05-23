@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest';
 const ui = 'examples/components/packages/ui';
 const dashboard = 'examples/components/packages/dashboard';
 const reexports = 'examples/components/packages/reexports';
+const singlePackage = 'examples/single-package';
 
 const readDist = (packageDir: string, file: string) => {
   return fs.readFileSync(path.join(process.cwd(), packageDir, 'dist', file), {
@@ -110,5 +111,22 @@ describe('examples CSS dependencies', () => {
     expect(reexportsCss).toContain('.package-reexport');
     expect(reexportsCss).toContain('.deep-reexport');
     expect(reexportsCss).toContain('.local-reexport');
+
+    const singlePackageCss = readDist(singlePackage, 'index.css');
+
+    expect(singlePackageCss).toContain('.single-button');
+    expect(singlePackageCss).toContain('.single-panel');
+  });
+
+  test('keeps single package component style dependencies', () => {
+    expect(readDist(singlePackage, 'es/style/index.css')).toBe(
+      lines('@import "./module.css";'),
+    );
+    expect(readDist(singlePackage, 'es/components/Panel/style/index.css')).toBe(
+      lines(
+        '@import "../../Button/style/index.css";',
+        '@import "../index.css";',
+      ),
+    );
   });
 });

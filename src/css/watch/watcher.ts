@@ -3,7 +3,7 @@ import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import { aukletConfigFile, aukletDefaultOptions } from '#auklet/config';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
-import { SOURCE_COMPONENT_MODULE_RE } from '#auklet/css/constants';
+import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import type {
   AukletLogger,
@@ -96,7 +96,7 @@ export class ModuleStyleWatcher {
 
   private shouldRebuildForFile(file: string) {
     if (path.basename(file) === aukletConfigFile) return true;
-    if (SOURCE_COMPONENT_MODULE_RE.test(file)) return true;
+    if (SOURCE_MODULE_RE.test(file)) return true;
     return this.config.styleExtensions.includes(path.extname(file));
   }
 

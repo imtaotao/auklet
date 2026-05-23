@@ -1,0 +1,15 @@
+.single-panel {
+  display: grid;
+  gap: 12px;
+  inline-size: min(420px, calc(100vw - 32px));
+  margin: 48px auto;
+  padding: 20px;
+  border: 1px solid #d8ddeb;
+  border-radius: 8px;
+  background: white;
+}
+
+.single-panel h1 {
+  margin: 0;
+  font-size: 20px;
+}

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 const math = 'examples/libs/packages/math';
+const singleLib = 'examples/single-lib';
 const ui = 'examples/components/packages/ui';
 const dashboard = 'examples/components/packages/dashboard';
 const reexports = 'examples/components/packages/reexports';
@@ -47,5 +48,10 @@ describe('examples JavaScript dependencies', () => {
     expect(readDist(ui, 'es/components/Card/index.js')).toContain(
       'import { Button } from "../Button/index.js";',
     );
+  });
+
+  test('builds single package lib output', () => {
+    expect(readDist(singleLib, 'index.js')).toContain('function formatName');
+    expect(readDist(singleLib, 'index.cjs')).toContain('function formatName');
   });
 });

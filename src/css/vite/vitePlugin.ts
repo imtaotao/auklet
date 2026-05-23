@@ -40,13 +40,22 @@ const createModuleStyleGraph = (
   options: AukletStylePluginOptions,
   viteRoot: string,
 ) => {
-  const workspaceRoot =
-    options.workspaceRoot ?? findWorkspaceRoot(viteRoot) ?? process.cwd();
+  const mode = options.mode ?? 'package';
+  const root = options.root ?? resolveGraphRoot(mode, viteRoot);
 
   return new ModuleStyleGraph({
     ...options,
-    workspaceRoot,
+    mode,
+    root,
   });
+};
+
+const resolveGraphRoot = (
+  mode: NonNullable<ModuleStyleGraphOptions['mode']>,
+  viteRoot: string,
+) => {
+  if (mode === 'monorepo') return findWorkspaceRoot(viteRoot) ?? process.cwd();
+  return viteRoot;
 };
 
 const invalidateVirtualModules = (
@@ -68,9 +77,9 @@ const invalidateVirtualModules = (
 };
 
 export type AukletStylePluginOptions = Partial<
-  Pick<ModuleStyleGraphOptions, 'workspaceRoot' | 'mode'>
+  Pick<ModuleStyleGraphOptions, 'root' | 'mode'>
 > &
-  Omit<ModuleStyleGraphOptions, 'workspaceRoot'>;
+  Omit<ModuleStyleGraphOptions, 'root'>;
 
 export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
   let graph: ModuleStyleGraph | null = null;
@@ -123,10 +132,10 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
       return result.code;
     },
 
-    configureServer(server: ViteDevServer) {
+    async configureServer(server: ViteDevServer) {
       const graph = getGraph();
       hmr.installFullReloadGuard(server);
-      server.watcher.add(graph.getWatchRoots());
+      server.watcher.add(await graph.getWatchRoots());
 
       const invalidateStyleGraph = (file: string) => {
         if (!graph.isSourceGraphFile(file)) return false;

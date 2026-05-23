@@ -1,33 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isArray } from 'aidly';
 import type { NormalizedAukletConfig } from '#auklet/types';
-import { SOURCE_COMPONENT_MODULE_RE } from '#auklet/css/constants';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
-import { joinDependencySpecifier } from '#auklet/css/core/style/specifier';
+import { SOURCE_MODULE_RE } from '#auklet/css/constants';
+import { appendUniqueMapValue, getSourceModuleDir } from '#auklet/utils';
 import {
-  appendUniqueMapValue,
-  getSourceModuleDir,
-  POSIX_SEPARATOR,
-} from '#auklet/utils';
-import {
-  collectModuleStyleSourceReferences,
-  getSourceReferenceImportedNames,
-  isTypeOnlySourceReference,
-  type ModuleStyleSourceReference,
-} from '#auklet/css/core/styleImports/sourceReference';
+  type ModuleImportReference,
+  isTypeOnlyModuleReference,
+  collectModuleImportReferences,
+  getModuleReferenceImportedNames,
+} from '#auklet/css/core/styleImports/sourceImportExportAnalyzer';
 import { resolveRelativeSourceImport } from '#auklet/css/core/resolvers/relative';
 import { resolvePackageImportsSourceImport } from '#auklet/css/core/resolvers/packageImports';
 import { resolveTsconfigPathsSourceImport } from '#auklet/css/core/resolvers/tsconfigPaths';
+import {
+  matchStyleAutoImportRules,
+  createStyleAutoImportRules,
+  createStyleAutoImportSpecifier,
+  createDirectStyleAutoImportSpecifier,
+} from '#auklet/css/core/styleImports/autoImportRules';
 
-const GLOBSTAR_TOKEN = '**';
 const SOURCE_EXTENSION_RE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const SOURCE_INDEX_RE = new RegExp(`[/\\\\]index${SOURCE_EXTENSION_RE.source}`);
-
-type AutoImportRule = {
-  packageName: string;
-  outputPattern: string;
-};
 
 export class ModuleStyleImportCollector {
   constructor(
@@ -39,17 +33,17 @@ export class ModuleStyleImportCollector {
 
   collect(files: Array<string>, config: NormalizedAukletConfig) {
     const entries = new Map<string, Array<string>>();
-    const rules = this.createAutoImportRules(config);
+    const rules = createStyleAutoImportRules(config);
 
     for (const file of files) {
-      if (!SOURCE_COMPONENT_MODULE_RE.test(file)) {
+      if (!SOURCE_MODULE_RE.test(file)) {
         continue;
       }
       const sourceRelative = path.relative(this.srcRoot, file);
       const sourceDir = path.dirname(sourceRelative);
       const sourceModuleDir = getSourceModuleDir(sourceRelative);
       const code = fs.readFileSync(file, 'utf8');
-      const imports = collectModuleStyleSourceReferences(file, code);
+      const imports = collectModuleImportReferences(file, code);
 
       for (const item of imports) {
         this.collectSourceImportStyle(
@@ -59,14 +53,14 @@ export class ModuleStyleImportCollector {
           item,
         );
 
-        if (isTypeOnlySourceReference(item)) continue;
+        if (isTypeOnlyModuleReference(item)) continue;
 
         const importPath = item.importPath;
-        const ruleMatches = this.matchAutoImportRules(rules, importPath);
+        const ruleMatches = matchStyleAutoImportRules(rules, importPath);
         if (!ruleMatches.length) continue;
 
         const directSpecifiers = ruleMatches.flatMap((ruleMatch) => {
-          const specifier = this.createDirectStyleSpecifier(
+          const specifier = createDirectStyleAutoImportSpecifier(
             ruleMatch.rule,
             importPath,
           );
@@ -84,10 +78,10 @@ export class ModuleStyleImportCollector {
         }
 
         for (const ruleMatch of ruleMatches) {
-          const importedNames = getSourceReferenceImportedNames(file, item);
+          const importedNames = getModuleReferenceImportedNames(file, item);
 
           for (const importedName of importedNames) {
-            const specifier = this.createStyleSpecifier(
+            const specifier = createStyleAutoImportSpecifier(
               ruleMatch.rule,
               ruleMatch.values,
               importedName,
@@ -109,9 +103,9 @@ export class ModuleStyleImportCollector {
     entries: Map<string, Array<string>>,
     sourceDir: string,
     sourceModuleDir: string,
-    item: ModuleStyleSourceReference,
+    item: ModuleImportReference,
   ) {
-    if (isTypeOnlySourceReference(item)) return;
+    if (isTypeOnlyModuleReference(item)) return;
 
     const importedStyleEntry = this.resolveSourceImportStyleEntry(
       sourceDir,
@@ -185,92 +179,5 @@ export class ModuleStyleImportCollector {
   private toRelativeSpecifier(fromDir: string, file: string) {
     const relative = path.relative(fromDir, file).split(path.sep).join('/');
     return relative.startsWith('.') ? relative : `./${relative}`;
-  }
-
-  private createAutoImportRules(config: NormalizedAukletConfig) {
-    const rules: Array<AutoImportRule> = [];
-    for (const [packageName, dependency] of Object.entries(
-      config.styles.dependencies,
-    )) {
-      const dependencyPaths = isArray(dependency.components)
-        ? dependency.components
-        : dependency.components
-          ? [dependency.components]
-          : [];
-
-      for (const dependencyPath of dependencyPaths) {
-        rules.push({
-          packageName,
-          outputPattern: joinDependencySpecifier(packageName, dependencyPath),
-        });
-      }
-    }
-    return rules;
-  }
-
-  private matchAutoImportRules(
-    rules: Array<AutoImportRule>,
-    importPath: string,
-  ) {
-    const matches: Array<{
-      rule: AutoImportRule;
-      values: Array<string>;
-    }> = [];
-
-    for (const rule of rules) {
-      if (
-        importPath !== rule.packageName &&
-        !importPath.startsWith(`${rule.packageName}${POSIX_SEPARATOR}`)
-      ) {
-        continue;
-      }
-      matches.push({
-        rule,
-        values: this.getImportPathValues(rule.packageName, importPath),
-      });
-    }
-    return matches;
-  }
-
-  private getImportPathValues(packageName: string, importPath: string) {
-    return importPath
-      .slice(packageName.length)
-      .replace(new RegExp(`^${POSIX_SEPARATOR}`), '')
-      .split(POSIX_SEPARATOR)
-      .filter(Boolean);
-  }
-
-  private createStyleSpecifier(
-    rule: AutoImportRule,
-    values: Array<string>,
-    importedName: string,
-  ) {
-    const pathValues = [...values];
-    return rule.outputPattern.replace(/\*\*|\*/g, (token) => {
-      const matchedValue = pathValues.shift();
-      if (matchedValue) return matchedValue;
-      if (token === GLOBSTAR_TOKEN) return importedName;
-      return matchedValue ?? importedName;
-    });
-  }
-
-  private createDirectStyleSpecifier(rule: AutoImportRule, importPath: string) {
-    const wildcardIndex = rule.outputPattern.indexOf('*');
-    if (wildcardIndex < 0) {
-      return null;
-    }
-    const wildcardLength = rule.outputPattern.startsWith(
-      GLOBSTAR_TOKEN,
-      wildcardIndex,
-    )
-      ? GLOBSTAR_TOKEN.length
-      : 1;
-    const prefix = rule.outputPattern.slice(0, wildcardIndex);
-    const suffix = rule.outputPattern.slice(wildcardIndex + wildcardLength);
-
-    if (!importPath.startsWith(prefix)) {
-      return null;
-    }
-    return `${importPath}${suffix}`;
   }
 }

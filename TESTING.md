@@ -23,9 +23,22 @@ src/__tests__/
   css/
     styleProcessor.spec.ts
     workspaceStyleResolver.spec.ts
-    moduleStyleImportCollector.spec.ts
-    moduleGraph.spec.ts
-    builder.spec.ts
+    styleImports/
+      autoImportRules.spec.ts
+      collectorDependencies.spec.ts
+      collectorSource.spec.ts
+      collectorSyntax.spec.ts
+    builder/
+      dependencyStyles.spec.ts
+      moduleOutput.spec.ts
+      packageOutput.spec.ts
+    moduleGraph/
+      cache.spec.ts
+      entries.spec.ts
+      source.spec.ts
+      packageSource/
+        monorepo.spec.ts
+        singlePackage.spec.ts
     watcher.spec.ts
     path.spec.ts
   build/
@@ -84,15 +97,16 @@ e2e 重点断言：
 - `buildStructure` 和 `graphStructure` 的 components/themes 语义 key 是否一致。
 
 新增 e2e 场景时优先复用现有主场景，只有当场景会让主测试变得难读时才新建 test。不要为每个小分支都建 e2e。
+四类目标形态的 smoke 测试放在独立 e2e 文件中：monorepo 组件包、monorepo lib 包、单包组件库、单包 lib 库。它们只断关键输出和 dev graph 是否可用，不承载复杂依赖链细节。
 
 ## 模块/API 单测职责
 
 - `StyleProcessor`：style import 展开、内容合并、重复处理、循环 import、支持的 style 扩展名。
 - `WorkspaceStyleResolver`：相对路径、包路径、package exports、node_modules fallback、output format rewrite、external style specifier。
-- `ModuleStyleImportCollector` / `styleImports`：从 `.tsx` 源码 import 和 named re-export 推导 style import，包括 package entry、deep import、namespace import、same-package import、local re-export binding、type-only skip、`.ts` 文件 skip，以及不支持 `export * from '...'` 的报错。collector 测试只保留集成语义，resolver 的细分边界放到 `css/resolvers/*.spec.ts`。
+- `ModuleStyleImportCollector` / `styleImports`：从 `.tsx` 源码 import 和 named re-export 推导 style import，包括 package entry、deep import、namespace import、same-package import、local re-export binding、type-only skip、`.ts` 文件 skip，以及不支持 `export * from '...'` 的报错。collector 测试只保留集成语义，resolver 的细分边界放到 `css/resolvers/*.spec.ts`，auto import rule 的匹配和 specifier 生成放到 `css/styleImports/*.spec.ts`。
 - `css/core/resolvers`：分别测试相对路径、`package.json#imports` 和 `tsconfig.compilerOptions.paths`。重点覆盖只返回当前 `sourceRoot` 内的候选路径、`package.json#imports` 的 `source` 条件、外部/未知 specifier、`tsconfig extends`、精确 alias 和更具体 pattern 优先。
 - `ModuleStyleGraph`：Vite/dev 虚拟入口、图结构、递归 workspace 依赖、第三方 CSS dependency 的 `/@fs` dev 解析、主题顺序、source graph 判断、watch roots、模块依赖顺序。
-- `moduleGraph/packageSource`：Vite/dev package source 的包发现、package name 列表、watch roots、source graph 文件边界。monorepo 和后续 single package source 分别写聚焦单测，不把虚拟 CSS 生成场景塞进 source 单测。
+- `moduleGraph/packageSource`：Vite/dev package source 的包发现、package name 列表、watch roots、source graph 文件边界。monorepo 和 single package source 分别写聚焦单测，不把虚拟 CSS 生成场景塞进 source 单测。
 - `ModuleStyleBuilder`：构建器自己的分支和产物边界，例如 legacy output-format rewrite、无 CSS 模块、空 style 入口、默认 cwd。
 - `ModuleStyleWatcher`：watch roots、debounce、logger、builder 调用参数。
 - `configLoader`：配置模块形态、TypeScript 配置加载、缺失配置、临时文件清理。

@@ -8,5 +8,5 @@ export interface StylePackageSource {
   getPackageNames(): Array<string>;
   isKnownPackageName(packageName: string): boolean;
   isSourceGraphFile(file: string): boolean;
-  getWatchRoots(): Array<string>;
+  getWatchRoots(): Promise<Array<string>>;
 }

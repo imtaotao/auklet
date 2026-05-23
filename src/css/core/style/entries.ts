@@ -61,7 +61,7 @@ export function collectModuleStyleImports(packageContext: StylePackageContext) {
   );
 }
 
-export function createComponentStyleEntryPlan(
+export function createModuleStyleEntryPlan(
   packageContext: StylePackageContext,
   sourceDir: string,
 ) {
@@ -71,7 +71,7 @@ export function createComponentStyleEntryPlan(
   );
 }
 
-export function createComponentStyleEntryPlans(
+export function createModuleStyleEntryPlans(
   packageContext: StylePackageContext,
 ) {
   return new StyleModuleEntryPlanner(packageContext).createEntries(

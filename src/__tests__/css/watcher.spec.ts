@@ -8,20 +8,36 @@ import {
 const mocks = vi.hoisted(() => {
   const events = new Map<string, (...args: Array<unknown>) => void>();
   const close = vi.fn().mockResolvedValue(undefined);
-  const watch = vi.fn(() => ({
-    close,
-    on: vi.fn((event: string, callback: (...args: Array<unknown>) => void) => {
-      events.set(event, callback);
-      return undefined;
-    }),
-  }));
-  const build = vi.fn().mockResolvedValue(undefined);
+  const watch = vi.fn(function watch() {
+    return {
+      close,
+      on: vi.fn(function on(
+        event: string,
+        callback: (...args: Array<unknown>) => void,
+      ) {
+        events.set(event, callback);
+        return undefined;
+      }),
+    };
+  });
+  const build = vi.fn(function build() {
+    return Promise.resolve();
+  });
+  const createBuilder = vi.fn(function createBuilder(
+    context: Record<string, unknown>,
+  ) {
+    builderContexts.push(context);
+    return {
+      build,
+    };
+  });
   const builderContexts: Array<Record<string, unknown>> = [];
 
   return {
     build,
     builderContexts,
     close,
+    createBuilder,
     events,
     watch,
   };
@@ -34,12 +50,7 @@ vi.mock('chokidar', () => ({
 }));
 
 vi.mock('#auklet/css/production/builder', () => ({
-  ModuleStyleBuilder: vi.fn((context: Record<string, unknown>) => {
-    mocks.builderContexts.push(context);
-    return {
-      build: mocks.build,
-    };
-  }),
+  ModuleStyleBuilder: mocks.createBuilder,
 }));
 
 import { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
@@ -60,6 +71,7 @@ describe('ModuleStyleWatcher', () => {
     mocks.build.mockClear();
     mocks.builderContexts.length = 0;
     mocks.close.mockClear();
+    mocks.createBuilder.mockClear();
     mocks.events.clear();
     mocks.watch.mockClear();
   });

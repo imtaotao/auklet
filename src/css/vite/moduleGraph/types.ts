@@ -2,7 +2,7 @@ import type { AukletConfig, ModuleStyleBuildConfig } from '#auklet/types';
 
 // Vite/dev module style graph 的共享类型。
 export interface ModuleStyleGraphOptions {
-  workspaceRoot: string;
+  root: string;
   packagesDir?: string;
   mode?: 'monorepo' | 'package';
   config?: ModuleStyleBuildConfig;

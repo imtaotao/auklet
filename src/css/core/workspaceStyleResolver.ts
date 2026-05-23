@@ -1,8 +1,10 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { NODE_MODULES_DIR, STYLE_ENTRY } from '#auklet/css/constants';
-import { POSIX_SEPARATOR } from '#auklet/utils';
-import { parsePackageStyleSpecifier } from '#auklet/css/core/style/specifier';
+import { NODE_MODULES_DIR } from '#auklet/css/constants';
+import {
+  createExternalStyleSpecifier,
+  createOutputStyleSpecifier,
+} from '#auklet/css/core/style/specifier';
 import type {
   ModuleStyleBuildConfig,
   ResolvedModuleStyleBuildContext,
@@ -42,61 +44,19 @@ export class WorkspaceStyleResolver {
   }
 
   toOutputStyleSpecifier(specifier: string, outRoot: string) {
-    const parsed = parsePackageStyleSpecifier(specifier);
-    if (!parsed) return specifier;
-    const { packageName, stylePath } = parsed;
-    const currentOutputFormat = path.basename(outRoot);
-    const outputFormat = this.getStylePathOutputFormat(stylePath);
-
-    if (outputFormat) {
-      return [packageName, currentOutputFormat, outputFormat.path].join(
-        POSIX_SEPARATOR,
-      );
-    }
-
-    return specifier;
+    return createOutputStyleSpecifier(specifier, {
+      currentOutputFormat: path.basename(outRoot),
+      outputFormats: this.config.output.outputFormats,
+    });
   }
 
   toExternalStyleSpecifier(specifier: string, outRoot: string) {
-    const parsed = parsePackageStyleSpecifier(specifier);
-    if (!parsed) return specifier;
-    const { packageName, stylePath } = parsed;
-    const currentOutputFormat = path.basename(outRoot);
-    const outputFormat = this.getStylePathOutputFormat(stylePath);
-
-    if (stylePath === STYLE_ENTRY) {
-      return [packageName, this.config.output.externalStyleFile].join(
-        POSIX_SEPARATOR,
-      );
-    }
-
-    if (
-      outputFormat &&
-      outputFormat.path ===
-        [this.config.output.styleDir, this.config.output.indexStyleFile].join(
-          POSIX_SEPARATOR,
-        )
-    ) {
-      return [
-        packageName,
-        currentOutputFormat,
-        this.config.output.styleDir,
-        this.config.output.externalStyleFile,
-      ].join(POSIX_SEPARATOR);
-    }
-
-    return specifier;
-  }
-
-  private getStylePathOutputFormat(stylePath: string) {
-    for (const format of this.config.output.outputFormats) {
-      const prefix = `${format}${POSIX_SEPARATOR}`;
-      if (!stylePath.startsWith(prefix)) continue;
-      return {
-        format,
-        path: stylePath.slice(prefix.length),
-      };
-    }
-    return null;
+    return createExternalStyleSpecifier(specifier, {
+      currentOutputFormat: path.basename(outRoot),
+      outputFormats: this.config.output.outputFormats,
+      styleDir: this.config.output.styleDir,
+      indexStyleFile: this.config.output.indexStyleFile,
+      externalStyleFile: this.config.output.externalStyleFile,
+    });
   }
 }

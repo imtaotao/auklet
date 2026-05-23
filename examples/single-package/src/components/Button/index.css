@@ -1,0 +1,9 @@
+.single-button {
+  border: 0;
+  border-radius: 6px;
+  background: #3158d4;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 12px;
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@demo/single-package",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "auk build",
+    "dev": "vite --host 127.0.0.1"
+  },
+  "devDependencies": {
+    "auklet": "workspace:*",
+    "vite": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./style.css": "./dist/index.css",
+    "./components/*.css": "./dist/es/components/*/style/index.css"
+  }
+}

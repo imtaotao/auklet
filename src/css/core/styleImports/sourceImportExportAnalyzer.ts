@@ -1,6 +1,6 @@
 import ts from 'typescript';
 
-export type ModuleStyleSourceReference = {
+export type ModuleImportReference = {
   importPath: string;
   importClause?: ts.ImportClause;
   importedNames?: Array<string>;
@@ -15,8 +15,8 @@ type ImportBinding = {
   hasNamespaceImport: boolean;
 };
 
-export function collectModuleStyleSourceReferences(file: string, code: string) {
-  const imports: Array<ModuleStyleSourceReference> = [];
+export function collectModuleImportReferences(file: string, code: string) {
+  const imports: Array<ModuleImportReference> = [];
   const importBindings = new Map<string, ImportBinding>();
   const localDeclarations = new Set<string>();
   const sourceFile = ts.createSourceFile(
@@ -60,13 +60,13 @@ export function collectModuleStyleSourceReferences(file: string, code: string) {
   return imports;
 }
 
-export function isTypeOnlySourceReference(item: ModuleStyleSourceReference) {
+export function isTypeOnlyModuleReference(item: ModuleImportReference) {
   return isTypeOnlyImportClause(item.importClause) || item.isTypeOnly;
 }
 
-export function getSourceReferenceImportedNames(
+export function getModuleReferenceImportedNames(
   file: string,
-  item: ModuleStyleSourceReference,
+  item: ModuleImportReference,
 ) {
   if (item.importedNames) {
     if (item.isTypeOnly) return [];
@@ -172,7 +172,7 @@ const collectImportBindings = (
 const collectExportDeclaration = (
   file: string,
   node: ts.ExportDeclaration,
-  imports: Array<ModuleStyleSourceReference>,
+  imports: Array<ModuleImportReference>,
   importBindings: Map<string, ImportBinding>,
   localDeclarations: Set<string>,
 ) => {

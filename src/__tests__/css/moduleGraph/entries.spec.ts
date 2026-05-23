@@ -1,73 +1,28 @@
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
-import { normalizeFileKey, toFsSpecifier } from '#auklet/utils';
-import { normalizeGraphStyleStructure } from '../fixtures/styleStructure';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { normalizeFileKey } from '#auklet/utils';
+import { normalizeGraphStyleStructure } from '../../fixtures/styleStructure';
 import {
   createVirtualProject,
   type VirtualProject,
-} from '../fixtures/virtualProject';
+} from '../../fixtures/virtualProject';
+import {
+  appPackageRoot,
+  createMonorepoGraph,
+  expectContentOrder,
+  expectWatchFile,
+  getKatexStylePath,
+  getKatexStyleSpecifier,
+  setupMonorepoPackages,
+  uiPackageRoot,
+} from './helpers';
 
-const appPackageRoot = 'packages/app-package';
-const uiPackageRoot = 'packages/ui-package';
-
-const createGraph = (fixture: VirtualProject) => {
-  return new ModuleStyleGraph({
-    workspaceRoot: fixture.root,
-  });
-};
-
-const packagePath = (
-  fixture: VirtualProject,
-  packageRoot: string,
-  relativePath: string,
-) => {
-  return path.join(fixture.root, packageRoot, relativePath);
-};
-
-const getKatexStylePath = (fixture: VirtualProject) => {
-  return packagePath(
-    fixture,
-    uiPackageRoot,
-    'node_modules/katex/dist/katex.min.css',
-  );
-};
-
-const getKatexStyleSpecifier = (fixture: VirtualProject) => {
-  return toFsSpecifier(getKatexStylePath(fixture));
-};
-
-const expectWatchFile = (
-  watchFiles: Array<string>,
-  fixture: VirtualProject,
-  packageRoot: string,
-  relativePath: string,
-) => {
-  expect(watchFiles).toContain(
-    normalizeFileKey(packagePath(fixture, packageRoot, relativePath)),
-  );
-};
-
-const expectContentOrder = (content: string, before: string, after: string) => {
-  expect(content.indexOf(before)).toBeLessThan(content.indexOf(after));
-};
-
-describe('ModuleStyleGraph', () => {
+describe('ModuleStyleGraph entries', () => {
   let fixture: VirtualProject;
 
   beforeEach(() => {
     fixture = createVirtualProject('auklet-css-graph-');
-    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
-    fixture.writeJson(path.join(appPackageRoot, 'package.json'), {
-      name: '@scope/app',
-    });
-    fixture.writeJson(path.join(uiPackageRoot, 'package.json'), {
-      name: '@scope/ui',
-    });
-    fixture.writeFile(
-      path.join(uiPackageRoot, 'node_modules/katex/dist/katex.min.css'),
-      '',
-    );
+    setupMonorepoPackages(fixture);
   });
 
   afterEach(() => {
@@ -116,9 +71,8 @@ describe('ModuleStyleGraph', () => {
       `,
     );
 
-    const graph = createGraph(fixture);
+    const graph = createMonorepoGraph(fixture);
     const parsed = graph.parsePackageStyleId('@scope/app/external.css');
-
     const result = await graph.createPackageStyleCode(parsed!);
 
     expect(result.code).toBe(`@import "${getKatexStyleSpecifier(fixture)}";`);
@@ -213,10 +167,10 @@ describe('ModuleStyleGraph', () => {
       '.article { background: var(--bg); }',
     );
 
-    const graph = createGraph(fixture);
-    const parsed = graph.parsePackageStyleId('@scope/app/style.css');
-
-    const result = await graph.createPackageStyleCode(parsed!);
+    const graph = createMonorepoGraph(fixture);
+    const result = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/style.css')!,
+    );
 
     expect(
       result.code.indexOf(`@import "${getKatexStyleSpecifier(fixture)}";`),
@@ -240,6 +194,7 @@ describe('ModuleStyleGraph', () => {
       ':root[data-wk-theme="dark"] { --bg: black; }',
     );
     expect(result.code).not.toContain('src/themes/light.css');
+
     const structure = await normalizeGraphStyleStructure(
       graph,
       '@scope/app',
@@ -257,6 +212,7 @@ describe('ModuleStyleGraph', () => {
       appPackageRoot,
       'auklet.config.ts',
     );
+
     const lightTheme = await graph.createPackageStyleCode(
       graph.parsePackageStyleId('@scope/app/themes/light.css')!,
     );
@@ -324,7 +280,7 @@ describe('ModuleStyleGraph', () => {
       '.ui-light { color-scheme: light; }',
     );
 
-    const graph = createGraph(fixture);
+    const graph = createMonorepoGraph(fixture);
     const result = await graph.createPackageStyleCode(
       graph.parsePackageStyleId('@scope/app/themes/light.css')!,
     );
@@ -342,100 +298,6 @@ describe('ModuleStyleGraph', () => {
       uiPackageRoot,
       'src/themes/light.css',
     );
-  });
-
-  test('normalizes slash styles for workspace source graph checks and watch roots', () => {
-    const graph = new ModuleStyleGraph({
-      workspaceRoot: 'C:\\repo\\workspace',
-    });
-
-    const sourceGraphFiles = [
-      'C:\\repo\\workspace\\packages\\app-package\\src\\pages\\Blog\\index.css',
-      'C:/repo/workspace/packages/app-package/src/pages/Blog/index.tsx',
-      'C:\\repo\\workspace\\packages\\shared\\src\\index.css',
-    ];
-
-    for (const file of sourceGraphFiles) {
-      expect(graph.isSourceGraphFile(file)).toBe(true);
-    }
-    expect(
-      graph.isSourceGraphFile(
-        'C:/repo/workspace/packages/app-package/src/pages/Blog/data.ts',
-      ),
-    ).toBe(false);
-
-    expect(graph.getWatchRoots()).toEqual([
-      'C:/repo/workspace/packages/*/src',
-      'C:/repo/workspace/packages/*/auklet.config.ts',
-    ]);
-  });
-
-  test('rejects package mode until package source is implemented', () => {
-    expect(
-      () =>
-        new ModuleStyleGraph({
-          workspaceRoot: fixture.root,
-          mode: 'package',
-        }),
-    ).toThrow('package mode is not supported yet');
-  });
-
-  test('reuses package contexts inside one CSS request', async () => {
-    const loadAukletConfig = vi.fn(
-      async (packageRoot: string, _options?: { cacheBust?: boolean }) => {
-        if (path.basename(packageRoot) === 'app-package') {
-          return {
-            styles: {
-              dependencies: {
-                '@scope/ui': {
-                  entry: ['/style.css', '/style.css'],
-                },
-              },
-            },
-          };
-        }
-
-        return {};
-      },
-    );
-    const graph = new ModuleStyleGraph({
-      workspaceRoot: fixture.root,
-      loadAukletConfig,
-    });
-
-    await graph.createPackageStyleCode({
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    });
-
-    expect(loadAukletConfig).toHaveBeenCalledTimes(2);
-    expect(
-      loadAukletConfig.mock.calls.map(([packageRoot]) =>
-        path.basename(packageRoot),
-      ),
-    ).toEqual(['app-package', 'ui-package']);
-    expect(
-      loadAukletConfig.mock.calls.every(
-        ([, options]) => options?.cacheBust === true,
-      ),
-    ).toBe(true);
-  });
-
-  test('creates a fresh package context cache for each CSS request', async () => {
-    const loadAukletConfig = vi.fn(async () => ({}));
-    const graph = new ModuleStyleGraph({
-      workspaceRoot: fixture.root,
-      loadAukletConfig,
-    });
-    const parsed = {
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    };
-
-    await graph.createPackageStyleCode(parsed);
-    await graph.createPackageStyleCode(parsed);
-
-    expect(loadAukletConfig).toHaveBeenCalledTimes(2);
   });
 
   test('creates source module CSS with dependency modules before own styles', async () => {
@@ -499,7 +361,7 @@ describe('ModuleStyleGraph', () => {
       '.markdown-prose { color: var(--markdown-text); }',
     );
 
-    const graph = createGraph(fixture);
+    const graph = createMonorepoGraph(fixture);
     const result = await graph.createPackageStyleCode(
       graph.parsePackageStyleId('@scope/app/pages/BlogArticlePage.css')!,
     );

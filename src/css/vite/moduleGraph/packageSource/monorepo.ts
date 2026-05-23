@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { aukletConfigFile } from '#auklet/config';
-import { SOURCE_COMPONENT_MODULE_RE } from '#auklet/css/constants';
+import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { normalizeFileKey, toWatchPath } from '#auklet/utils';
 import type {
   StylePackageInfo,
@@ -9,33 +9,24 @@ import type {
 } from '#auklet/css/vite/moduleGraph/packageSource/types';
 
 export type MonorepoPackageSourceOptions = {
-  workspaceRoot: string;
+  root: string;
   packagesDir: string;
   styleExtensions: Array<string>;
 };
 
-export function createMonorepoPackageSource(
-  options: MonorepoPackageSourceOptions,
-): StylePackageSource {
-  return new MonorepoPackageSource(options);
-}
-
-class MonorepoPackageSource implements StylePackageSource {
+export class MonorepoPackageSource implements StylePackageSource {
   private packages?: Array<StylePackageInfo>;
   private packageNames?: Array<string>;
-  private readonly workspaceRoot: string;
+  private readonly root: string;
 
   constructor(private readonly options: MonorepoPackageSourceOptions) {
-    this.workspaceRoot = normalizeFileKey(options.workspaceRoot);
+    this.root = normalizeFileKey(options.root);
   }
 
   getPackages() {
     if (this.packages) return this.packages;
 
-    const packagesRoot = path.join(
-      this.workspaceRoot,
-      this.options.packagesDir,
-    );
+    const packagesRoot = path.join(this.root, this.options.packagesDir);
     if (!fs.existsSync(packagesRoot)) {
       this.packages = [];
       return this.packages;
@@ -77,24 +68,21 @@ class MonorepoPackageSource implements StylePackageSource {
   isSourceGraphFile(file: string) {
     const normalizedFile = normalizeFileKey(file);
     const packagesRoot = normalizeFileKey(
-      path.join(this.workspaceRoot, this.options.packagesDir),
+      path.join(this.root, this.options.packagesDir),
     );
     if (!normalizedFile.startsWith(`${packagesRoot}/`)) {
       return false;
     }
     if (normalizedFile.endsWith(aukletConfigFile)) return true;
-    if (SOURCE_COMPONENT_MODULE_RE.test(normalizedFile)) return true;
+    if (SOURCE_MODULE_RE.test(normalizedFile)) return true;
 
     return this.options.styleExtensions.some((extension) =>
       normalizedFile.endsWith(extension),
     );
   }
 
-  getWatchRoots() {
-    const packagesRoot = path.join(
-      this.workspaceRoot,
-      this.options.packagesDir,
-    );
+  async getWatchRoots() {
+    const packagesRoot = path.join(this.root, this.options.packagesDir);
     return [
       toWatchPath(packagesRoot, '*', 'src'),
       toWatchPath(packagesRoot, '*', aukletConfigFile),

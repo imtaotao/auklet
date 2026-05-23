@@ -3,12 +3,15 @@ import type { ModuleStyleBuildConfig } from '#auklet/types';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import type { ModuleStyleEntryPlan } from '#auklet/css/core/styleModuleEntryPlanner';
 import {
+  createOutputModuleStyleSpecifier,
+  createOutputOwnStyleSpecifier,
+} from '#auklet/css/core/style/specifier';
+import {
   type FormatWriterOptions,
   writeStyleFile,
 } from '#auklet/css/production/format/shared';
-import { toPosixPath } from '#auklet/utils';
 
-export class ComponentStyleEntryWriter {
+export class ModuleStyleEntryWriter {
   private readonly config: ModuleStyleBuildConfig;
   private readonly sourceRoot: string;
   private readonly resolver: StylePackageContext['resolver'];
@@ -69,11 +72,9 @@ export class ComponentStyleEntryWriter {
     specifiers: Array<string>,
     styleDir: string,
   ) {
-    return specifiers.map((specifier) => {
-      if (specifier.startsWith('.')) return specifier;
-      if (!path.isAbsolute(specifier)) return specifier;
-      return toPosixPath(path.relative(styleDir, specifier));
-    });
+    return specifiers.map((specifier) =>
+      createOutputModuleStyleSpecifier(specifier, styleDir),
+    );
   }
 
   private getOwnStyleSpecifiers(
@@ -82,11 +83,13 @@ export class ComponentStyleEntryWriter {
     outRoot: string,
   ) {
     return ownStyleFiles.map((styleFile) =>
-      toPosixPath(
-        path.relative(
+      createOutputOwnStyleSpecifier(
+        {
+          sourceRoot: this.sourceRoot,
+          outputRoot: outRoot,
           styleDir,
-          path.join(outRoot, path.relative(this.sourceRoot, styleFile)),
-        ),
+        },
+        styleFile,
       ),
     );
   }
