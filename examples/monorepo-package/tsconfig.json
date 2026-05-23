@@ -1,10 +1,11 @@
 {
-  "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules"],
+  "include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
+  "exclude": ["**/dist", "node_modules"],
   "compilerOptions": {
     "target": "ES2018",
     "module": "preserve",
     "moduleResolution": "Bundler",
+    "jsx": "preserve",
     "rootDir": ".",
     "outDir": "dist",
     "declaration": true,

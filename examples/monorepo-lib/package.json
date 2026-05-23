@@ -1,5 +1,5 @@
 {
-  "name": "@demo/libs",
+  "name": "@demo/monorepo-lib",
   "private": true,
   "type": "module",
   "scripts": {

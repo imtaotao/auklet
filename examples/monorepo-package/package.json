@@ -1,5 +1,5 @@
 {
-  "name": "@demo/components",
+  "name": "@demo/monorepo-package",
   "private": true,
   "type": "module",
   "scripts": {

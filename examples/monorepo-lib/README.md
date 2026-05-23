@@ -1,4 +1,4 @@
-# Libs
+# Monorepo Lib
 
 A minimal monorepo for TypeScript-only packages.
 
@@ -7,5 +7,5 @@ There are no source CSS files and `modules` is not enabled, so `auk build` shoul
 ```bash
 cd ../../
 pnpm i
-pnpm --filter @demo/libs build
+pnpm --filter @demo/monorepo-lib build
 ```

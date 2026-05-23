@@ -1,4 +1,4 @@
-# Components
+# Monorepo Package
 
 A component-oriented monorepo for module CSS output.
 
@@ -11,7 +11,7 @@ Packages:
 ```bash
 cd ../../
 pnpm i
-pnpm --filter @demo/components build
+pnpm --filter @demo/monorepo-package build
 ```
 
 Expected CSS output includes package-level `dist/index.css` and module CSS entries under `dist/es` and `dist/lib` because `modules` is enabled for style packages.

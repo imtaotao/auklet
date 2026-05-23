@@ -126,10 +126,15 @@ Prefer extending the main e2e scenario when adding new e2e coverage. Create a
 new test only when adding the case to the main scenario would make it hard to
 read. Do not create e2e tests for every small branch.
 
-Four target project-shape smoke tests live in a separate e2e file: monorepo
-component package, monorepo library package, single-package component library,
-and single-package library. They only assert key output and dev graph usability;
-they do not carry complex dependency-chain details.
+Four target project-shape smoke tests live in separate e2e files: monorepo
+package, monorepo lib, single package, and single lib. These tests validate
+basic build/dev graph usability for each supported package mode without carrying
+the full dependency-chain assertions from `moduleStyleProject.spec.ts`.
+
+Example output tests are split by project shape under `examples/__tests__`:
+monorepo package, monorepo lib, single package, and single lib. Each file keeps
+the JavaScript, CSS, and output-structure assertions for that one shape together
+so a failure points at the affected mode instead of a horizontal output layer.
 
 ## Module/API Test Responsibilities
 

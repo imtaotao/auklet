@@ -83,6 +83,9 @@ importers:
       postcss:
         specifier: 'catalog:'
         version: 8.5.15
+      prettier:
+        specifier: 'catalog:'
+        version: 3.8.3
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -111,9 +114,6 @@ importers:
       lint-staged:
         specifier: 'catalog:'
         version: 17.0.5
-      prettier:
-        specifier: 'catalog:'
-        version: 3.8.3
       vite:
         specifier: 'catalog:'
         version: 8.0.14(@types/node@22.17.0)(yaml@2.9.0)
@@ -121,47 +121,9 @@ importers:
         specifier: 'catalog:'
         version: 4.1.7(@types/node@22.17.0)(@vitest/coverage-v8@4.1.7)(vite@8.0.14(@types/node@22.17.0)(yaml@2.9.0))
 
-  examples/components: {}
+  examples/monorepo-lib: {}
 
-  examples/components/packages/dashboard:
-    dependencies:
-      '@demo/ui':
-        specifier: workspace:*
-        version: link:../ui
-    devDependencies:
-      auklet:
-        specifier: workspace:*
-        version: link:../../../..
-
-  examples/components/packages/reexports:
-    dependencies:
-      '@demo/ui':
-        specifier: workspace:*
-        version: link:../ui
-    devDependencies:
-      auklet:
-        specifier: workspace:*
-        version: link:../../../..
-
-  examples/components/packages/theme:
-    devDependencies:
-      auklet:
-        specifier: workspace:*
-        version: link:../../../..
-
-  examples/components/packages/ui:
-    dependencies:
-      '@demo/theme':
-        specifier: workspace:*
-        version: link:../theme
-    devDependencies:
-      auklet:
-        specifier: workspace:*
-        version: link:../../../..
-
-  examples/libs: {}
-
-  examples/libs/packages/math:
+  examples/monorepo-lib/packages/math:
     dependencies:
       aidly:
         specifier: 'catalog:'
@@ -171,7 +133,45 @@ importers:
         specifier: workspace:*
         version: link:../../../..
 
-  examples/libs/packages/string:
+  examples/monorepo-lib/packages/string:
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
+  examples/monorepo-package: {}
+
+  examples/monorepo-package/packages/dashboard:
+    dependencies:
+      '@demo/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
+  examples/monorepo-package/packages/reexports:
+    dependencies:
+      '@demo/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
+  examples/monorepo-package/packages/theme:
+    devDependencies:
+      auklet:
+        specifier: workspace:*
+        version: link:../../../..
+
+  examples/monorepo-package/packages/ui:
+    dependencies:
+      '@demo/theme':
+        specifier: workspace:*
+        version: link:../theme
     devDependencies:
       auklet:
         specifier: workspace:*

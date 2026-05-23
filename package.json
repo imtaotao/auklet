@@ -72,6 +72,7 @@
     "postcss": "catalog:",
     "chokidar": "catalog:",
     "minimist": "catalog:",
+    "prettier": "catalog:",
     "typescript": "catalog:",
     "conditional-export": "catalog:"
   },
@@ -80,7 +81,6 @@
     "@types/minimist": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "husky": "catalog:",
-    "prettier": "catalog:",
     "lint-staged": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

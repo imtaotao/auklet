@@ -407,19 +407,19 @@ The Vite plugin supports two package sources:
 
 ```text
 examples/
-├── components/     # Component library monorepo demo
-├── libs/           # Pure lib monorepo demo
-├── single-package/ # Single-package component library demo with Vite dev mode
-├── single-lib/     # Single-package pure TypeScript lib demo
-└── __tests__/      # Example output tests
+├── monorepo-package/ # Component library monorepo demo
+├── monorepo-lib/     # Pure lib monorepo demo
+├── single-package/   # Single-package component library demo with Vite dev mode
+├── single-lib/       # Single-package pure TypeScript lib demo
+└── __tests__/        # Example output tests
 ```
 
 Examples cover real usage scenarios:
 
-- `components`: includes theme, ui, dashboard, and related packages, covering
-  component libraries, theme dependencies, and inter-package component
+- `monorepo-package`: includes theme, ui, dashboard, and related packages,
+  covering component libraries, theme dependencies, and inter-package component
   dependencies.
-- `libs`: covers pure TypeScript library builds without CSS.
+- `monorepo-lib`: covers pure TypeScript library builds without CSS.
 - `single-package`: covers default `aukletStylePlugin()` package mode and
   single-package component CSS builds.
 - `single-lib`: covers single-package pure TypeScript library builds, where CSS
