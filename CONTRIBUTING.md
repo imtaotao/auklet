@@ -1,164 +1,228 @@
-# 贡献者指南
+# Contributing Guide
 
-本文档面向后续维护者和协作 AI，用来说明 auklet 当前的代码架构、核心模块职责和构建链路。修改实现前，建议先读本文档和 `TESTING.md`。
+This document is for future maintainers and collaborating AI agents. It explains
+auklet's current code architecture, core module responsibilities, and build
+flows. Before changing implementation code, read this document and `TESTING.md`.
 
-## 项目定位
+## Project Scope
 
-auklet 是一个面向 TypeScript 包的构建工具，主要提供两部分能力：
+auklet is a build tool for TypeScript packages. It provides two main capability
+areas:
 
-- JavaScript/TypeScript 构建：基于 `tsdown` 生成 bundle、global、module 等产物。
-- Style 构建：为组件库生成包级 CSS、模块 CSS、主题 CSS、external CSS，以及 Vite dev 环境下的虚拟 CSS 入口。
+- JavaScript/TypeScript builds: generate bundle, global, and module output based
+  on `tsdown`.
+- Style builds: generate package CSS, module CSS, theme CSS, external CSS, and
+  virtual CSS entries for Vite dev mode.
 
-仓库本身是单包项目，`examples/` 下放真实项目形态的 demo，用于调试和测试
-monorepo 与单包场景。
+This repository itself is a single-package project. `examples/` contains real
+project-shape demos for debugging and testing both monorepo and single-package
+scenarios.
 
-## 命名约定
+## Naming Conventions
 
-代码内部优先使用 `Style` 表达样式构建语义，例如 `ModuleStyleBuilder`、`ModuleStyleGraph`、`PackageStyleEntryWriter`。这样即使未来支持 Less 等其他样式语言，核心抽象也不需要大规模改名。
+Use `Style` for internal style build concepts, such as `ModuleStyleBuilder`,
+`ModuleStyleGraph`, and `PackageStyleEntryWriter`. This keeps core abstractions
+stable if auklet later supports other style languages such as Less.
 
-`css` 只保留在确实面向 CSS 产物或兼容外部接口的地方：
+Keep `css` only where the API or artifact is explicitly CSS-oriented:
 
-- 目录名：`src/css/`，表示当前模块仍然处理 CSS 产物。
-- CLI 命令：`auk build-css`，保持用户命令直观。
-- 文件名和 import id：`style.css`、`module.css`、`external.css`、`auklet-css:*`。
-- 日志前缀：`[auklet:css]`。
+- Directory name: `src/css/`, because the current module still handles CSS
+  output.
+- CLI command: `auk build-css`, because the user-facing command should stay
+  obvious.
+- File names and import ids: `style.css`, `module.css`, `external.css`,
+  `auklet-css:*`.
+- Log prefix: `[auklet:css]`.
 
-## 根目录结构
+## Repository Layout
 
 ```text
 .
-├── bin/                  # CLI 入口，发布后由 auk / auklet 命令调用
-├── src/                  # 工具源码
-├── examples/             # 真实项目 demo 和 examples 级测试
-├── TESTING.md            # 测试架构和测试编写规范
-├── README.md             # 用户使用文档
-├── package.json          # 包信息、命令、exports/imports
-└── tsconfig.json         # 当前包 TypeScript 配置
+├── bin/                  # CLI entry, exposed as auk / auklet after publishing
+├── src/                  # Tool source
+├── examples/             # Real demos and example-level tests
+├── TESTING.md            # Test architecture and test style guide
+├── README.md             # User-facing documentation
+├── package.json          # Package metadata, scripts, exports/imports
+└── tsconfig.json         # TypeScript config for this package
 ```
 
-## 源码模块
+## Source Modules
 
 ```text
 src/
-├── index.ts              # 对外公开 API 汇总
-├── types.ts              # 用户配置、内部配置、构建上下文类型
-├── config.ts             # 默认配置和配置 normalize
-├── configLoader.ts       # 加载 auklet.config.ts
-├── utils.ts              # 通用路径和文件工具
-├── build/                # JavaScript 构建链路
-└── css/                  # Style 构建链路
+├── index.ts              # Public API exports
+├── types.ts              # User config, internal config, and build context types
+├── config.ts             # Defaults and config normalization
+├── configLoader.ts       # Loads auklet.config.ts
+├── utils.ts              # Shared path and file utilities
+├── build/                # JavaScript build flow
+└── css/                  # Style build flow
 ```
 
-### 配置模块
+### Config Modules
 
-- `types.ts` 定义 `AukletConfig`、`NormalizedAukletConfig`、`PackageBuildOptions`、`ModuleStyleBuildConfig` 等类型。
-- `config.ts` 定义默认值，并把用户配置 normalize 成内部稳定结构。
-- `configLoader.ts` 负责从包根目录加载 `auklet.config.ts`，支持 TypeScript 配置文件和 cache bust。
+- `types.ts` defines `AukletConfig`, `NormalizedAukletConfig`,
+  `PackageBuildOptions`, `ModuleStyleBuildConfig`, and related types.
+- `config.ts` defines defaults and normalizes user config into a stable internal
+  shape.
+- `configLoader.ts` loads `auklet.config.ts` from a package root. It supports
+  TypeScript config files and cache busting.
 
-配置读取原则：
+Config rules:
 
-- 对外 API 使用 `AukletConfig`。
-- 内部核心模块尽量使用 `NormalizedAukletConfig`。
-- 默认值集中放在 `config.ts`，不要在多个模块里重复写默认配置。
+- Public APIs use `AukletConfig`.
+- Internal core modules should prefer `NormalizedAukletConfig`.
+- Defaults belong in `config.ts`; do not duplicate default config in multiple
+  modules.
 
-### JavaScript 构建模块
+### JavaScript Build Modules
 
 ```text
 src/build/
-├── bundleConfig.ts       # bundle 格式配置
-├── moduleConfig.ts       # unbundle module 配置
-├── runTsdown.ts          # CLI/API 调用 tsdown 的入口
-├── tsdownConfig.ts       # 兼容入口，转发到 tsdown/define
-└── tsdown/               # 根据 auklet 配置和 package.json 生成 tsdown 参数
-    ├── define.ts         # 对外 defineKernelPackageConfig* 入口
-    ├── context.ts        # 读取 package.json 并生成构建上下文
-    ├── dependencies.ts   # external、alwaysBundle、globals 规则
-    ├── entries.ts        # bundle/module 入口收集
-    ├── common.ts         # tsdown 通用配置和用户回调
-    └── types.ts          # build 配置内部类型
+├── bundleConfig.ts       # Bundle format config
+├── cleanOutput.ts        # Cleans output directory for auk build
+├── moduleConfig.ts       # Unbundled module config
+├── runTsdown.ts          # CLI/API entry for running tsdown
+├── tsdownConfig.ts       # Compatibility entry forwarding to tsdown/define
+└── tsdown/               # Generates tsdown config from auklet config and package.json
+    ├── define.ts         # Public defineKernelPackageConfig* entry
+    ├── context.ts        # Reads package.json and creates build context
+    ├── dependencies.ts   # external, alwaysBundle, and globals rules
+    ├── entries.ts        # Bundle/module entry collection
+    ├── parseModuleId.ts  # Module id parser used by IIFE dependency classification
+    ├── common.ts         # Shared tsdown config and user callback handling
+    └── types.ts          # Internal build config types
 ```
 
-`runTsdown` 是执行层，负责拼命令、调用 tsdown。`tsdownConfig` 是配置翻译层，负责把 auklet 的 `build` 配置转换成 tsdown 需要的格式。
+`runTsdown` is the execution layer. It builds command arguments and invokes
+tsdown. `cleanOutput` only serves `auk build`; it removes the current package's
+configured `output` directory. `tsdownConfig` is the config translation layer
+that maps auklet `build` options to tsdown config.
 
-### Style 核心模块
+### Style Core Modules
 
 ```text
-src/css/core/
-├── stylePackageContext.ts        # 收集当前包 style 构建上下文
-├── styleProcessor.ts             # 读取、合并、展开 style 内容
-├── workspaceStyleResolver.ts     # 解析 workspace/package/node_modules style 依赖
-├── styleImports/                 # 从 TSX import/re-export 推导 style 依赖
-│   ├── collector.ts              # 根据 source import/export 和配置生成模块 style import
-│   ├── autoImportRules.ts        # 自动 style import 规则匹配和 specifier 生成
-│   └── sourceImportExportAnalyzer.ts # 解析 TSX import/re-export 语法
-├── resolvers/                    # 同包源码 import 候选路径解析
-│   ├── relative.ts               # 相对路径 import
-│   ├── packageImports.ts         # package.json#imports，优先 source 条件
-│   └── tsconfigPaths.ts          # tsconfig compilerOptions.paths
-├── styleModuleEntryPlanner.ts    # 规划模块级 style 入口
-└── style/
-    ├── dependencies.ts           # 从配置读取 global/theme/external 依赖
-    ├── entries.ts                # package/theme/external/module 入口语义
-    ├── files.ts                  # style 文件扫描
-    └── specifier.ts              # package style specifier 解析/生成
+src/css/
+├── config.ts                     # Default CSS output structure config
+├── constants.ts                  # CSS/source file matching constants
+└── core/
+    ├── stylePackageContext.ts        # Collects style build context for one package
+    ├── styleProcessor.ts             # Reads, merges, and expands style content
+    ├── workspaceStyleResolver.ts     # Resolves workspace/package/node_modules style deps
+    ├── styleImports/                 # Infers style deps from TSX imports/re-exports
+    │   ├── collector.ts              # Builds module style imports from source refs and config
+    │   ├── autoImportRules.ts        # Auto import rule matching and specifier generation
+    │   └── sourceImportExportAnalyzer.ts # Parses TSX import/re-export syntax
+    ├── resolvers/                    # Same-package source import candidate resolvers
+    │   ├── relative.ts               # Relative imports
+    │   ├── packageImports.ts         # package.json#imports, preferring source condition
+    │   └── tsconfigPaths.ts          # tsconfig compilerOptions.paths
+    ├── styleModuleEntryPlanner.ts    # Plans module-level style entries
+    └── style/
+        ├── dependencies.ts           # Reads global/theme/external deps from config
+        ├── entries.ts                # package/theme/external/module entry semantics
+        ├── files.ts                  # Style file scanning
+        └── specifier.ts              # Package style specifier parsing/generation
 ```
 
-重点模块说明：
+Key modules:
 
-- `StylePackageContext`：把包根目录、source/output、主题文件、样式文件、resolver、processor 等聚合起来，是 production 和 dev 两边的共享上下文。
-- `StyleProcessor`：负责 CSS 内容层面的处理，例如读取文件、展开 `@import`、合并 PostCSS root。
-- `WorkspaceStyleResolver`：负责把配置里的 style 依赖解析到真实文件或输出路径，处理 workspace 包和外部包差异。
-- `styleImports/collector.ts`：只扫描 `.tsx` 组件源码，根据 import / named re-export 和 `styles.dependencies.*.components` 推导模块级 style import。`.ts` 文件不会参与 CSS auto import；`export * from '...'` 不支持，因为无法可靠推断组件名。同包源码依赖会通过 `resolvers/` 解析候选路径，并统一限制在当前包 `sourceRoot` 内。
-- `styleImports/autoImportRules.ts`：把 `components` 配置转换成内部 auto import rule，负责 package entry named import 和 deep import 的匹配与 specifier 生成。
-- `styleImports/sourceImportExportAnalyzer.ts`：只负责 TypeScript AST 层面的 import / export 语义分析，输出 collector 可消费的 module import reference。
-- `resolvers/`：只负责把源码 import specifier 转成当前包源码内的候选相对路径，不负责判断 style 文件是否存在，也不反推出 output 目录。`packageImports` 使用 `conditional-export` 解析 `package.json#imports`，优先 `source` 条件；`tsconfigPaths` 通过 TypeScript 读取 `compilerOptions.paths`，支持 `extends` 和更具体的 pattern 优先。
-- `StyleModuleEntryPlanner`：根据源码目录和 import 收集结果，生成模块级 style entry plan。
-- `style/entries.ts`：环境无关的 style graph 入口，统一暴露 package、theme、external、module 的入口语义。Production writer 和 Vite/dev renderer 都消费它。
+- `StylePackageContext`: aggregates package root, source/output directories,
+  theme files, style files, resolver, and processor. It is shared by production
+  and dev paths.
+- `StyleProcessor`: handles CSS content work such as reading files, expanding
+  `@import`, and merging PostCSS roots.
+- `WorkspaceStyleResolver`: resolves style dependencies from config to real
+  files or output paths, accounting for workspace packages and external
+  packages.
+- `styleImports/collector.ts`: scans only `.tsx` source files. It infers
+  module-level style imports from imports / named re-exports and
+  `styles.dependencies.*.components`. `.ts` files do not participate in CSS auto
+  import. `export * from '...'` is unsupported because exported component names
+  cannot be inferred reliably. Same-package source dependencies are resolved
+  through `resolvers/` and are constrained to the current package `sourceRoot`.
+- `styleImports/autoImportRules.ts`: turns `components` config into internal
+  auto import rules. It handles package-entry named imports, deep imports, and
+  specifier generation.
+- `styleImports/sourceImportExportAnalyzer.ts`: only handles TypeScript AST
+  import/export analysis and emits module import references consumed by the
+  collector.
+- `resolvers/`: turns source import specifiers into candidate relative paths
+  inside the current package source tree. It does not check whether style files
+  exist and does not infer output directories. `packageImports` uses
+  `conditional-export` for `package.json#imports` and prefers the `source`
+  condition. `tsconfigPaths` reads `compilerOptions.paths` through TypeScript,
+  supports `extends`, and prefers more specific patterns.
+- `StyleModuleEntryPlanner`: creates module-level style entry plans from source
+  directories and collected imports.
+- `style/entries.ts`: environment-neutral style graph entry semantics. It
+  exposes package, theme, external, and module entries consumed by both
+  production writers and Vite/dev renderers.
 
-### Style production 模块
+### Style Production Modules
 
 ```text
 src/css/production/
-├── builder.ts                       # CSS 构建入口
-├── packageEntryWriter.ts           # 写入包级 dist/index.css
-├── moduleOutputWriter.ts            # 编排 dist/es 和 dist/lib 下的模块化 CSS 产物
+├── builder.ts                       # CSS build entry
+├── packageEntryWriter.ts           # Writes package-level dist/index.css
+├── moduleOutputWriter.ts            # Orchestrates modular CSS output under dist/es and dist/lib
 └── format/
-    ├── sourceWriter.ts              # 复制源码 style 文件
-    ├── entryWriter.ts               # 写入 style/index.css
-    ├── moduleWriter.ts              # 写入 style/module.css
-    ├── externalWriter.ts            # 写入 style/external.css
-    ├── themeWriter.ts               # 写入 style/themes 和 themes 入口
-    ├── moduleEntryWriter.ts         # 写入模块级 style/index.css
-    └── shared.ts                    # format writer 共享类型和路径 helper
+    ├── sourceWriter.ts              # Copies source style files
+    ├── entryWriter.ts               # Writes style/index.css
+    ├── moduleWriter.ts              # Writes style/module.css
+    ├── externalWriter.ts            # Writes style/external.css
+    ├── themeWriter.ts               # Writes style/themes and theme entries
+    ├── moduleEntryWriter.ts         # Writes module-level style/index.css
+    └── shared.ts                    # Shared types and path helpers for format writers
 ```
 
-- `ModuleStyleBuilder` 负责组织构建流程：解析上下文、判断是否需要生成模块产物、调用包级入口 writer 和模块化输出 writer、输出日志。
-- `PackageStyleEntryWriter` 只负责包级 `dist/index.css` 聚合产物。
-- `ModuleStyleOutputWriter` 只负责编排 `dist/es`、`dist/lib` 下的输出流程，具体文件写入由 `format/` 下的原子 writer 完成。
+- `ModuleStyleBuilder` orchestrates the build: resolve context, decide whether
+  module output is needed, call the package entry writer and module output
+  writer, and emit logs.
+- `PackageStyleEntryWriter` only writes the package-level aggregate
+  `dist/index.css`.
+- `ModuleStyleOutputWriter` only orchestrates output under `dist/es` and
+  `dist/lib`; actual file writes are handled by atomic writers in `format/`.
 
-production 文件职责：
+Production file responsibilities:
 
-- `builder.ts`：production CSS 构建入口。负责创建 build context、创建 `StylePackageContext`、决定是否执行 modules 输出、汇总日志。
-- `packageEntryWriter.ts`：写包级入口 `dist/index.css`。这个文件会把本包主题、全局 style 依赖和本包源码 style 聚合成一个真实 CSS 文件。
-- `moduleOutputWriter.ts`：写 modules 模式下的 format 产物编排器。它遍历 `es`、`lib` 等输出格式，并按顺序调用 `format/` 下的原子 writer。
-- `format/sourceWriter.ts`：复制源码 style 文件到当前 format 输出目录，保持源码 style 文件能被模块级入口引用。
-- `format/entryWriter.ts`：写当前 format 的 style 总入口，例如 `dist/es/style/index.css`。入口组合顺序来自 `style/entries.ts`。
-- `format/moduleWriter.ts`：写当前包自身模块样式集合，例如 `dist/es/style/module.css`。
-- `format/externalWriter.ts`：写外部 style 入口，例如 `dist/es/style/external.css`。
-- `format/themeWriter.ts`：写主题相关产物，包括 `dist/es/style/themes/*.css` 和 `dist/es/themes/*.css`。
-- `format/moduleEntryWriter.ts`：写模块级 style 入口，例如 `dist/es/components/Button/style/index.css`。
-- `format/shared.ts`：放 format writer 共享类型、空入口注释和相对 import 路径 helper。
+- `builder.ts`: production CSS build entry. It creates build context,
+  `StylePackageContext`, decides whether to run module output, and summarizes
+  logs.
+- `packageEntryWriter.ts`: writes `dist/index.css`. It aggregates current
+  package themes, global style dependencies, and current package source styles
+  into one real CSS file.
+- `moduleOutputWriter.ts`: orchestrates format output when `modules` is enabled.
+  It iterates `es`, `lib`, and other output formats, then calls atomic writers
+  under `format/` in order.
+- `format/sourceWriter.ts`: copies source style files into the current format
+  output directory so module-level entries can reference them.
+- `format/entryWriter.ts`: writes the current format's style entry, such as
+  `dist/es/style/index.css`. Entry composition order comes from
+  `style/entries.ts`.
+- `format/moduleWriter.ts`: writes current package module styles, such as
+  `dist/es/style/module.css`.
+- `format/externalWriter.ts`: writes external style entries, such as
+  `dist/es/style/external.css`.
+- `format/themeWriter.ts`: writes theme output, including
+  `dist/es/style/themes/*.css` and `dist/es/themes/*.css`.
+- `format/moduleEntryWriter.ts`: writes module-level style entries, such as
+  `dist/es/components/Button/style/index.css`.
+- `format/shared.ts`: shared types, empty-entry comments, and relative import
+  path helpers for format writers.
 
-production 模块不应该重复实现 dev graph 的入口语义；入口组合顺序应优先来自 `style/entries.ts`。
+Production modules should not reimplement dev graph entry semantics. Entry
+composition order should come from `style/entries.ts`.
 
-### Style dev/Vite 模块
+### Style Dev/Vite Modules
 
 ```text
 src/css/vite/
-├── vitePlugin.ts        # Vite 插件入口
-├── hmr.ts               # style 相关 HMR 判断和更新
-└── moduleGraph/         # Vite/dev 虚拟 CSS 图
-    ├── graph.ts         # graph facade、watch 边界和 workspace 包发现
+├── vitePlugin.ts        # Vite plugin entry
+├── hmr.ts               # Style-related HMR checks and updates
+└── moduleGraph/         # Vite/dev virtual CSS graph
+    ├── graph.ts         # Graph facade, watch boundaries, and package source dispatch
     ├── styleCodeFactory.ts
     ├── requestCache.ts
     ├── devDependency.ts
@@ -171,46 +235,60 @@ src/css/vite/
     └── types.ts
 ```
 
-Vite 插件负责把 package CSS import 转成虚拟模块，并调用 `moduleGraph/` 生成 CSS 内容。HMR 模块负责判断源码、配置、style 文件变化后哪些虚拟 CSS 模块需要失效。
+The Vite plugin turns package CSS imports into virtual modules and calls
+`moduleGraph/` to generate CSS. HMR logic decides which virtual CSS modules to
+invalidate when source, config, or style files change.
 
-- `moduleGraph/graph.ts`：Vite/dev 模式下的 graph facade，根据虚拟 CSS id 创建请求缓存并分发给 CSS 生成器。
-- `moduleGraph/styleCodeFactory.ts`：根据 `style/entries.ts` 生成 dev 虚拟 CSS 内容，并递归解析 workspace style 依赖。
-- `moduleGraph/requestCache.ts`：缓存一次 graph 请求中的 package context，避免同一次请求重复加载和扫描。
-- `moduleGraph/devDependency.ts`：把 dev 虚拟 CSS 里的第三方 CSS dependency 按声明它的 package root 解析成 Vite `/@fs/...` 路径，避免虚拟模块丢失 node_modules 解析上下文。
-- `moduleGraph/packageSource/`：抽象 dev graph 的包来源。`singlePackage.ts` 使用 Vite root 作为当前包根目录；`monorepo.ts` 扫描 workspace packages。
+- `moduleGraph/graph.ts`: Vite/dev graph facade. It creates request caches from
+  virtual CSS ids and dispatches to CSS generators.
+- `moduleGraph/styleCodeFactory.ts`: generates virtual CSS from
+  `style/entries.ts` and recursively resolves package style dependencies.
+- `moduleGraph/requestCache.ts`: caches package context within a single graph
+  request to avoid repeated loading and scanning.
+- `moduleGraph/devDependency.ts`: resolves third-party CSS dependencies from the
+  package root that declares them and emits Vite `/@fs/...` imports, avoiding
+  lost `node_modules` resolution context from virtual modules.
+- `moduleGraph/packageSource/`: abstracts where dev graph packages come from.
+  `singlePackage.ts` uses Vite root as the current package root; `monorepo.ts`
+  scans workspace packages.
 
-### Watch 模块
+### Watch Module
 
 ```text
 src/css/watch/
 └── watcher.ts
 ```
 
-`ModuleStyleWatcher` 用于 `auk build-css --watch` 和 `auk dev`。它监听包内 source/config/style 变化，并 debounce 调用 `ModuleStyleBuilder`。
+`ModuleStyleWatcher` powers `auk build-css --watch` and `auk dev`. It watches
+package source/config/style changes and debounces calls to `ModuleStyleBuilder`.
 
-## CLI 链路
+## CLI Flow
 
-CLI 入口是 `bin/entry.cjs`，发布后暴露为 `auk` 和 `auklet`。
+The CLI entry is `bin/entry.cjs`, exposed as `auk` and `auklet` after
+publishing.
 
 ```mermaid
 flowchart TD
   CLI["bin/entry.cjs"] --> Command{"command"}
   Command --> Build["auk build"]
   Command --> BuildJs["auk build-js"]
+  Command --> BuildJsWatch["auk build-js --watch"]
   Command --> BuildStyle["auk build-css"]
   Command --> Dev["auk dev"]
   Command --> Version["auk version / --version"]
 
   Build --> LoadBuildConfig["loadAukletConfig"]
-  LoadBuildConfig --> CleanOutput["删除配置的 output 目录"]
+  LoadBuildConfig --> CleanOutput["remove configured output dir"]
   CleanOutput --> BuildJs
   BuildJs --> RunTsdown["runTsdown"]
   RunTsdown --> TsdownConfig["createTsdownArgs / tsdownConfig"]
   TsdownConfig --> Tsdown["tsdown"]
+  BuildJsWatch --> RunTsdownWatch["runTsdown --watch"]
+  RunTsdownWatch --> TsdownWatch["tsdown --watch"]
 
   Build --> BuildStyle
   LoadBuildConfig --> BuildStyle
-  BuildStyle --> ResolveStyleConfig["复用或读取 auklet config"]
+  BuildStyle --> ResolveStyleConfig["reuse or load auklet config"]
   ResolveStyleConfig --> StyleBuilder["ModuleStyleBuilder"]
   StyleBuilder --> PackageWriter["PackageStyleEntryWriter"]
   StyleBuilder --> FormatWriter["ModuleStyleOutputWriter"]
@@ -220,120 +298,175 @@ flowchart TD
   StyleWatch --> StyleBuilder
 ```
 
-## JavaScript 构建链路
+## JavaScript Build Flow
 
 ```mermaid
 flowchart TD
-  PackageRoot["package root"] --> LoadPkg["读取 package.json"]
+  PackageRoot["package root"] --> LoadPkg["read package.json"]
   PackageRoot --> LoadConfig["loadAukletConfig"]
   LoadConfig --> Normalize["normalizeAukletConfig"]
   LoadPkg --> TsdownConfig["tsdownConfig"]
   Normalize --> TsdownConfig
   TsdownConfig --> Args["createTsdownArgs"]
   Args --> Tsdown["tsdown"]
-  Tsdown --> Dist["dist JS / d.ts 产物"]
+  Tsdown --> Dist["dist JS / d.ts output"]
 ```
 
-关键规则：
+Key rules:
 
-- `build.target` 默认是 `es2020`。
-- `build.platform` 默认是 `neutral`。
-- `build.tsconfig` 默认从包根目录向上查找最近的 `tsconfig.json`。
-- `dependencies`、`peerDependencies` 和 `build.externals` 会作为 external 的来源。
-- `build.alias` 会透传给 tsdown `alias`，bundle 和 module 产物都生效。
-- `build.globals` 会合并进 IIFE 产物的 `output.globals`，并覆盖根据 external 包名自动推导的全局变量名。
-- `build.mainFields` 会通过 tsdown `inputOptions` 传给 bundle 产物的 rolldown `resolve.mainFields`；未配置时只给 IIFE bundle 默认设置 `['browser', 'module', 'main']`，用于兼容只有 `package.json#main` 的浏览器依赖；`modules: true` 下的 unbundled 产物不额外设置。
-- `build.configureTsdown` 是最终 tsdown config 钩子；`kind` 只区分 `bundle` 和 `module`，分别对应包级 bundle 产物和 `modules: true` 下的 unbundled 产物。
-- `modules: true` 时会生成 `dist/es` 和 `dist/lib` 这类模块产物；CSS 模块级产物也跟随这个行为。
+- `build.target` defaults to `es2020`.
+- `build.platform` defaults to `neutral`.
+- `build.tsconfig` defaults to the nearest `tsconfig.json` found by walking
+  upward from the package root.
+- `dependencies`, `peerDependencies`, and `build.externals` are sources for
+  externals.
+- `build.alias` is passed through to tsdown `alias` and applies to bundle and
+  module output.
+- `build.globals` is merged into IIFE `output.globals` and overrides global
+  names inferred from external package names.
+- `build.mainFields` is passed to rolldown `resolve.mainFields` through tsdown
+  `inputOptions` for bundle output. When omitted, only IIFE bundles get the
+  default `['browser', 'module', 'main']`, which helps browser dependencies that
+  only define `package.json#main`. Unbundled output under `modules: true` does
+  not set extra main fields.
+- `build.configureTsdown` is the final tsdown config hook. `kind` is either
+  `bundle` or `module`, corresponding to package-level bundle output and
+  unbundled output under `modules: true`.
+- When `modules: true`, auklet generates module output such as `dist/es` and
+  `dist/lib`; module-level CSS output follows the same behavior.
 
-## CSS production 构建链路
+## CSS Production Build Flow
 
 ```mermaid
 flowchart TD
-  Start["ModuleStyleBuilder.build"] --> ResolveContext["解析 packageRoot/source/output/config"]
+  Start["ModuleStyleBuilder.build"] --> ResolveContext["resolve packageRoot/source/output/config"]
   ResolveContext --> PackageContext["StylePackageContext.create"]
-  PackageContext --> Scan["扫描 source 下 style/theme/source 文件"]
-  Scan --> PackageStyle["写 dist/index.css"]
+  PackageContext --> Scan["scan style/theme/source files under source"]
+  Scan --> PackageStyle["write dist/index.css"]
   Scan --> Modules{"config.modules?"}
-  Modules -->|false| Done["结束"]
-  Modules -->|true| ModuleImports["ModuleStyleImportCollector 收集源码 import"]
-  ModuleImports --> EntryPlan["StyleModuleEntryPlanner 规划模块 style entry"]
-  EntryPlan --> SharedGraph["style/entries.ts 提供 style/theme/external 顺序"]
-  SharedGraph --> Writer["ModuleStyleOutputWriter 写 dist/es 和 dist/lib"]
+  Modules -->|false| Done["done"]
+  Modules -->|true| ModuleImports["ModuleStyleImportCollector collects source imports"]
+  ModuleImports --> EntryPlan["StyleModuleEntryPlanner plans module style entries"]
+  EntryPlan --> SharedGraph["style/entries.ts provides style/theme/external order"]
+  SharedGraph --> Writer["ModuleStyleOutputWriter writes dist/es and dist/lib"]
   Writer --> Outputs["style/index.css / module.css / external.css / themes/*.css / components/*/style/index.css"]
 ```
 
-产物语义：
+Output semantics:
 
-- `dist/index.css`：包级聚合 CSS，面向直接引用包样式的场景。
-- `dist/{es,lib}/style/index.css`：当前 format 的 style 总入口。
-- `dist/{es,lib}/style/module.css`：当前包自身模块样式集合。
-- `dist/{es,lib}/style/external.css`：external style 入口。
-- `dist/{es,lib}/themes/*.css`：主题入口，包含主题依赖和当前主题文件。
-- `dist/{es,lib}/components/*/style/index.css`：模块级 style 入口。`components/` 是常见产物路径，不代表内部语义只支持组件。
+- `dist/index.css`: package-level aggregate CSS for direct package style imports.
+- `dist/{es,lib}/style/index.css`: style entry for the current format.
+- `dist/{es,lib}/style/module.css`: module style collection for the current
+  package.
+- `dist/{es,lib}/style/external.css`: external style entry.
+- `dist/{es,lib}/themes/*.css`: theme entries including theme dependencies and
+  current theme files.
+- `dist/{es,lib}/components/*/style/index.css`: module-level style entry.
+  `components/` is a common output path, not a restriction that only components
+  are supported internally.
 
-## CSS dev/Vite 链路
+## CSS Dev/Vite Flow
 
 ```mermaid
 flowchart TD
-  Import["用户 import package css id"] --> Plugin["aukletStylePlugin"]
-  Plugin --> ResolveId["解析为虚拟 id"]
+  Import["user imports package css id"] --> Plugin["aukletStylePlugin"]
+  Plugin --> ResolveId["resolve to virtual id"]
   ResolveId --> Graph["ModuleStyleGraph"]
+  Graph --> Source["packageSource: package / monorepo"]
   Graph --> Cache["requestCache.ts"]
   Cache --> PackageContext["StylePackageContext"]
   Graph --> Factory["styleCodeFactory.ts"]
   Factory --> SharedGraph["core/style/entries.ts"]
-  SharedGraph --> LoadStyle["生成虚拟 CSS 内容"]
-  LoadStyle --> Vite["返回给 Vite"]
-  FileChange["source/config/style 变化"] --> Hmr["hmr.ts"]
-  Hmr --> Invalidate["失效相关虚拟模块"]
+  SharedGraph --> LoadStyle["generate virtual CSS content"]
+  LoadStyle --> Vite["return to Vite"]
+  FileChange["source/config/style changes"] --> Hmr["hmr.ts"]
+  Hmr --> Invalidate["invalidate related virtual modules"]
 ```
 
-dev 链路不写真实产物，而是生成虚拟 CSS 内容。它和 production writer 共享 `core/style/entries.ts`，确保以下语义一致：
+The dev flow does not write real output. It generates virtual CSS content. It
+shares `core/style/entries.ts` with production writers to keep these semantics
+aligned:
 
-- style 总入口包含哪些部分，以及顺序。
-- theme 入口是否包含主题依赖，以及当前主题内容。
-- external 入口如何表达外部 style 依赖。
+- which parts are included in the style entry and in what order;
+- whether theme entries include theme dependencies and current theme content;
+- how external style dependencies are represented.
 
-dev 虚拟 CSS 会保留 workspace style 依赖的虚拟递归语义；非 workspace 的第三方 CSS dependency 会用声明它的 package root 解析，并输出为 Vite `/@fs/...` import，避免 PostCSS/Vite 从消费项目或虚拟模块上下文解析失败。
+Virtual dev CSS keeps inter-package style dependencies as recursive virtual CSS.
+Third-party CSS dependencies are resolved from the package root that declares
+them and emitted as Vite `/@fs/...` imports, avoiding PostCSS/Vite resolution
+failures from consumer project or virtual module context.
 
-Vite 插件支持两种 package source：
+The Vite plugin supports two package sources:
 
-- `mode: 'package'`：默认值，Vite root 就是当前包根目录，适合单包组件库。
-- `mode: 'monorepo'`：从 Vite root 向上查找 `pnpm-workspace.yaml`，并扫描 workspace packages。
+- `mode: 'package'`: default. Vite root is the current package root, intended
+  for single-package component libraries.
+- `mode: 'monorepo'`: walks upward from Vite root to find `pnpm-workspace.yaml`
+  and scans workspace packages.
 
 ## Examples
 
 ```text
 examples/
-├── components/     # 组件库 monorepo demo
-├── libs/           # 纯 lib monorepo demo
-├── single-package/ # 单包组件库 demo，包含 Vite dev 模式
-├── single-lib/     # 单包纯 TypeScript lib demo
-└── __tests__/      # examples 构建产物测试
+├── components/     # Component library monorepo demo
+├── libs/           # Pure lib monorepo demo
+├── single-package/ # Single-package component library demo with Vite dev mode
+├── single-lib/     # Single-package pure TypeScript lib demo
+└── __tests__/      # Example output tests
 ```
 
-examples 用于覆盖真实使用场景：
+Examples cover real usage scenarios:
 
-- `components`：包含 theme、ui、dashboard 等包，覆盖组件库、主题依赖、包间组件依赖。
-- `libs`：覆盖没有 CSS 的纯 TypeScript lib 构建。
-- `single-package`：覆盖默认 `aukletStylePlugin()` 的单包 Vite/dev 虚拟 CSS 图，以及单包组件 CSS 构建。
-- `single-lib`：覆盖单包纯 TypeScript lib 构建，预期没有 CSS 产物。
-- `examples/__tests__`：检查 examples 构建后的 JS 产物、CSS 产物和目录结构。
+- `components`: includes theme, ui, dashboard, and related packages, covering
+  component libraries, theme dependencies, and inter-package component
+  dependencies.
+- `libs`: covers pure TypeScript library builds without CSS.
+- `single-package`: covers default `aukletStylePlugin()` package mode and
+  single-package component CSS builds.
+- `single-lib`: covers single-package pure TypeScript library builds, where CSS
+  output is expected to be empty.
+- `examples/__tests__`: checks JavaScript output, CSS output, and directory
+  structure after example builds.
 
-根目录 `pnpm build:examples` 会构建 examples 下的包，`pnpm test:examples` 会先构建再运行 examples 测试，`pnpm dev:examples` 可启动带 dev script 的 demo 进行手动检查。
+Root `pnpm build:examples` builds packages under examples. `pnpm test:examples`
+builds examples first and then runs example tests. `pnpm dev:examples` starts
+demos that expose a dev script for manual checks.
 
-## 测试策略
+## Testing Strategy
 
-测试规范详见 `TESTING.md`。这里只列维护时最重要的原则：
+See `TESTING.md` for the full test guide. The most important maintenance rules
+are:
 
-- 影响最终产物结构或 dev/production 语义一致性的改动，需要项目级 e2e 覆盖。
-- 单个模块的边界行为，用对应模块单测覆盖。
-- 文件系统测试使用 `src/__tests__/fixtures/virtualProject.ts`，临时文件放在 `src/__tests__/.tmp/`。
-- 真实构建产物和 Vite/dev graph 尽量 normalize 成同一种 `StyleStructure` 再断言。
-- 不要在测试里重复封装纯转发的 `readFile/writeFile` helper。
+```text
+src/__tests__/
+├── build/                       # clean output, tsdown args/config tests
+├── css/
+│   ├── builder/                 # production CSS builder branch tests
+│   ├── moduleGraph/             # Vite/dev graph, cache, source boundary tests
+│   │   └── packageSource/       # monorepo/package source focused tests
+│   ├── resolvers/               # relative/imports/tsconfig paths resolver tests
+│   ├── styleImports/            # auto import rules and collector tests
+│   ├── hmr.spec.ts
+│   ├── path.spec.ts
+│   ├── styleProcessor.spec.ts
+│   ├── styleSpecifier.spec.ts
+│   ├── watcher.spec.ts
+│   └── workspaceStyleResolver.spec.ts
+├── e2e/                         # project-level style output and package mode smoke tests
+├── fixtures/                    # virtual project and style structure helpers
+├── configLoader.spec.ts
+└── index.spec.ts
+```
 
-常用验证命令：
+- Changes that affect final output structure or dev/production semantic
+  alignment need project-level e2e coverage.
+- Single-module boundary behavior belongs in that module's unit tests.
+- File-system tests use `src/__tests__/fixtures/virtualProject.ts`; temporary
+  files live in `src/__tests__/.tmp/`.
+- Prefer normalizing real build output and Vite/dev graph output into the same
+  `StyleStructure` before assertions.
+- Do not wrap pure `readFile/writeFile` forwarding helpers in tests.
+
+Common verification commands:
 
 ```bash
 pnpm run typecheck
@@ -342,18 +475,26 @@ pnpm run build
 pnpm run test:examples
 ```
 
-## 修改建议
+## Change Checklist
 
-- 配置字段变更时，同步检查 `types.ts`、`config.ts`、`README.md`、测试 fixture 和 examples。
-- CSS 入口顺序变更时，优先改 `src/css/core/style/entries.ts`，再检查 production 和 dev 消费逻辑。
-- 新增 style 依赖类型时，同时检查 `dependencies.ts`、`workspaceStyleResolver.ts`、`styleImports/collector.ts`、`moduleGraph/` 和 `StyleStructure` 测试 helper。
-- 新增 CLI 行为时，同步检查 `bin/entry.cjs`、README CLI 文档和必要的单测。
-- 新增 public API 时，同步检查 `src/index.ts` 和 `README.md` 的 Programmatic API。
+- Config field changes: check `types.ts`, `config.ts`, `README.md`, test
+  fixtures, and examples.
+- CSS entry order changes: update `src/css/core/style/entries.ts` first, then
+  check production and dev consumers.
+- New style dependency type: check `dependencies.ts`, `workspaceStyleResolver.ts`,
+  `styleImports/collector.ts`, `moduleGraph/`, and `StyleStructure` test
+  helpers.
+- New CLI behavior: check `bin/entry.cjs`, README CLI docs, and necessary unit
+  tests.
+- New public API: check `src/index.ts` and README Programmatic API docs.
 
-## 代码风格约定
+## Code Style
 
-- 导出的普通函数优先使用 `function` 声明。
-- 不导出的局部 helper 可以使用箭头函数。
-- 函数通常不显式标注返回值类型；需要约束返回结构时，在 `return` 的值上使用 `satisfies`。
-- 路径语义尽量使用 posix `/` 做输出和测试断言，文件系统绝对路径只在内部解析阶段出现。
-- 不要把 CSS 专用命名扩散到未来可能支持其他样式语言的通用模块，通用层优先使用 `style` 命名。
+- Exported normal functions should prefer `function` declarations.
+- Non-exported local helpers may use arrow functions.
+- Functions usually do not need explicit return type annotations; use
+  `satisfies` on returned values when the return structure needs constraints.
+- Use posix `/` semantics for output and test assertions. Absolute file-system
+  paths should only appear in internal resolution steps.
+- Do not spread CSS-specific naming into generic modules that may support other
+  style languages later. Generic layers should prefer `style` naming.
