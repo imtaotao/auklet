@@ -2,21 +2,21 @@ import path from 'node:path';
 import { aukletConfigFile } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
-import { ModuleStyleGraphRequestCache } from '#auklet/css/vite/moduleGraph/requestCache';
-import { StyleCodeFactory } from '#auklet/css/vite/moduleGraph/styleCodeFactory';
 import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
+import { StyleCodeFactory } from '#auklet/css/vite/moduleGraph/styleCodeFactory';
+import { ModuleStyleGraphRequestCache } from '#auklet/css/vite/moduleGraph/requestCache';
+import { createMonorepoPackageSource } from '#auklet/css/vite/moduleGraph/packageSource/monorepo';
+import type { StylePackageSource } from '#auklet/css/vite/moduleGraph/packageSource/types';
 import type {
   ModuleStyleGraphOptions,
   PackageStyleId,
 } from '#auklet/css/vite/moduleGraph/types';
-import { SOURCE_COMPONENT_MODULE_RE } from '#auklet/css/constants';
-import { normalizeFileKey, toWatchPath } from '#auklet/utils';
+import { normalizeFileKey } from '#auklet/utils';
 
-// package style graph 的对外门面，负责 workspace 发现、watch 边界和请求分发。
+// package style graph 的对外门面，负责 package source、watch 边界和请求分发。
 export class ModuleStyleGraph {
   private readonly config: NonNullable<ModuleStyleGraphOptions['config']>;
-  private readonly workspaceRoot: string;
-  private readonly packagesDir: string;
+  private readonly packageSource: StylePackageSource;
   private readonly styleCodeFactory: StyleCodeFactory;
   private readonly loadAukletConfig: NonNullable<
     ModuleStyleGraphOptions['loadAukletConfig']
@@ -24,32 +24,25 @@ export class ModuleStyleGraph {
 
   constructor(options: ModuleStyleGraphOptions) {
     this.config = options.config ?? moduleStyleBuildConfig;
-    this.workspaceRoot = normalizeFileKey(options.workspaceRoot);
-    this.packagesDir = options.packagesDir ?? 'packages';
+    const mode = options.mode ?? 'monorepo';
+    if (mode === 'package') {
+      throw new Error('[auklet:css] package mode is not supported yet.');
+    }
+    this.packageSource = createMonorepoPackageSource({
+      workspaceRoot: normalizeFileKey(options.workspaceRoot),
+      packagesDir: options.packagesDir ?? 'packages',
+      styleExtensions: this.config.styleExtensions,
+    });
     this.loadAukletConfig = options.loadAukletConfig ?? loadAukletConfig;
     this.styleCodeFactory = new StyleCodeFactory(this.config);
   }
 
   parsePackageStyleId(id: string) {
-    return parsePackageStyleId(id, this.getWorkspacePackageNames());
+    return parsePackageStyleId(id, this.getPackageNames());
   }
 
-  isWorkspaceSourceGraphFile(file: string) {
-    const normalizedFile = normalizeFileKey(file);
-    const packagesRoot = normalizeFileKey(
-      path.join(this.workspaceRoot, this.packagesDir),
-    );
-    if (!normalizedFile.startsWith(`${packagesRoot}/`)) {
-      return false;
-    }
-    if (normalizedFile.endsWith(aukletConfigFile)) return true;
-    if (SOURCE_COMPONENT_MODULE_RE.test(normalizedFile)) {
-      return true;
-    }
-
-    return this.config.styleExtensions.some((extension) =>
-      normalizedFile.endsWith(extension),
-    );
+  isSourceGraphFile(file: string) {
+    return this.packageSource.isSourceGraphFile(file);
   }
 
   isStyleConfigFile(file: string) {
@@ -60,16 +53,12 @@ export class ModuleStyleGraph {
     return this.config.styleExtensions.includes(path.extname(file));
   }
 
-  getWorkspacePackageNames() {
-    return this.createRequestCache().getWorkspacePackageNames();
+  getPackageNames() {
+    return this.packageSource.getPackageNames();
   }
 
   getWatchRoots() {
-    const packagesRoot = path.join(this.workspaceRoot, this.packagesDir);
-    return [
-      toWatchPath(packagesRoot, '*', 'src'),
-      toWatchPath(packagesRoot, '*', aukletConfigFile),
-    ];
+    return this.packageSource.getWatchRoots();
   }
 
   createPackageStyleCode(parsed: PackageStyleId) {
@@ -81,8 +70,7 @@ export class ModuleStyleGraph {
 
   private createRequestCache() {
     return new ModuleStyleGraphRequestCache({
-      workspaceRoot: this.workspaceRoot,
-      packagesDir: this.packagesDir,
+      packageSource: this.packageSource,
       config: this.config,
       loadAukletConfig: this.loadAukletConfig,
     });

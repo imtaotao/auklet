@@ -319,7 +319,7 @@ export class StyleCodeFactory {
     const parsed = parsePackageStyleSpecifier(specifier);
     if (!parsed) return specifier;
 
-    if (cache.isWorkspacePackageName(parsed.packageName)) {
+    if (cache.isKnownPackageName(parsed.packageName)) {
       if (parsed.stylePath === STYLE_ENTRY) {
         return `${parsed.packageName}/${EXTERNAL_ENTRY}`;
       }
@@ -339,6 +339,6 @@ export class StyleCodeFactory {
     id: string,
     cache: ModuleStyleGraphRequestCache,
   ) {
-    return parsePackageStyleId(id, cache.getWorkspacePackageNames());
+    return parsePackageStyleId(id, cache.getPackageNames());
   }
 }

@@ -37,7 +37,7 @@ const browserVirtualPath = (id: string) => {
   return `/@id/${id.replace('\0', '__x00__')}`;
 };
 
-const createModule = (id: string) => ({ id } satisfies MockModule);
+const createModule = (id: string) => ({ id }) satisfies MockModule;
 
 const registerModule = (context: HmrTestContext, id: string) => {
   const module = createModule(id);
@@ -89,8 +89,8 @@ const expectJsUpdates = (
 
 const createGraph = () => {
   return {
-    getWorkspacePackageNames: vi.fn(() => [fixture.packageName]),
-    isWorkspaceSourceGraphFile: vi.fn((file: string) =>
+    getPackageNames: vi.fn(() => [fixture.packageName]),
+    isSourceGraphFile: vi.fn((file: string) =>
       file.startsWith(`${fixture.workspaceRoot}/packages/`),
     ),
     isStyleFile: vi.fn((file: string) => file.endsWith('.css')),

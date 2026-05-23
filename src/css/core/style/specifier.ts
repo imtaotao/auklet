@@ -11,7 +11,7 @@ export function parsePackageStyleSpecifier(specifier: string) {
   const parts = specifier.split('/');
   const packageName = specifier.startsWith('@')
     ? `${parts.shift() ?? ''}/${parts.shift() ?? ''}`
-    : parts.shift() ?? '';
+    : (parts.shift() ?? '');
 
   if (!packageName) return null;
 

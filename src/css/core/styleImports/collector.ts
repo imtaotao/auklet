@@ -195,8 +195,8 @@ export class ModuleStyleImportCollector {
       const dependencyPaths = isArray(dependency.components)
         ? dependency.components
         : dependency.components
-        ? [dependency.components]
-        : [];
+          ? [dependency.components]
+          : [];
 
       for (const dependencyPath of dependencyPaths) {
         rules.push({

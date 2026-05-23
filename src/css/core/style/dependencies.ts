@@ -11,8 +11,8 @@ export function getGlobalStyleDependencies(config: NormalizedAukletConfig) {
     const globalDependencies = isArray(dependency.entry)
       ? dependency.entry
       : dependency.entry
-      ? [dependency.entry]
-      : [];
+        ? [dependency.entry]
+        : [];
 
     for (const globalDependency of globalDependencies) {
       dependencies.push(joinDependencySpecifier(packageName, globalDependency));

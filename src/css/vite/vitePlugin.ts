@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { HotUpdateOptions, ModuleNode, Plugin, ViteDevServer } from 'vite';
 import type { ModuleStyleGraphOptions } from '#auklet/css/vite/moduleGraph/types';
-import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { AukletStyleHmr } from '#auklet/css/vite/hmr';
+import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 
 const WORKSPACE_FILE = 'pnpm-workspace.yaml';
 const VIRTUAL_ID_PREFIX = 'virtual:auklet-css:';
@@ -54,7 +54,7 @@ const invalidateVirtualModules = (
   graph: ModuleStyleGraph,
 ) => {
   const modules: Array<ModuleNode> = [];
-  for (const packageName of graph.getWorkspacePackageNames()) {
+  for (const packageName of graph.getPackageNames()) {
     for (const entry of ['style.css', 'external.css', 'module.css']) {
       const module = server.moduleGraph.getModuleById(
         `${RESOLVED_VIRTUAL_ID_PREFIX}${packageName}/${entry}`,
@@ -68,7 +68,7 @@ const invalidateVirtualModules = (
 };
 
 export type AukletStylePluginOptions = Partial<
-  Pick<ModuleStyleGraphOptions, 'workspaceRoot'>
+  Pick<ModuleStyleGraphOptions, 'workspaceRoot' | 'mode'>
 > &
   Omit<ModuleStyleGraphOptions, 'workspaceRoot'>;
 
@@ -129,7 +129,7 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
       server.watcher.add(graph.getWatchRoots());
 
       const invalidateStyleGraph = (file: string) => {
-        if (!graph.isWorkspaceSourceGraphFile(file)) return false;
+        if (!graph.isSourceGraphFile(file)) return false;
         invalidateVirtualModules(server, graph);
         return true;
       };

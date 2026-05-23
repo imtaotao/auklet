@@ -21,7 +21,7 @@ export type StyleEntryPart =
   | StyleModulePart;
 
 const dependenciesPart = (specifiers: Array<string>) =>
-  ({ type: 'dependencies', specifiers } satisfies DependenciesPart);
+  ({ type: 'dependencies', specifiers }) satisfies DependenciesPart;
 
 // 环境无关的 style entry graph。production writer 和 Vite/dev renderer 都从这里取入口语义。
 export function createStyleEntryParts(config: NormalizedAukletConfig) {

@@ -45,9 +45,8 @@ const runBuildStyle = async (args, options = {}) => {
     return 0;
   }
 
-  const { ModuleStyleBuilder } = await import(
-    '../dist/css/production/builder.js'
-  );
+  const { ModuleStyleBuilder } =
+    await import('../dist/css/production/builder.js');
   const builder = new ModuleStyleBuilder({ aukletConfig, logger: console });
   await builder.build();
   return 0;
@@ -60,9 +59,8 @@ const runBuildJs = async (args) => {
 
 const runBuild = async (args) => {
   const aukletConfig = await loadCurrentAukletConfig();
-  const { cleanAukletOutputByConfig } = await import(
-    '../dist/build/cleanOutput.js'
-  );
+  const { cleanAukletOutputByConfig } =
+    await import('../dist/build/cleanOutput.js');
   cleanAukletOutputByConfig(process.cwd(), aukletConfig);
 
   const jsExitCode = await runBuildJs(args);

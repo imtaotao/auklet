@@ -356,10 +356,10 @@ describe('ModuleStyleGraph', () => {
     ];
 
     for (const file of sourceGraphFiles) {
-      expect(graph.isWorkspaceSourceGraphFile(file)).toBe(true);
+      expect(graph.isSourceGraphFile(file)).toBe(true);
     }
     expect(
-      graph.isWorkspaceSourceGraphFile(
+      graph.isSourceGraphFile(
         'C:/repo/workspace/packages/app-package/src/pages/Blog/data.ts',
       ),
     ).toBe(false);
@@ -368,6 +368,16 @@ describe('ModuleStyleGraph', () => {
       'C:/repo/workspace/packages/*/src',
       'C:/repo/workspace/packages/*/auklet.config.ts',
     ]);
+  });
+
+  test('rejects package mode until package source is implemented', () => {
+    expect(
+      () =>
+        new ModuleStyleGraph({
+          workspaceRoot: fixture.root,
+          mode: 'package',
+        }),
+    ).toThrow('package mode is not supported yet');
   });
 
   test('reuses package contexts inside one CSS request', async () => {

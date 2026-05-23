@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { aukletConfigFile, normalizeAukletConfig } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
@@ -10,6 +9,7 @@ import type {
 } from '#auklet/types';
 import type { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
+import type { StylePackageSource } from '#auklet/css/vite/moduleGraph/packageSource/types';
 import type {
   LoadAukletConfig,
   PackageStyleId,
@@ -26,22 +26,14 @@ export type PackageStyleContext = {
   styleProcessor: StyleProcessor;
 };
 
-type WorkspacePackage = {
-  packageName: string;
-  packageRoot: string;
-};
-
 // 单次虚拟 CSS 请求内的上下文缓存；每次请求新建，确保跨请求能看到配置和源码变化。
 export type ModuleStyleGraphRequestCacheOptions = {
-  workspaceRoot: string;
-  packagesDir: string;
+  packageSource: StylePackageSource;
   config: ModuleStyleBuildConfig;
   loadAukletConfig?: LoadAukletConfig;
 };
 
 export class ModuleStyleGraphRequestCache {
-  private workspacePackages?: Array<WorkspacePackage>;
-  private workspacePackageNames?: Array<string>;
   private readonly contexts = new Map<
     string,
     Promise<PackageStyleContext | null>
@@ -52,15 +44,12 @@ export class ModuleStyleGraphRequestCache {
     this.loadAukletConfig = options.loadAukletConfig ?? loadAukletConfig;
   }
 
-  getWorkspacePackageNames() {
-    this.workspacePackageNames ??= this.getWorkspacePackages().map(
-      (item) => item.packageName,
-    );
-    return this.workspacePackageNames;
+  getPackageNames() {
+    return this.options.packageSource.getPackageNames();
   }
 
-  isWorkspacePackageName(packageName: string) {
-    return this.getWorkspacePackageNames().includes(packageName);
+  isKnownPackageName(packageName: string) {
+    return this.options.packageSource.isKnownPackageName(packageName);
   }
 
   async getContext(parsed: PackageStyleId) {
@@ -73,13 +62,12 @@ export class ModuleStyleGraphRequestCache {
   }
 
   private async createContext(parsed: PackageStyleId) {
-    const workspacePackage = this.getWorkspacePackages().find(
-      (item) => item.packageName === parsed.packageName,
-    );
-    if (!workspacePackage) return null;
+    const stylePackage = this.options.packageSource
+      .getPackages()
+      .find((item) => item.packageName === parsed.packageName);
+    if (!stylePackage) return null;
 
-    const packageRoot = workspacePackage.packageRoot;
-    if (!fs.existsSync(packageRoot)) return null;
+    const packageRoot = stylePackage.packageRoot;
 
     const rawConfig = await this.loadAukletConfig(packageRoot, {
       cacheBust: true,
@@ -106,41 +94,5 @@ export class ModuleStyleGraphRequestCache {
       sourceRoot: packageContext.sourceRoot,
       styleProcessor: packageContext.styleProcessor,
     };
-  }
-
-  private getWorkspacePackages() {
-    if (this.workspacePackages) return this.workspacePackages;
-
-    const packagesRoot = path.join(
-      this.options.workspaceRoot,
-      this.options.packagesDir,
-    );
-    if (!fs.existsSync(packagesRoot)) {
-      this.workspacePackages = [];
-      return this.workspacePackages;
-    }
-
-    this.workspacePackages = fs
-      .readdirSync(packagesRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .flatMap((entry) => {
-        const packageRoot = path.join(packagesRoot, entry.name);
-        const packageJsonPath = path.join(packageRoot, 'package.json');
-        if (!fs.existsSync(packageJsonPath)) return [];
-
-        const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {
-          name?: string;
-        };
-        if (!pkg.name) return [];
-
-        return [
-          {
-            packageName: pkg.name,
-            packageRoot,
-          },
-        ];
-      });
-
-    return this.workspacePackages;
   }
 }

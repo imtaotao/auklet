@@ -4,6 +4,7 @@ import type { AukletConfig, ModuleStyleBuildConfig } from '#auklet/types';
 export interface ModuleStyleGraphOptions {
   workspaceRoot: string;
   packagesDir?: string;
+  mode?: 'monorepo' | 'package';
   config?: ModuleStyleBuildConfig;
   loadAukletConfig?: LoadAukletConfig;
 }

@@ -1,6 +1,6 @@
 {
   "name": "auklet",
-  "version": "0.0.15",
+  "version": "0.0.17",
   "type": "module",
   "author": "chentao.arthur",
   "packageManager": "pnpm@10.27.0",
@@ -20,6 +20,7 @@
     "test:examples": "pnpm build:examples && vitest run examples/__tests__",
     "test:coverage": "vitest run src/__tests__ --coverage",
     "typecheck": "tsc --noEmit --skipLibCheck",
+    "dev:examples": "pnpm --filter './examples/*' --if-present dev",
     "build:examples": "pnpm --filter './examples/*' build",
     "format:md": "prettier --write \"*.md\" \"examples/**/*.md\"",
     "format": "prettier --write \"package.json\" \"pnpm-workspace.yaml\" \"(bin|src|dist|examples)/**/*.{js,mjs,cjs,ts,tsx,json,md,yaml,css}\""
@@ -63,26 +64,26 @@
     "tsdown"
   ],
   "dependencies": {
-    "unrun": "^0.3.0",
-    "execa": "^9.1.0",
-    "aidly": "^1.37.0",
-    "rimraf": "^6.0.1",
-    "tsdown": "^0.22.0",
-    "postcss": "^8.5.14",
-    "chokidar": "^5.0.0",
-    "minimist": "^1.2.8",
-    "typescript": "^6.0.3",
-    "conditional-export": "^1.1.0"
+    "unrun": "catalog:",
+    "execa": "catalog:",
+    "aidly": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "postcss": "catalog:",
+    "chokidar": "catalog:",
+    "minimist": "catalog:",
+    "typescript": "catalog:",
+    "conditional-export": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^22.17.0",
-    "@types/minimist": "^1.2.5",
-    "@vitest/coverage-v8": "^1.6.0",
-    "husky": "^9.0.11",
-    "prettier": "^2.4.1",
-    "lint-staged": "^15.2.5",
-    "vite": "^8.0.13",
-    "vitest": "^1.6.0"
+    "@types/node": "catalog:",
+    "@types/minimist": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "husky": "catalog:",
+    "prettier": "catalog:",
+    "lint-staged": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "lint-staged": {
     "*.js": [

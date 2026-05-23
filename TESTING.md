@@ -92,6 +92,7 @@ e2e 重点断言：
 - `ModuleStyleImportCollector` / `styleImports`：从 `.tsx` 源码 import 和 named re-export 推导 style import，包括 package entry、deep import、namespace import、same-package import、local re-export binding、type-only skip、`.ts` 文件 skip，以及不支持 `export * from '...'` 的报错。collector 测试只保留集成语义，resolver 的细分边界放到 `css/resolvers/*.spec.ts`。
 - `css/core/resolvers`：分别测试相对路径、`package.json#imports` 和 `tsconfig.compilerOptions.paths`。重点覆盖只返回当前 `sourceRoot` 内的候选路径、`package.json#imports` 的 `source` 条件、外部/未知 specifier、`tsconfig extends`、精确 alias 和更具体 pattern 优先。
 - `ModuleStyleGraph`：Vite/dev 虚拟入口、图结构、递归 workspace 依赖、第三方 CSS dependency 的 `/@fs` dev 解析、主题顺序、source graph 判断、watch roots、模块依赖顺序。
+- `moduleGraph/packageSource`：Vite/dev package source 的包发现、package name 列表、watch roots、source graph 文件边界。monorepo 和后续 single package source 分别写聚焦单测，不把虚拟 CSS 生成场景塞进 source 单测。
 - `ModuleStyleBuilder`：构建器自己的分支和产物边界，例如 legacy output-format rewrite、无 CSS 模块、空 style 入口、默认 cwd。
 - `ModuleStyleWatcher`：watch roots、debounce、logger、builder 调用参数。
 - `configLoader`：配置模块形态、TypeScript 配置加载、缺失配置、临时文件清理。

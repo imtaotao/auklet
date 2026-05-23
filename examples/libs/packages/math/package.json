@@ -6,7 +6,7 @@
     "build": "auk build"
   },
   "dependencies": {
-    "aidly": "^1.37.0"
+    "aidly": "catalog:"
   },
   "devDependencies": {
     "auklet": "workspace:*"

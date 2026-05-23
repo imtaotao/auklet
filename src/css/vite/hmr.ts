@@ -33,7 +33,7 @@ const invalidateVirtualModules = (
   graph: ModuleStyleGraph,
 ) => {
   const modules: Array<ModuleNode> = [];
-  for (const packageName of graph.getWorkspacePackageNames()) {
+  for (const packageName of graph.getPackageNames()) {
     for (const entry of ['style.css', 'external.css', 'module.css']) {
       const module = server.moduleGraph.getModuleById(
         `\0auklet-css:${packageName}/${entry}`,
@@ -111,7 +111,7 @@ export class AukletStyleHmr {
   handleStyleHotUpdate(context: HotUpdateOptions) {
     const graph = this.graph();
     if (
-      !graph.isWorkspaceSourceGraphFile(context.file) ||
+      !graph.isSourceGraphFile(context.file) ||
       !graph.isStyleFile(context.file)
     ) {
       return;
