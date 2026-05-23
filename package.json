@@ -69,6 +69,7 @@
     "aidly": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "semver": "catalog:",
     "postcss": "catalog:",
     "chokidar": "catalog:",
     "minimist": "catalog:",
@@ -78,6 +79,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/semver": "catalog:",
     "@types/minimist": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "husky": "catalog:",

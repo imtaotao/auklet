@@ -3,8 +3,9 @@ packages:
   - 'examples/*/packages/*'
 
 catalog:
-  '@types/minimist': 1.2.5
   '@types/node': 22.17.0
+  '@types/semver': 7.7.1
+  '@types/minimist': 1.2.5
   '@vitest/coverage-v8': 4.1.7
   aidly: 1.37.0
   chokidar: 5.0.0
@@ -16,6 +17,7 @@ catalog:
   postcss: 8.5.15
   prettier: 3.8.3
   rimraf: 6.1.3
+  semver: 7.8.1
   tsdown: 0.22.0
   typescript: 6.0.3
   unrun: 0.3.0
