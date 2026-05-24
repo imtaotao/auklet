@@ -13,6 +13,7 @@ catalog:
   execa: 9.6.1
   husky: 9.1.7
   lint-staged: 17.0.5
+  verdaccio: 6.7.1
   minimist: 1.2.8
   postcss: 8.5.15
   prettier: 3.8.3

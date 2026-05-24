@@ -1,14 +1,28 @@
 {
   "name": "@demo/single-package",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "scripts": {
     "build": "auk build",
-    "dev": "vite --host 127.0.0.1"
+    "dev": "vite --host 127.0.0.1",
+    "publish:dry-run": "NPM_CONFIG_CACHE=.publish-cache auk publish --dry-run",
+    "publish:local": "NPM_CONFIG_CACHE=.publish-cache auk publish"
+  },
+  "auklet": {
+    "publish": {
+      "before": "node -e \"console.log('[publish-demo] before', process.env.AUKLET_PUBLISH_DRY_RUN, process.env.AUKLET_PUBLISH_PACKAGES)\"",
+      "afterSuccess": "node -e \"console.log('[publish-demo] success', process.env.AUKLET_PUBLISH_DRY_RUN, process.env.AUKLET_PUBLISH_PACKAGES)\"",
+      "afterFailure": "node -e \"console.log('[publish-demo] failure', process.env.AUKLET_PUBLISH_ERROR)\""
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "http://127.0.0.1:4873"
   },
   "devDependencies": {
-    "auklet": "workspace:*",
+    "auklet": "link:../..",
     "vite": "catalog:"
   },
   "exports": {

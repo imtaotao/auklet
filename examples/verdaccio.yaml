@@ -1,0 +1,22 @@
+storage: .verdaccio/storage
+
+auth:
+  htpasswd:
+    file: .verdaccio/htpasswd
+
+uplinks: {}
+
+packages:
+  '@*/*':
+    access: $all
+    publish: $all
+    unpublish: $all
+  '**':
+    access: $all
+    publish: $all
+    unpublish: $all
+
+log:
+  type: stdout
+  format: pretty
+  level: warn

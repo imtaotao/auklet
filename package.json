@@ -20,6 +20,7 @@
     "test:examples": "pnpm build:examples && vitest run examples/__tests__",
     "test:coverage": "vitest run src/__tests__ --coverage",
     "typecheck": "tsc --noEmit --skipLibCheck",
+    "dev:registry": "verdaccio --config examples/verdaccio.yaml --listen 127.0.0.1:4873",
     "dev:examples": "pnpm --filter './examples/*' --if-present dev",
     "build:examples": "pnpm --filter './examples/*' build",
     "format:md": "prettier --write \"*.md\" \"examples/**/*.md\"",
@@ -83,6 +84,7 @@
     "@types/minimist": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "husky": "catalog:",
+    "verdaccio": "catalog:",
     "lint-staged": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

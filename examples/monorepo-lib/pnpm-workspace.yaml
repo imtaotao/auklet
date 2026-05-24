@@ -1,0 +1,5 @@
+packages:
+  - 'packages/*'
+
+catalog:
+  aidly: 1.37.0

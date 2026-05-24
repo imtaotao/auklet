@@ -1,8 +1,21 @@
 {
   "name": "@demo/monorepo-package",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter './packages/*' build"
+    "build": "pnpm --filter './packages/*' build",
+    "publish:dry-run": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/* --dry-run",
+    "publish:local": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/*"
+  },
+  "auklet": {
+    "publish": {
+      "before": "node -e \"console.log('[publish-demo] before', process.env.AUKLET_PUBLISH_DRY_RUN, process.env.AUKLET_PUBLISH_PACKAGES)\"",
+      "afterSuccess": "node -e \"console.log('[publish-demo] success', process.env.AUKLET_PUBLISH_DRY_RUN, process.env.AUKLET_PUBLISH_PACKAGES)\"",
+      "afterFailure": "node -e \"console.log('[publish-demo] failure', process.env.AUKLET_PUBLISH_ERROR)\""
+    }
+  },
+  "devDependencies": {
+    "auklet": "link:../.."
   }
 }

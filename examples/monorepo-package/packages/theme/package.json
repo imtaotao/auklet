@@ -5,8 +5,14 @@
   "scripts": {
     "build": "auk build-css"
   },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "http://127.0.0.1:4873"
+  },
   "devDependencies": {
-    "auklet": "workspace:*"
+    "auklet": "link:../../../.."
   },
   "exports": {
     "./style.css": "./dist/index.css",
