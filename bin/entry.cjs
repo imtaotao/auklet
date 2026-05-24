@@ -104,6 +104,18 @@ const runDev = async () => {
   return failed?.exitCode ?? 0;
 };
 
+const runPublish = async (args) => {
+  const { runPublishCli } = await import('../dist/publish/cli.js');
+  await runPublishCli(args);
+  return 0;
+};
+
+const runOwner = async (args) => {
+  const { runOwnerCli } = await import('../dist/publish/cli.js');
+  await runOwnerCli(args);
+  return 0;
+};
+
 const argv = minimist(process.argv.slice(2), {
   boolean: ['help', 'version'],
   alias: {
@@ -129,6 +141,8 @@ if (argv.help || !command) {
   console.log('  build-js  Build package JavaScript output with tsdown');
   console.log('  build-css  Build package module CSS output, supports --watch');
   console.log('  dev       Watch package JavaScript and CSS output');
+  console.log('  publish   Build and publish package output with pnpm');
+  console.log('  owner     Manage npm package owners with pnpm');
   console.log('  version   Print auklet version');
   console.log('');
   console.log('Options:');
@@ -142,6 +156,8 @@ const runners = {
   'build-js': runBuildJs,
   'build-css': runBuildStyle,
   dev: runDev,
+  publish: runPublish,
+  owner: runOwner,
   version: runVersion,
 };
 

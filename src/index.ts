@@ -15,6 +15,12 @@ export type {
   StyleOptions,
 } from '#auklet/types';
 export type { RunTsdownOptions } from '#auklet/build/runTsdown';
+export type {
+  OwnerOptions,
+  PublishOptions,
+  PublishPackageConfig,
+  PublishTarget,
+} from '#auklet/publish/types';
 export type { AukletStylePluginOptions } from '#auklet/css/vite/vitePlugin';
 export {
   aukletDefaultOptions,
@@ -27,5 +33,6 @@ export {
 } from '#auklet/configLoader';
 export { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
 export { createTsdownArgs, runTsdown } from '#auklet/build/runTsdown';
+export { addOwners, publishPackages } from '#auklet/publish/runner';
 export { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
 export { ModuleStyleBuilder } from '#auklet/css/production/builder';
