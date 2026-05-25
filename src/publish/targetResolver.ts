@@ -5,8 +5,8 @@ import {
   readPackageJson,
   requirePackageName,
   requirePackageVersion,
-} from '#auklet/publish/packageJson';
-import { readPnpmWorkspacePackages } from '#auklet/publish/pnpm';
+} from '#auklet/publish/api/packageJsonApi';
+import { readPnpmWorkspacePackages } from '#auklet/publish/api/pnpmApi';
 import type {
   OwnerOptions,
   PackageJson,
@@ -123,9 +123,11 @@ const resolveMonorepoPublishPlan = async (
   const targets = selectedPackages
     .filter((item) => {
       if (!item.private) return true;
-      console.warn(
-        `[auklet:publish] package ${item.name} is private, skipping.`,
-      );
+      if (isExactlyMatchedByFilter(item.name, options.filters)) {
+        console.warn(
+          `[auklet:publish] package ${item.name} is private, skipping.`,
+        );
+      }
       return false;
     })
     .map((item) => {
@@ -139,7 +141,10 @@ const resolveMonorepoPublishPlan = async (
     });
 
   validatePublishTargets(targets);
-  validateVersionConsistency(rootVersion, targets);
+  validateWorkspaceInternalDependencies(targets);
+  if (!options.version) {
+    validateVersionConsistency(rootVersion, targets);
+  }
 
   return {
     root,
@@ -182,6 +187,13 @@ const matchesFilter = (packageName: string, filter: string) => {
     return packageName.startsWith(`${scope}/`);
   }
   return packageName === filter;
+};
+
+const isExactlyMatchedByFilter = (
+  packageName: string,
+  filters: Array<string>,
+) => {
+  return filters.some((filter) => filter === packageName);
 };
 
 const createPublishTarget = (options: {
@@ -255,6 +267,31 @@ const getWorkspaceDependencies = (packageJson: PackageJson) => {
     ...packageJson.dependencies,
     ...packageJson.optionalDependencies,
   })
-    .filter(([, version]) => version.startsWith('workspace:'))
+    .filter(([, version]) => version === 'workspace:*')
     .map(([packageName]) => packageName);
 };
+
+const validateWorkspaceInternalDependencies = (
+  targets: Array<PublishTarget>,
+) => {
+  const targetNames = new Set(targets.map((target) => target.packageName));
+  for (const target of targets) {
+    for (const dependencyGroup of workspaceDependencyGroups) {
+      for (const [packageName, version] of Object.entries(
+        target.packageJson[dependencyGroup] ?? {},
+      )) {
+        if (!targetNames.has(packageName)) continue;
+        if (version === 'workspace:*') continue;
+        throw new Error(
+          `[auklet:publish] package ${target.packageName} ${dependencyGroup} ${packageName} must use workspace:* before publishing.`,
+        );
+      }
+    }
+  }
+};
+
+const workspaceDependencyGroups = [
+  'dependencies',
+  'optionalDependencies',
+  'peerDependencies',
+] as const;

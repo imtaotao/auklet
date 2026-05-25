@@ -264,12 +264,12 @@ package source/config/style changes and debounces calls to `ModuleStyleBuilder`.
 
 ## CLI Flow
 
-The CLI entry is `bin/entry.cjs`, exposed as `auk` and `auklet` after
+The CLI entry is `bin/entry.mjs`, exposed as `auk` and `auklet` after
 publishing.
 
 ```mermaid
 flowchart TD
-  CLI["bin/entry.cjs"] --> Command{"command"}
+  CLI["bin/entry.mjs"] --> Command{"command"}
   Command --> Build["auk build"]
   Command --> BuildJs["auk build-js"]
   Command --> BuildJsWatch["auk build-js --watch"]
@@ -484,7 +484,7 @@ pnpm run test:examples
 - New style dependency type: check `dependencies.ts`, `workspaceStyleResolver.ts`,
   `styleImports/collector.ts`, `moduleGraph/`, and `StyleStructure` test
   helpers.
-- New CLI behavior: check `bin/entry.cjs`, README CLI docs, and necessary unit
+- New CLI behavior: check `bin/entry.mjs`, README CLI docs, and necessary unit
   tests.
 - New public API: check `src/index.ts` and README Programmatic API docs.
 

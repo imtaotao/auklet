@@ -21,9 +21,10 @@ export type PackageJson = {
 
 export type PublishPackageConfig = {
   format?: boolean;
-  before?: PublishHookConfig;
-  afterSuccess?: PublishHookConfig;
-  afterFailure?: PublishHookConfig;
+  beforeBuild?: PublishHookConfig;
+  afterBuild?: PublishHookConfig;
+  beforePublish?: PublishHookConfig;
+  afterPublish?: PublishHookConfig;
 };
 
 export type PublishHookConfig = string | Array<string>;
@@ -53,6 +54,7 @@ export type PublishOptions = {
   dryRun: boolean;
   otp?: string;
   ignoreScripts: boolean;
+  allowDirty: boolean;
 };
 
 export type OwnerOptions = {
@@ -72,4 +74,10 @@ export type PublishPlan = {
   workspaceMode: 'single' | 'monorepo';
 };
 
-export type HookStatus = 'before' | 'success' | 'failure';
+export type HookStatus =
+  | 'beforeBuild'
+  | 'afterBuild'
+  | 'beforePublish'
+  | 'afterPublish';
+
+export type HookResult = 'success' | 'failure';

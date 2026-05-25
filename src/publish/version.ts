@@ -1,5 +1,5 @@
 import semver from 'semver';
-import { getGitShortHash } from '#auklet/publish/git';
+import { getGitShortHash } from '#auklet/publish/api/gitApi';
 
 const prereleaseKinds = new Set(['alpha', 'beta']);
 const releaseIncrements = new Set(['patch', 'minor', 'major']);
@@ -19,7 +19,15 @@ export async function resolvePublishVersion(
   }
 
   if (releaseIncrements.has(versionSpec)) {
-    const next = semver.inc(currentVersion, versionSpec as semver.ReleaseType);
+    const parsed = semver.parse(currentVersion);
+    if (!parsed) {
+      throw new Error(
+        `[auklet:publish] invalid package version: ${currentVersion}`,
+      );
+    }
+    const baseVersion = `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+    const next = semver.inc(baseVersion, versionSpec as semver.ReleaseType);
+
     if (!next) {
       throw new Error(
         `[auklet:publish] failed to bump version ${currentVersion} with ${versionSpec}.`,

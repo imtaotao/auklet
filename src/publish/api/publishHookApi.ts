@@ -1,6 +1,7 @@
 import { execa } from 'execa';
 import type {
   HookStatus,
+  HookResult,
   PublishPackageConfig,
   PublishPlan,
   PublishTarget,
@@ -9,6 +10,7 @@ import type {
 type RunPublishHookOptions = {
   status: HookStatus;
   plan: PublishPlan;
+  result?: HookResult;
   failedTarget?: PublishTarget;
   error?: unknown;
 };
@@ -35,14 +37,16 @@ export async function runPublishHook(options: RunPublishHookOptions) {
 }
 
 const getHook = (config: PublishPackageConfig, status: HookStatus) => {
-  if (status === 'before') return config.before;
-  if (status === 'success') return config.afterSuccess;
-  return config.afterFailure;
+  if (status === 'beforeBuild') return config.beforeBuild;
+  if (status === 'afterBuild') return config.afterBuild;
+  if (status === 'beforePublish') return config.beforePublish;
+  return config.afterPublish;
 };
 
 const createHookEnv = (options: RunPublishHookOptions) => {
   const env: Record<string, string> = {
     AUKLET_PUBLISH_STATUS: options.status,
+    AUKLET_PUBLISH_RESULT: options.result ?? '',
     AUKLET_PUBLISH_VERSION: options.plan.version,
     AUKLET_PUBLISH_DRY_RUN: options.plan.dryRun ? 'true' : 'false',
     AUKLET_PUBLISH_ROOT: options.plan.root,

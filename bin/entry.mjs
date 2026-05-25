@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
-const fs = require('node:fs');
-const path = require('node:path');
-const minimist = require('minimist');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { cac } from 'cac';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const getPackageVersion = () => {
   const packageJson = JSON.parse(
@@ -74,7 +77,7 @@ const runDev = async () => {
   const { createTsdownArgs } = await import('../dist/build/runTsdown.js');
   const entries = [
     createTsdownArgs(['--watch']),
-    [path.resolve(__dirname, './entry.cjs'), 'build-css', '--watch'],
+    [path.resolve(__dirname, './entry.mjs'), 'build-css', '--watch'],
   ];
   const processes = entries.map((args) =>
     execa(process.execPath, args, {
@@ -116,64 +119,87 @@ const runOwner = async (args) => {
   return 0;
 };
 
-const argv = minimist(process.argv.slice(2), {
-  boolean: ['help', 'version'],
-  alias: {
-    h: 'help',
-    v: 'version',
-  },
-});
-const [command, ...args] = argv._;
-const commandIndex = process.argv.indexOf(command);
-const commandArgs =
-  commandIndex >= 0 ? process.argv.slice(commandIndex + 1) : args;
-
-if (argv.version) {
-  console.log(getPackageVersion());
-  process.exit(0);
-}
-
-if (argv.help || !command) {
-  console.log('Usage: auk <command>');
-  console.log('');
-  console.log('Commands:');
-  console.log('  build     Build package JavaScript and CSS output');
-  console.log('  build-js  Build package JavaScript output with tsdown');
-  console.log('  build-css  Build package module CSS output, supports --watch');
-  console.log('  dev       Watch package JavaScript and CSS output');
-  console.log('  publish   Build and publish package output with pnpm');
-  console.log('  owner     Manage npm package owners with pnpm');
-  console.log('  version   Print auklet version');
-  console.log('');
-  console.log('Options:');
-  console.log('  -v, --version  Print auklet version');
-  console.log('  -h, --help     Print help');
-  process.exit(argv.help ? 0 : 1);
-}
-
-const runners = {
-  build: runBuild,
-  'build-js': runBuildJs,
-  'build-css': runBuildStyle,
-  dev: runDev,
-  publish: runPublish,
-  owner: runOwner,
-  version: runVersion,
+const getCommandArgs = (command) => {
+  const rawArgs = process.argv.slice(2);
+  const commandIndex = rawArgs.indexOf(command);
+  return commandIndex >= 0 ? rawArgs.slice(commandIndex + 1) : [];
 };
 
-const runner = runners[command];
+const runCliCommand = (runner, args) => {
+  return runner(args).then((exitCode) => {
+    process.exit(exitCode ?? 0);
+  });
+};
 
-if (runner) {
-  runner(commandArgs)
-    .then((exitCode) => {
-      process.exit(exitCode ?? 0);
-    })
-    .catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
-  return;
-}
+const main = async () => {
+  const cli = cac('auk');
 
-console.error(`Unknown auk command: ${command}`);
-process.exit(1);
+  cli
+    .command('build [...args]', 'Build package JavaScript and CSS output')
+    .allowUnknownOptions()
+    .action(() => runCliCommand(runBuild, getCommandArgs('build')));
+
+  cli
+    .command(
+      'build-js [...args]',
+      'Build package JavaScript output with tsdown',
+    )
+    .allowUnknownOptions()
+    .action(() => runCliCommand(runBuildJs, getCommandArgs('build-js')));
+
+  cli
+    .command('build-css [...args]', 'Build package module CSS output')
+    .option('-w, --watch', 'Watch module CSS output')
+    .allowUnknownOptions()
+    .action(() => runCliCommand(runBuildStyle, getCommandArgs('build-css')));
+
+  cli
+    .command('dev', 'Watch package JavaScript and CSS output')
+    .action(() => runCliCommand(runDev, []));
+
+  cli
+    .command('publish [...args]', 'Build and publish package output with pnpm')
+    .allowUnknownOptions()
+    .action(() => runCliCommand(runPublish, getCommandArgs('publish')));
+
+  cli
+    .command('owner [...args]', 'Manage npm package owners with pnpm')
+    .allowUnknownOptions()
+    .action(() => runCliCommand(runOwner, getCommandArgs('owner')));
+
+  cli
+    .command('version', 'Print auklet version')
+    .action(() => runCliCommand(runVersion, []));
+
+  cli.option('-v, --version', 'Print auklet version');
+  cli.help();
+
+  if (process.argv.length <= 2) {
+    cli.outputHelp();
+    process.exit(1);
+  }
+
+  cli.parse(process.argv, { run: false });
+  if (!cli.matchedCommand && cli.options.version) {
+    console.log(getPackageVersion());
+    process.exit(0);
+  }
+  if (cli.options.help) {
+    process.exit(0);
+  }
+  if (!cli.matchedCommand) {
+    const [command] = process.argv.slice(2);
+    if (command) {
+      console.error(`Unknown auk command: ${command}`);
+    } else {
+      cli.outputHelp();
+    }
+    process.exit(1);
+  }
+  await cli.runMatchedCommand();
+};
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

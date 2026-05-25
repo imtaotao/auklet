@@ -1,6 +1,7 @@
 import minimist from 'minimist';
-import { addOwners, publishPackages } from '#auklet/publish/runner';
-import { ensurePnpm } from '#auklet/publish/pnpm';
+import { OwnerRunner } from '#auklet/publish/ownerRunner';
+import { PublishRunner } from '#auklet/publish/publishRunner';
+import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
 import type { OwnerOptions, PublishOptions } from '#auklet/publish/types';
 
 const publishFlags = new Set([
@@ -10,14 +11,16 @@ const publishFlags = new Set([
   'dry-run',
   'otp',
   'ignore-scripts',
+  'allow-dirty',
 ]);
 const ownerFlags = new Set(['_', 'filter', 'package', 'otp']);
 
 export async function runPublishCli(args: Array<string>) {
-  validateNoPrefixedFlags(args);
-  const argv = minimist(args, {
+  const cliArgs = stripLeadingArgsSeparator(args);
+  validateNoPrefixedFlags(cliArgs);
+  const argv = minimist(cliArgs, {
     string: ['filter', 'version', 'otp'],
-    boolean: ['dry-run', 'ignore-scripts'],
+    boolean: ['dry-run', 'ignore-scripts', 'allow-dirty'],
   });
   validateFlags(argv, publishFlags);
   if (argv._.length) {
@@ -27,19 +30,21 @@ export async function runPublishCli(args: Array<string>) {
   }
 
   await ensurePnpm();
-  await publishPackages({
+  await new PublishRunner({
     cwd: process.cwd(),
     filters: toArray(argv.filter),
     version: stringOption(argv.version),
     dryRun: argv['dry-run'] === true,
     otp: stringOption(argv.otp),
     ignoreScripts: argv['ignore-scripts'] === true,
-  } satisfies PublishOptions);
+    allowDirty: argv['allow-dirty'] === true,
+  } satisfies PublishOptions).run();
 }
 
 export async function runOwnerCli(args: Array<string>) {
-  validateNoPrefixedFlags(args);
-  const argv = minimist(args, {
+  const cliArgs = stripLeadingArgsSeparator(args);
+  validateNoPrefixedFlags(cliArgs);
+  const argv = minimist(cliArgs, {
     string: ['filter', 'package', 'otp'],
   });
   validateFlags(argv, ownerFlags);
@@ -54,13 +59,13 @@ export async function runOwnerCli(args: Array<string>) {
   }
 
   await ensurePnpm();
-  await addOwners({
+  await new OwnerRunner({
     cwd: process.cwd(),
     users,
     filters: toArray(argv.filter),
     packages: toArray(argv.package),
     otp: stringOption(argv.otp),
-  } satisfies OwnerOptions);
+  } satisfies OwnerOptions).run();
 }
 
 const validateFlags = (
@@ -79,6 +84,10 @@ const validateNoPrefixedFlags = (args: Array<string>) => {
   if (flag) {
     throw new Error(`[auklet:publish] unknown option: ${flag}`);
   }
+};
+
+const stripLeadingArgsSeparator = (args: Array<string>) => {
+  return args.filter((arg) => arg !== '--');
 };
 
 const toArray = (value: unknown) => {

@@ -10,8 +10,8 @@
     "pnpm": "=10.27.0"
   },
   "bin": {
-    "auk": "./bin/entry.cjs",
-    "auklet": "./bin/entry.cjs"
+    "auk": "./bin/entry.mjs",
+    "auklet": "./bin/entry.mjs"
   },
   "scripts": {
     "prepare": "husky",
@@ -21,6 +21,7 @@
     "test:coverage": "vitest run src/__tests__ --coverage",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "dev:registry": "verdaccio --config examples/verdaccio.yaml --listen 127.0.0.1:4873",
+    "dev:registry-login": "npm adduser --registry http://127.0.0.1:4873 --auth-type=legacy",
     "dev:examples": "pnpm --filter './examples/*' --if-present dev",
     "build:examples": "pnpm --filter './examples/*' build",
     "format:md": "prettier --write \"*.md\" \"examples/**/*.md\"",
@@ -65,6 +66,7 @@
     "tsdown"
   ],
   "dependencies": {
+    "cac": "catalog:",
     "unrun": "catalog:",
     "execa": "catalog:",
     "aidly": "catalog:",
@@ -72,15 +74,18 @@
     "tsdown": "catalog:",
     "semver": "catalog:",
     "postcss": "catalog:",
+    "briefing": "catalog:",
     "chokidar": "catalog:",
     "minimist": "catalog:",
     "prettier": "catalog:",
+    "picocolors": "catalog:",
     "typescript": "catalog:",
     "conditional-export": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/semver": "catalog:",
+    "@types/prettier": "catalog:",
     "@types/minimist": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "husky": "catalog:",

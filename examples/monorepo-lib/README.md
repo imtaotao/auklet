@@ -12,5 +12,20 @@ pnpm --dir examples/monorepo-lib publish:local
 
 This example has its own `pnpm-workspace.yaml` so publish target discovery stays
 inside this monorepo fixture. Package dry-run publishing points to a local
-Verdaccio registry at `http://127.0.0.1:4873`. `publish:local` performs a real
-local publish and requires a clean git working tree.
+Verdaccio registry at `http://127.0.0.1:4873`.
+
+Before running `publish:local`, start and log in to the local registry:
+
+```bash
+pnpm run dev:registry
+pnpm run dev:registry-login
+```
+
+`publish:local` performs a real local publish and uses `--allow-dirty` so it can
+be used while developing publish behavior.
+
+To publish a new local version while skipping git operations:
+
+```bash
+pnpm --dir examples/monorepo-lib publish:local -- --version patch
+```

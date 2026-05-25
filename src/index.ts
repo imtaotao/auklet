@@ -33,6 +33,7 @@ export {
 } from '#auklet/configLoader';
 export { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
 export { createTsdownArgs, runTsdown } from '#auklet/build/runTsdown';
-export { addOwners, publishPackages } from '#auklet/publish/runner';
+export { OwnerRunner } from '#auklet/publish/ownerRunner';
+export { PublishRunner } from '#auklet/publish/publishRunner';
 export { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
 export { ModuleStyleBuilder } from '#auklet/css/production/builder';

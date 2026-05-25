@@ -1,5 +1,5 @@
 import type { PublishTarget } from '#auklet/publish/types';
-import { runPnpmBuild } from '#auklet/publish/pnpm';
+import { runPnpmBuild } from '#auklet/publish/api/pnpmApi';
 
 export function validateBuildScript(targets: Array<PublishTarget>) {
   for (const target of targets) {

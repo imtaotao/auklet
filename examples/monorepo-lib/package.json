@@ -1,18 +1,17 @@
 {
   "name": "@demo/monorepo-lib",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "pnpm --filter './packages/*' build",
     "publish:dry-run": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/* --dry-run",
-    "publish:local": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/*"
+    "publish:local": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/* --version patch --allow-dirty"
   },
   "auklet": {
     "publish": {
-      "before": "node -e \"console.log('[publish-demo] before', process.env.AUKLET_PUBLISH_DRY_RUN, process.env.AUKLET_PUBLISH_PACKAGES)\"",
-      "afterSuccess": "node -e \"console.log('[publish-demo] success', process.env.AUKLET_PUBLISH_DRY_RUN, process.env.AUKLET_PUBLISH_PACKAGES)\"",
-      "afterFailure": "node -e \"console.log('[publish-demo] failure', process.env.AUKLET_PUBLISH_ERROR)\""
+      "beforePublish": "node -e \"console.log('[publish-demo] beforePublish', process.env.AUKLET_PUBLISH_DRY_RUN, process.env.AUKLET_PUBLISH_PACKAGES)\"",
+      "afterPublish": "node -e \"console.log('[publish-demo] afterPublish', process.env.AUKLET_PUBLISH_RESULT, process.env.AUKLET_PUBLISH_ERROR || process.env.AUKLET_PUBLISH_PACKAGES)\""
     }
   },
   "devDependencies": {
