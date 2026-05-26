@@ -95,6 +95,31 @@ describe('runDev', () => {
     });
   });
 
+  test('passes unknown tsdown args to JavaScript watch', async () => {
+    await runDev(['--minify', '--sourcemap', '--source', 'source']);
+
+    const [, args] = mocks.execa.mock.calls[0] as unknown as [
+      string,
+      Array<string>,
+    ];
+    expect(args).toEqual(
+      expect.arrayContaining(['--minify', '--sourcemap', '--watch']),
+    );
+    expect(args).not.toContain('--source');
+    expect(args).not.toContain('source');
+  });
+
+  test('rejects custom tsdown config with auklet build overrides', async () => {
+    await expect(
+      runDev(['--source', 'source', '--config', 'tsdown.config.ts']),
+    ).rejects.toThrow(
+      'Auklet build config flags cannot be used with tsdown --config, -c, or --no-config.',
+    );
+
+    expect(mocks.execa).not.toHaveBeenCalled();
+    expect(mocks.createCssWatcher).not.toHaveBeenCalled();
+  });
+
   test('closes CSS watcher when JavaScript watch exits', async () => {
     await runDev(['--source', 'source', '--modules']);
 

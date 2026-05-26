@@ -6,6 +6,7 @@ import {
   writePackageJson,
 } from '#auklet/publish/api/packageJsonApi';
 import {
+  commitRelease,
   createVersionTag,
   ensureGitClean,
   hasGitChanges,
@@ -20,6 +21,9 @@ const writePackage = vi.mocked(writePackageJson);
 const resolvePlan = vi.mocked(resolvePublishPlan);
 const runHook = vi.mocked(runPublishHook);
 const formatOutputs = vi.mocked(formatPublishOutputs);
+const commit = vi.mocked(commitRelease);
+const createTag = vi.mocked(createVersionTag);
+const publish = vi.mocked(runPnpmPublish);
 
 const stripAnsi = (value: string) => {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
@@ -370,6 +374,35 @@ describe('PublishRunner', () => {
           }),
         ],
       }),
+    );
+  });
+
+  test('dry-run skips release commit, tag, and real publish', async () => {
+    resolvePlan.mockResolvedValueOnce({
+      root: process.cwd(),
+      version: '1.0.1',
+      dryRun: true,
+      config: {},
+      workspaceMode: 'single',
+      targets: [createTarget('@scope/ui')],
+    });
+
+    await new PublishRunner({
+      cwd: process.cwd(),
+      filters: [],
+      version: 'patch',
+      dryRun: true,
+      format: true,
+      ignoreScripts: false,
+      allowDirty: false,
+    }).run();
+
+    expect(commit).not.toHaveBeenCalled();
+    expect(createTag).not.toHaveBeenCalled();
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(publish).toHaveBeenCalledWith(
+      process.cwd(),
+      expect.arrayContaining(['--dry-run']),
     );
   });
 
