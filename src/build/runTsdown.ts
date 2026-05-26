@@ -21,15 +21,29 @@ export function hasTsdownConfigArg(args: Array<string>) {
   );
 }
 
+const hasTsdownConfigLoaderArg = (args: Array<string>) => {
+  return args.some(
+    (arg, index) =>
+      arg === '--config-loader' ||
+      arg.startsWith('--config-loader=') ||
+      args[index - 1] === '--config-loader',
+  );
+};
+
 export type RunTsdownOptions = {
   cwd?: string;
   env?: Record<string, string>;
 };
 
 export function createTsdownArgs(args: Array<string>) {
-  const tsdownArgs = hasTsdownConfigArg(args)
-    ? args
-    : ['--config', defaultConfigFile, ...args];
+  if (hasTsdownConfigArg(args)) {
+    return [tsdownRunFile, ...args];
+  }
+
+  const loaderArgs = hasTsdownConfigLoaderArg(args)
+    ? []
+    : ['--config-loader', 'native'];
+  const tsdownArgs = ['--config', defaultConfigFile, ...loaderArgs, ...args];
   return [tsdownRunFile, ...tsdownArgs];
 }
 

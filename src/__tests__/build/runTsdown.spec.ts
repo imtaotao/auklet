@@ -7,9 +7,14 @@ describe('createTsdownArgs', () => {
     const args = createTsdownArgs(['--watch']);
 
     expect(path.basename(args[0])).toBe('run.mjs');
-    expect(args.slice(1, 3)).toEqual(['--config', expect.any(String)]);
+    expect(args.slice(1, 5)).toEqual([
+      '--config',
+      expect.any(String),
+      '--config-loader',
+      'native',
+    ]);
     expect(args[2]).toContain('tsdownConfig');
-    expect(args.slice(3)).toEqual(['--watch']);
+    expect(args.slice(5)).toEqual(['--watch']);
   });
 
   test('keeps explicit config args untouched', () => {
@@ -17,5 +22,13 @@ describe('createTsdownArgs', () => {
 
     expect(path.basename(args[0])).toBe('run.mjs');
     expect(args.slice(1)).toEqual(['--config', 'custom.config.ts', '--watch']);
+  });
+
+  test('keeps explicit config loader when using the built-in config', () => {
+    const args = createTsdownArgs(['--config-loader', 'unrun', '--watch']);
+
+    expect(path.basename(args[0])).toBe('run.mjs');
+    expect(args.slice(1, 3)).toEqual(['--config', expect.any(String)]);
+    expect(args.slice(3)).toEqual(['--config-loader', 'unrun', '--watch']);
   });
 });
