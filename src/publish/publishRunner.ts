@@ -69,6 +69,7 @@ export class PublishRunner {
     validateBuildScript(plan.targets);
 
     await this.git.checkBeforePublish(plan);
+    await this.preflight.verifyAuthentication(plan);
     this.versions.logDryRunPlan(plan);
 
     return plan;

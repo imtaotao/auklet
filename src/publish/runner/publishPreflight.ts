@@ -1,4 +1,5 @@
 import { PnpmPublishApi } from '#auklet/publish/api/pnpmPublishApi';
+import { runPnpmWhoami } from '#auklet/publish/api/pnpmApi';
 import { PublishTargetError } from '#auklet/publish/runner/publishTargetError';
 import type { PublishOptions, PublishPlan } from '#auklet/publish/types';
 
@@ -9,6 +10,11 @@ export class PublishPreflight {
 
   async run(plan: PublishPlan) {
     await this.verifyPnpmPublishDryRun(plan);
+  }
+
+  async verifyAuthentication(plan: PublishPlan) {
+    if (plan.dryRun) return;
+    await runPnpmWhoami(plan.root);
   }
 
   private async verifyPnpmPublishDryRun(plan: PublishPlan) {

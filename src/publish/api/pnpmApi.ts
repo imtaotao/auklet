@@ -70,6 +70,20 @@ export async function runPnpmPublish(packageRoot: string, args: Array<string>) {
   }
 }
 
+export async function runPnpmWhoami(root: string) {
+  const result = await runPnpm(['whoami'], {
+    cwd: root,
+  });
+  if (result.exitCode) {
+    throw new Error(
+      '[auklet:publish] npm authentication is required before publishing.\n' +
+        '[auklet:publish] Run `pnpm login` or configure an npm token before retrying.',
+    );
+  }
+
+  return String(result.stdout ?? '').trim();
+}
+
 export async function runPnpmOwnerAdd(
   packageName: string,
   user: string,

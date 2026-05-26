@@ -12,7 +12,7 @@ import {
   hasGitChanges,
 } from '#auklet/publish/api/gitApi';
 import { runPublishHook } from '#auklet/publish/api/publishHookApi';
-import { runPnpmPublish } from '#auklet/publish/api/pnpmApi';
+import { runPnpmPublish, runPnpmWhoami } from '#auklet/publish/api/pnpmApi';
 import { formatPublishOutputs } from '#auklet/publish/runner/publishOutputFormatter';
 import { PublishRunner } from '#auklet/publish/publishRunner';
 
@@ -24,6 +24,7 @@ const formatOutputs = vi.mocked(formatPublishOutputs);
 const commit = vi.mocked(commitRelease);
 const createTag = vi.mocked(createVersionTag);
 const publish = vi.mocked(runPnpmPublish);
+const whoami = vi.mocked(runPnpmWhoami);
 
 const stripAnsi = (value: string) => {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
@@ -96,6 +97,7 @@ vi.mock('#auklet/publish/api/packageJsonApi', () => ({
 vi.mock('#auklet/publish/api/pnpmApi', () => ({
   runPnpmOwnerAdd: vi.fn(),
   runPnpmPublish: vi.fn(),
+  runPnpmWhoami: vi.fn(),
 }));
 
 describe('PublishRunner', () => {
@@ -193,6 +195,49 @@ describe('PublishRunner', () => {
       'beforePublish',
       'afterPublish',
     ]);
+  });
+
+  test('checks npm authentication before build and version writes', async () => {
+    const order: Array<string> = [];
+    whoami.mockImplementationOnce(async () => {
+      order.push('whoami');
+      return 'publisher';
+    });
+    writePackage.mockImplementationOnce(() => {
+      order.push('write');
+    });
+
+    await new PublishRunner({
+      cwd: process.cwd(),
+      filters: [],
+      version: 'patch',
+      dryRun: false,
+      format: true,
+      ignoreScripts: false,
+      allowDirty: false,
+    }).run();
+
+    expect(order).toEqual(['whoami', 'write']);
+    expect(whoami).toHaveBeenCalledWith(process.cwd());
+  });
+
+  test('does not write versions when npm authentication is missing', async () => {
+    whoami.mockRejectedValueOnce(new Error('not authenticated'));
+
+    await expect(
+      new PublishRunner({
+        cwd: process.cwd(),
+        filters: [],
+        version: 'patch',
+        dryRun: false,
+        format: true,
+        ignoreScripts: false,
+        allowDirty: false,
+      }).run(),
+    ).rejects.toThrow('not authenticated');
+
+    expect(writePackage).not.toHaveBeenCalled();
+    expect(runPnpmPublish).not.toHaveBeenCalled();
   });
 
   test('prints a final success summary with version changes', async () => {
@@ -397,6 +442,7 @@ describe('PublishRunner', () => {
       allowDirty: false,
     }).run();
 
+    expect(whoami).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
     expect(createTag).not.toHaveBeenCalled();
     expect(publish).toHaveBeenCalledTimes(1);
