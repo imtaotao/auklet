@@ -31,6 +31,7 @@ const findWorkspaceTsconfig = (packageRoot: string) => {
 export function createBuildContext(
   packageRoot: string,
   options: PackageBuildOptions,
+  source: string,
   output: string,
 ) {
   const pkg = JSON.parse(
@@ -48,6 +49,7 @@ export function createBuildContext(
     pkg,
     banner,
     packageRoot,
+    source,
     output,
     runtimeDependencyNames: Object.keys(pkg.dependencies ?? {}),
     packageExternal: getPackageExternal(pkg, options),

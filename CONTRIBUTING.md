@@ -100,6 +100,15 @@ tsdown. `cleanOutput` only serves `auk build`; it removes the current package's
 configured `output` directory. `tsdownConfig` is the config translation layer
 that maps auklet `build` options to tsdown config.
 
+Build CLI overrides are parsed in `src/cli.ts`. Top-level flags such as
+`--source`, `--output`, `--modules`, and namespaced flags such as
+`--build.formats`, `--build.target`, `--build.platform`, and
+`--build.tsconfig` override `auklet.config.ts` for the current command. The JS
+build path passes those overrides to the tsdown child process through
+`AUKLET_CONFIG_OVERRIDES`, which is read by the built-in auklet tsdown config.
+Do not combine these flags with tsdown `--config`, `-c`, or `--no-config`; a
+custom tsdown config owns its own config loading behavior.
+
 ### Style Core Modules
 
 ```text

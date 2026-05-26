@@ -9,7 +9,7 @@ const defaultConfigFile = fileURLToPath(
   new URL(`./tsdownConfig.${currentExtension}`, import.meta.url),
 );
 
-const hasConfigArg = (args: Array<string>) => {
+export function hasTsdownConfigArg(args: Array<string>) {
   return args.some(
     (arg, index) =>
       arg === '--no-config' ||
@@ -19,14 +19,15 @@ const hasConfigArg = (args: Array<string>) => {
       args[index - 1] === '-c' ||
       args[index - 1] === '--config',
   );
-};
+}
 
 export type RunTsdownOptions = {
   cwd?: string;
+  env?: Record<string, string>;
 };
 
 export function createTsdownArgs(args: Array<string>) {
-  const tsdownArgs = hasConfigArg(args)
+  const tsdownArgs = hasTsdownConfigArg(args)
     ? args
     : ['--config', defaultConfigFile, ...args];
   return [tsdownRunFile, ...tsdownArgs];
@@ -39,6 +40,7 @@ export async function runTsdown(
   const tsdownArgs = createTsdownArgs(args);
   const result = await execa(process.execPath, tsdownArgs, {
     cwd: options.cwd ?? process.cwd(),
+    env: options.env,
     stdio: 'inherit',
     reject: false,
   });

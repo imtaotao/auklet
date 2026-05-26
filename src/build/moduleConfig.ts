@@ -36,7 +36,7 @@ export function createModuleConfigs(context: BuildContext) {
   const commonConfig = createCommonConfig(context, {
     neverBundle: context.packageExternal,
   });
-  const entry = getModuleEntries(context.packageRoot);
+  const entry = getModuleEntries(context.packageRoot, context.source);
 
   return [
     createModuleConfig(

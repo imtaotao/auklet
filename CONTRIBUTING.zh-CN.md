@@ -81,6 +81,14 @@ src/build/
 
 `runTsdown` 是执行层，负责构造命令参数并调用 tsdown。`cleanOutput` 只服务 `auk build`，它会删除当前 package 配置的 `output` 目录。`tsdownConfig` 是配置翻译层，负责把 auklet 的 `build` 配置映射到 tsdown config。
 
+Build CLI override 在 `src/cli.ts` 中解析。`--source`、`--output`、
+`--modules` 这类顶层参数，以及 `--build.formats`、`--build.target`、
+`--build.platform`、`--build.tsconfig` 这类命名空间参数，会覆盖当前命令中
+的 `auklet.config.ts` 配置。JS 构建路径会通过 `AUKLET_CONFIG_OVERRIDES`
+把这些 override 传给 tsdown 子进程，并由 auklet 内置 tsdown config 读取。
+不要把这些参数和 tsdown 的 `--config`、`-c` 或 `--no-config` 混用；自定义
+tsdown config 需要自己决定如何加载配置。
+
 ### Style Core 模块
 
 ```text

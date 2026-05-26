@@ -5,25 +5,25 @@ const toPosixPath = (value: string) => {
   return value.split(path.sep).join('/');
 };
 
-export function getBundleEntry(packageRoot: string) {
-  const tsEntry = 'src/index.ts';
-  const tsxEntry = 'src/index.tsx';
+export function getBundleEntry(packageRoot: string, source = 'src') {
+  const tsEntry = path.join(source, 'index.ts');
+  const tsxEntry = path.join(source, 'index.tsx');
 
   if (fs.existsSync(path.join(packageRoot, tsEntry))) {
-    return { index: tsEntry };
+    return { index: toPosixPath(tsEntry) };
   }
   if (fs.existsSync(path.join(packageRoot, tsxEntry))) {
-    return { index: tsxEntry };
+    return { index: toPosixPath(tsxEntry) };
   }
-  return { index: tsEntry };
+  return { index: toPosixPath(tsEntry) };
 }
 
-export function getModuleEntries(packageRoot: string) {
-  const sourceRoot = path.join(packageRoot, 'src');
+export function getModuleEntries(packageRoot: string, source = 'src') {
+  const sourceRoot = path.join(packageRoot, source);
   const entries: Record<string, string> = {};
 
   if (!fs.existsSync(sourceRoot)) {
-    return getBundleEntry(packageRoot);
+    return getBundleEntry(packageRoot, source);
   }
 
   const collect = (dir: string) => {
@@ -57,5 +57,5 @@ export function getModuleEntries(packageRoot: string) {
 
   return Object.keys(entries).length > 0
     ? entries
-    : getBundleEntry(packageRoot);
+    : getBundleEntry(packageRoot, source);
 }

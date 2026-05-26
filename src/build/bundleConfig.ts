@@ -78,7 +78,7 @@ export function createBundleConfigs(
       context,
       {
         ...createCommonConfig(context, deps),
-        entry: getBundleEntry(context.packageRoot),
+        entry: getBundleEntry(context.packageRoot, context.source),
         format,
         globalName: context.globalName,
         outDir: context.output,

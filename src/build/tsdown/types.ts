@@ -20,6 +20,7 @@ export type PackageJsonLike = {
 export type BuildContext = {
   packageRoot: string;
   tsconfig: string;
+  source: string;
   output: string;
   pkg: PackageJsonLike;
   runtimeDependencyNames: Array<string>;

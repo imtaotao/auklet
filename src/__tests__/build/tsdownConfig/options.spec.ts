@@ -209,6 +209,34 @@ describe('defineKernelPackageConfigFromOptions', () => {
     });
   });
 
+  test('uses custom source directory for bundle and module configs', () => {
+    project.writeFile('source/index.ts', 'export const value = 1;');
+    project.writeFile(
+      'source/components/Button/index.tsx',
+      'export function Button() { return null; }',
+    );
+
+    const configs = defineKernelPackageConfigFromOptions(project.root, {
+      source: 'source',
+      modules: true,
+      build: {
+        formats: ['cjs'],
+      },
+    });
+
+    expect(configs[0]).toMatchObject({
+      entry: {
+        index: 'source/index.ts',
+      },
+    });
+    expect(configs[1]).toMatchObject({
+      entry: {
+        'components/Button/index': 'source/components/Button/index.tsx',
+        index: 'source/index.ts',
+      },
+    });
+  });
+
   test('uses tsx package entry when ts entry is missing', () => {
     project.writeFile(
       'src/index.tsx',

@@ -99,9 +99,55 @@ Commands:
 - `build-css`: generates CSS output.
 - `build-css --watch`: watches source/config/style files and rebuilds CSS.
 
+Build commands can override the top-level package config for a single run:
+
+```bash
+pnpm auk build --source source --output build --modules
+pnpm auk build --build.formats esm,cjs
+pnpm auk build --build.target es2022
+pnpm auk build --build.platform node
+pnpm auk build --build.tsconfig tsconfig.build.json
+```
+
+Supported build override flags:
+
+- `--source <dir>`
+- `--output <dir>`
+- `--modules`
+- `--no-modules`
+- `--build.formats <formats>`: comma-separated `cjs`, `esm`, and/or `iife`.
+- `--build.target <target>`
+- `--build.platform <platform>`: `node`, `neutral`, or `browser`.
+- `--build.tsconfig <file>`
+
+Config precedence is:
+
+```text
+CLI flags > auklet.config.ts > auklet defaults
+```
+
+These flags are supported by `build`, `build-js`, and `build-css`. `dev` does
+not currently accept build override flags.
+
+`build-js` still passes unknown flags through to tsdown, but auklet build
+override flags cannot be combined with tsdown custom config flags:
+
+```bash
+# not allowed
+pnpm auk build-js --source source --config tsdown.config.ts
+pnpm auk build-js --output build -c tsdown.config.ts
+pnpm auk build-js --modules --no-config
+```
+
+When `--config`, `-c`, or `--no-config` is used, tsdown owns the full build
+config. In that mode, use `auklet.config.ts` or tsdown config code directly
+instead of auklet CLI overrides.
+
 ## Configuration Example
 
-Create `auklet.config.ts` in the package root:
+`auklet.config.ts` is optional. When it is missing, auklet uses its defaults.
+Create `auklet.config.ts` in the package root when a package needs to override
+those defaults:
 
 ```ts
 import type { AukletConfig } from 'auklet';
