@@ -10,7 +10,7 @@ catalog:
   '@vitest/coverage-v8': 4.1.7
   cac: 7.0.0
   aidly: 1.37.0
-  briefing: 0.0.2
+  briefing: 0.0.4
   chokidar: 5.0.0
   conditional-export: 1.1.0
   execa: 9.6.1

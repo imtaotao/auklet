@@ -6,14 +6,12 @@ import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import type {
-  AukletLogger,
   ModuleStyleBuildConfig,
   ModuleStyleBuildContext,
 } from '#auklet/types';
 
 export class ModuleStyleWatcher {
   private readonly context: ModuleStyleBuildContext & { packageRoot: string };
-  private readonly logger?: AukletLogger;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private isBuilding = false;
   private shouldRebuild = false;
@@ -27,12 +25,10 @@ export class ModuleStyleWatcher {
       packageRoot: process.cwd(),
       ...context,
     };
-    this.logger = context.logger;
   }
 
   async watch() {
     await this.rebuild();
-    this.logger?.log?.('[auklet:css] watch mode ready');
   }
 
   private async rebuild() {
@@ -46,7 +42,7 @@ export class ModuleStyleWatcher {
       await builder.build();
       await this.refreshWatcher();
     } catch (error) {
-      this.logger?.error?.(error);
+      // Watch mode keeps running after transient build or watcher errors.
     } finally {
       this.isBuilding = false;
       if (this.shouldRebuild) {
@@ -79,18 +75,14 @@ export class ModuleStyleWatcher {
       }
       this.scheduleBuild();
     });
-    this.watcher.on('error', (error: unknown) => {
-      this.logger?.error?.(error);
-    });
+    this.watcher.on('error', () => undefined);
   }
 
   private scheduleBuild() {
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.rebuild().catch((error) => {
-        this.logger?.error?.(error);
-      });
+      void this.rebuild();
     }, 80);
   }
 

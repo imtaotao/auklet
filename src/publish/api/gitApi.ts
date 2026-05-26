@@ -1,4 +1,5 @@
 import { execa } from 'execa';
+import type { AukletLogger } from '#auklet/logger';
 
 const runGit = async (args: Array<string>, cwd: string) => {
   return execa('git', args, {
@@ -53,12 +54,18 @@ export async function commitRelease(cwd: string, version: string) {
   }
 }
 
-export async function createVersionTag(cwd: string, version: string) {
+export async function createVersionTag(
+  cwd: string,
+  version: string,
+  logger: AukletLogger,
+) {
   const tagName = `v${version}`;
   const exists = await runGit(['rev-parse', '--verify', tagName], cwd);
   if (!exists.exitCode) {
-    console.warn(
-      `[auklet:publish] git tag ${tagName} already exists, skipping tag creation.`,
+    logger.warnOnce(
+      'git tag ',
+      logger.version(tagName),
+      ' already exists, skipping tag creation.',
     );
     return;
   }

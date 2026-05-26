@@ -4,6 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cac } from 'cac';
+import { execa } from 'execa';
+import { createTsdownArgs, runTsdown } from '../dist/build/runTsdown.js';
+import { cleanAukletOutputByConfig } from '../dist/build/cleanOutput.js';
+import { loadAukletConfig } from '../dist/configLoader.js';
+import { createAukletLogger } from '../dist/logger.js';
+import { ModuleStyleWatcher } from '../dist/css/watch/watcher.js';
+import { ModuleStyleBuilder } from '../dist/css/production/builder.js';
+import { logModuleStyleBuildResult } from '../dist/css/production/buildReporter.js';
+import { runOwnerCli, runPublishCli } from '../dist/publish/cli.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,12 +29,16 @@ const runVersion = async () => {
 };
 
 const loadCurrentAukletConfig = async (options) => {
-  const { loadAukletConfig } = await import('../dist/configLoader.js');
   return loadAukletConfig(process.cwd(), options);
+};
+
+const createLogger = (scope) => {
+  return createAukletLogger({ scope });
 };
 
 const runBuildStyle = async (args, options = {}) => {
   const shouldWatch = args.includes('--watch') || args.includes('-w');
+  const logger = createLogger();
   const aukletConfig =
     options.aukletConfig ??
     (await loadCurrentAukletConfig({
@@ -33,9 +46,13 @@ const runBuildStyle = async (args, options = {}) => {
     }));
 
   if (shouldWatch) {
-    const { ModuleStyleWatcher } = await import('../dist/css/watch/watcher.js');
-    const watcher = new ModuleStyleWatcher({ aukletConfig, logger: console });
-    await watcher.watch();
+    const watcher = await logger.group('Build CSS', async () => {
+      const css = logger.child('css');
+      const watcher = new ModuleStyleWatcher({ aukletConfig });
+      await watcher.watch();
+      css.success('watch mode ready');
+      return watcher;
+    });
     const close = () => {
       watcher
         .close()
@@ -48,22 +65,24 @@ const runBuildStyle = async (args, options = {}) => {
     return 0;
   }
 
-  const { ModuleStyleBuilder } =
-    await import('../dist/css/production/builder.js');
-  const builder = new ModuleStyleBuilder({ aukletConfig, logger: console });
-  await builder.build();
+  const builder = new ModuleStyleBuilder({ aukletConfig });
+  await logger.group('Build CSS', async () => {
+    const timer = logger.timer();
+    const result = await builder.build();
+    logModuleStyleBuildResult(logger.child('css'), result, timer.elapsed());
+  });
   return 0;
 };
 
 const runBuildJs = async (args) => {
-  const { runTsdown } = await import('../dist/build/runTsdown.js');
-  return runTsdown(args, { cwd: process.cwd() });
+  const logger = createLogger();
+  return logger.group('Build JavaScript', async () => {
+    return runTsdown(args, { cwd: process.cwd() });
+  });
 };
 
 const runBuild = async (args) => {
   const aukletConfig = await loadCurrentAukletConfig();
-  const { cleanAukletOutputByConfig } =
-    await import('../dist/build/cleanOutput.js');
   cleanAukletOutputByConfig(process.cwd(), aukletConfig);
 
   const jsExitCode = await runBuildJs(args);
@@ -73,8 +92,6 @@ const runBuild = async (args) => {
 };
 
 const runDev = async () => {
-  const { execa } = await import('execa');
-  const { createTsdownArgs } = await import('../dist/build/runTsdown.js');
   const entries = [
     createTsdownArgs(['--watch']),
     [path.resolve(__dirname, './entry.mjs'), 'build-css', '--watch'],
@@ -108,13 +125,11 @@ const runDev = async () => {
 };
 
 const runPublish = async (args) => {
-  const { runPublishCli } = await import('../dist/publish/cli.js');
   await runPublishCli(args);
   return 0;
 };
 
 const runOwner = async (args) => {
-  const { runOwnerCli } = await import('../dist/publish/cli.js');
   await runOwnerCli(args);
   return 0;
 };
@@ -190,7 +205,8 @@ const main = async () => {
   if (!cli.matchedCommand) {
     const [command] = process.argv.slice(2);
     if (command) {
-      console.error(`Unknown auk command: ${command}`);
+      const logger = createLogger('cli');
+      logger.error(`Unknown auk command: ${command}`);
     } else {
       cli.outputHelp();
     }
@@ -200,6 +216,7 @@ const main = async () => {
 };
 
 main().catch((error) => {
-  console.error(error);
+  const logger = createLogger('cli');
+  logger.error(error);
   process.exit(1);
 });

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { createScopedAukletLogger, type AukletLogger } from '#auklet/logger';
 import { findWorkspaceRoot } from '#auklet/workspace/root';
 import {
   getPublishConfig,
@@ -10,6 +11,7 @@ import { readPnpmWorkspacePackages } from '#auklet/publish/api/pnpmApi';
 import type {
   OwnerOptions,
   PackageJson,
+  PublishOptions,
   PublishPlan,
   PublishTarget,
   WorkspacePackage,
@@ -19,12 +21,10 @@ import {
   validateVersionConsistency,
 } from '#auklet/publish/version';
 
-type ResolvePublishTargetsOptions = {
-  cwd: string;
-  filters: Array<string>;
-  version?: string;
-  dryRun: boolean;
-};
+type ResolvePublishTargetsOptions = Pick<
+  PublishOptions,
+  'cwd' | 'filters' | 'version' | 'dryRun'
+>;
 
 type ResolveOwnerTargetsOptions = Pick<
   OwnerOptions,
@@ -33,9 +33,10 @@ type ResolveOwnerTargetsOptions = Pick<
 
 export async function resolvePublishPlan(
   options: ResolvePublishTargetsOptions,
+  logger: AukletLogger = createScopedAukletLogger('publish'),
 ) {
   if (options.filters.length) {
-    return resolveMonorepoPublishPlan(options);
+    return resolveMonorepoPublishPlan(options, logger);
   }
   return resolveCurrentPackagePublishPlan(options);
 }
@@ -105,6 +106,7 @@ const resolveCurrentPackagePublishPlan = async (
 
 const resolveMonorepoPublishPlan = async (
   options: ResolvePublishTargetsOptions,
+  logger: AukletLogger,
 ): Promise<PublishPlan> => {
   const root = requireWorkspaceRoot(options.cwd);
   const rootPackageJson = readPackageJson(root);
@@ -124,8 +126,10 @@ const resolveMonorepoPublishPlan = async (
     .filter((item) => {
       if (!item.private) return true;
       if (isExactlyMatchedByFilter(item.name, options.filters)) {
-        console.warn(
-          `[auklet:publish] package ${item.name} is private, skipping.`,
+        logger.warnOnce(
+          'package ',
+          logger.package(item.name),
+          ' is private, skipping.',
         );
       }
       return false;

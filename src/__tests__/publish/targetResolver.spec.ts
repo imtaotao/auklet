@@ -12,6 +12,16 @@ vi.mock('#auklet/publish/api/pnpmApi', () => ({
 
 const readWorkspacePackages = vi.mocked(readPnpmWorkspacePackages);
 
+const stripAnsi = (value: string) => {
+  return value.replace(/\u001b\[[0-9;]*m/g, '');
+};
+
+const getConsoleMessages = (spy: {
+  mock: { calls: Array<Array<unknown>> };
+}) => {
+  return spy.mock.calls.map(([message]) => stripAnsi(String(message)));
+};
+
 describe('resolvePublishPlan', () => {
   let project: VirtualProject;
 
@@ -78,7 +88,7 @@ describe('resolvePublishPlan', () => {
       workspacePackage('@scope/root', project.root, '1.0.0', true),
       workspacePackage('@scope/ui', project.resolve('packages/ui'), '1.0.0'),
     ]);
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(
       resolvePublishPlan({
@@ -100,7 +110,7 @@ describe('resolvePublishPlan', () => {
     readWorkspacePackages.mockResolvedValue([
       workspacePackage('@scope/root', project.root, '1.0.0', true),
     ]);
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(
       resolvePublishPlan({
@@ -109,8 +119,8 @@ describe('resolvePublishPlan', () => {
         dryRun: false,
       }),
     ).rejects.toThrow('no publishable package found');
-    expect(warn).toHaveBeenCalledWith(
-      '[auklet:publish] package @scope/root is private, skipping.',
+    expect(getConsoleMessages(warn)).toContain(
+      'publish › package @scope/root is private, skipping.',
     );
   });
 

@@ -1,6 +1,9 @@
 import type { PackageBuildOptions } from '#auklet/types';
 import type { BuildContext, PackageJsonLike } from '#auklet/build/tsdown/types';
 import { parseModuleId } from '#auklet/build/tsdown/parseModuleId';
+import { createScopedAukletLogger } from '#auklet/logger';
+
+const logger = createScopedAukletLogger('build');
 
 const getExternal = (names: Array<string>) => {
   const external = new Set<string>();
@@ -70,8 +73,8 @@ export function getIifeAlwaysBundle(context: BuildContext) {
     } catch (error) {
       if (!warnedParseFailures.has(id)) {
         warnedParseFailures.add(id);
-        console.warn(
-          `[auklet:build] Unable to parse module id for IIFE bundle dependency classification: ${id}`,
+        logger.warn(
+          `Unable to parse module id for IIFE bundle dependency classification: ${id}`,
           error,
         );
       }

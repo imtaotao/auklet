@@ -54,20 +54,14 @@ vi.mock('#auklet/css/production/builder', () => ({
 }));
 
 import { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
-import type { AukletConfig, AukletLogger } from '#auklet/types';
+import type { AukletConfig } from '#auklet/types';
 
 describe('ModuleStyleWatcher', () => {
   let project: VirtualProject;
-  let logger: Required<AukletLogger>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     project = createVirtualProject('auklet-watcher-');
-    logger = {
-      log: vi.fn(),
-      info: vi.fn(),
-      error: vi.fn(),
-    };
     mocks.build.mockClear();
     mocks.builderContexts.length = 0;
     mocks.close.mockClear();
@@ -91,7 +85,6 @@ describe('ModuleStyleWatcher', () => {
     const watcher = new ModuleStyleWatcher({
       packageRoot: project.root,
       aukletConfig,
-      logger,
     });
 
     await watcher.watch();
@@ -99,7 +92,6 @@ describe('ModuleStyleWatcher', () => {
     expect(mocks.builderContexts[0]).toMatchObject({
       packageRoot: project.root,
       aukletConfig,
-      logger,
     });
     expect(mocks.watch).toHaveBeenCalledWith(
       [
@@ -112,8 +104,6 @@ describe('ModuleStyleWatcher', () => {
         usePolling: true,
       },
     );
-    expect(logger.log).toHaveBeenCalledWith('[auklet:css] watch mode ready');
-
     await watcher.close();
   });
 
@@ -121,7 +111,6 @@ describe('ModuleStyleWatcher', () => {
     project.writeFile('src/index.tsx', 'export const value = 1;');
     const watcher = new ModuleStyleWatcher({
       packageRoot: project.root,
-      logger,
     });
 
     await watcher.watch();
@@ -141,7 +130,6 @@ describe('ModuleStyleWatcher', () => {
     project.writeFile('auklet.config.ts', 'export const config = {};');
     const watcher = new ModuleStyleWatcher({
       packageRoot: project.root,
-      logger,
     });
 
     await watcher.watch();

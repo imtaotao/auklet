@@ -18,6 +18,16 @@ const writePackage = vi.mocked(writePackageJson);
 const resolvePlan = vi.mocked(resolvePublishPlan);
 const runHook = vi.mocked(runPublishHook);
 
+const stripAnsi = (value: string) => {
+  return value.replace(/\u001b\[[0-9;]*m/g, '');
+};
+
+const getConsoleMessages = (spy: {
+  mock: { calls: Array<Array<unknown>> };
+}) => {
+  return spy.mock.calls.map(([message]) => stripAnsi(String(message)));
+};
+
 vi.mock('#auklet/publish/targetResolver', () => ({
   resolvePublishPlan: vi.fn(() => ({
     root: process.cwd(),
@@ -85,7 +95,7 @@ describe('PublishRunner', () => {
   });
 
   test('skips git checks, commit checks, and tags with --allow-dirty', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await new PublishRunner({
       cwd: process.cwd(),
@@ -102,13 +112,13 @@ describe('PublishRunner', () => {
       process.cwd(),
       expect.arrayContaining(['--no-git-checks']),
     );
-    expect(warn).toHaveBeenCalledWith(
-      '[auklet:publish] --allow-dirty enabled, skipping git commit and tag.',
+    expect(getConsoleMessages(warn)).toContain(
+      'publish › --allow-dirty enabled, skipping git commit and tag.',
     );
   });
 
   test('writes versions but skips git operations with --allow-dirty', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await new PublishRunner({
       cwd: process.cwd(),
@@ -127,8 +137,8 @@ describe('PublishRunner', () => {
     expect(ensureGitClean).not.toHaveBeenCalled();
     expect(hasGitChanges).not.toHaveBeenCalled();
     expect(createVersionTag).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith(
-      '[auklet:publish] --allow-dirty enabled, skipping git commit and tag.',
+    expect(getConsoleMessages(warn)).toContain(
+      'publish › --allow-dirty enabled, skipping git commit and tag.',
     );
   });
 
@@ -201,17 +211,15 @@ describe('PublishRunner', () => {
       }).run(),
     ).rejects.toThrow('publish failed for @scope/widgets');
 
-    expect(writeError).toHaveBeenCalledWith(
-      '[auklet:publish] partial publish detected',
-    );
-    expect(writeError).toHaveBeenCalledWith(
-      '[auklet:publish] published packages:',
-    );
-    expect(writeError).toHaveBeenCalledWith('- @scope/theme@1.0.1');
-    expect(writeError).toHaveBeenCalledWith('[auklet:publish] failed package:');
-    expect(writeError).toHaveBeenCalledWith('- @scope/widgets@1.0.1');
-    expect(writeError).toHaveBeenCalledWith(
-      '[auklet:publish] package.json versions may have been written. Auklet will not roll them back; check publish output before retrying.',
+    expect(getConsoleMessages(writeError)).toEqual(
+      expect.arrayContaining([
+        'publish › partial publish detected',
+        'publish › published packages:',
+        'publish › - @scope/theme@1.0.1',
+        'publish › failed package:',
+        'publish › - @scope/widgets@1.0.1',
+        'publish › package.json versions may have been written. Auklet will not roll them back; check publish output before retrying.',
+      ]),
     );
   });
 });

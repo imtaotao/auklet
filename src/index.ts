@@ -6,6 +6,7 @@ export type {
   ModuleStyleBuildConfig,
   ModuleStyleBuildContext,
   ModuleStyleBuildOptions,
+  ModuleStyleBuildResult,
   NormalizedAukletConfig,
   NormalizedStyleDependencyGroup,
   PackageBuildFormat,

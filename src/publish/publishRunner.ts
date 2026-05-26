@@ -1,3 +1,4 @@
+import { createScopedAukletLogger } from '#auklet/logger';
 import { runPublishHook } from '#auklet/publish/api/publishHookApi';
 import {
   runPackageBuilds,
@@ -11,6 +12,7 @@ import { PublishPreflight } from '#auklet/publish/runner/publishPreflight';
 import { PublishTargetError } from '#auklet/publish/runner/publishTargetError';
 import { ReleaseGitController } from '#auklet/publish/runner/releaseGitController';
 import { VersionWriter } from '#auklet/publish/runner/versionWriter';
+import type { AukletLogger } from '#auklet/logger';
 import type { PublishOptions, PublishPlan } from '#auklet/publish/types';
 
 export class PublishRunner {
@@ -18,12 +20,17 @@ export class PublishRunner {
   private readonly publisher: PackagePublisher;
   private readonly preflight: PublishPreflight;
   private readonly versions: VersionWriter;
+  private readonly logger: AukletLogger;
 
-  constructor(private readonly options: PublishOptions) {
-    this.git = new ReleaseGitController(options);
-    this.publisher = new PackagePublisher(options);
-    this.preflight = new PublishPreflight(options);
-    this.versions = new VersionWriter(options);
+  private readonly options: PublishOptions;
+
+  constructor(options: PublishOptions) {
+    this.options = options;
+    this.logger = createScopedAukletLogger('publish');
+    this.git = new ReleaseGitController(this.options, this.logger);
+    this.publisher = new PackagePublisher(this.options);
+    this.preflight = new PublishPreflight(this.options);
+    this.versions = new VersionWriter(this.options, this.logger);
   }
 
   async run() {
@@ -34,7 +41,7 @@ export class PublishRunner {
       await runPublishHook({ status: 'beforeBuild', plan });
       failureHookEnabled = true;
       this.versions.writeBeforeBuild(plan);
-      await runPackageBuilds(plan.targets);
+      await runPackageBuilds(plan.targets, this.logger);
       await runPublishHook({ status: 'afterBuild', plan });
       await formatPublishOutputs(plan.targets, plan.config.format !== false);
       await runPublishHook({ status: 'beforePublish', plan });
@@ -48,7 +55,7 @@ export class PublishRunner {
   }
 
   private async preparePlan() {
-    const plan = await resolvePublishPlan(this.options);
+    const plan = await resolvePublishPlan(this.options, this.logger);
     validateBuildScript(plan.targets);
 
     await this.git.checkBeforePublish(plan);
@@ -81,11 +88,11 @@ export class PublishRunner {
           error instanceof PublishTargetError ? error.originalError : error,
       });
     } catch (hookError) {
-      console.error(hookError);
+      this.logger.error?.(hookError);
     }
 
     if (error instanceof PublishTargetError) {
-      reportPublishFailure(error, plan.version);
+      reportPublishFailure(error, plan.version, this.logger);
     }
     this.versions.logWrittenVersionFailure(plan);
     throw error;

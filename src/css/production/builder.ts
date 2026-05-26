@@ -1,22 +1,19 @@
-import path from 'node:path';
+import fs from 'node:fs';
 import { normalizeAukletConfig } from '#auklet/config';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import { ModuleStyleOutputWriter } from '#auklet/css/production/moduleOutputWriter';
 import { PackageStyleEntryWriter } from '#auklet/css/production/packageEntryWriter';
 import type {
-  AukletLogger,
   ModuleStyleBuildConfig,
   ModuleStyleBuildContext,
   ModuleStyleBuildOptions,
   NormalizedAukletConfig,
   ResolvedModuleStyleBuildContext,
 } from '#auklet/types';
-import { toPosixPath } from '#auklet/utils';
 
 export class ModuleStyleBuilder {
   private readonly context: ModuleStyleBuildContext & { packageRoot: string };
-  private readonly logger?: AukletLogger;
 
   constructor(
     context: ModuleStyleBuildContext = {},
@@ -28,13 +25,11 @@ export class ModuleStyleBuilder {
       output: context.output,
       ...context,
     };
-    this.logger = context.logger;
   }
 
   async build(options: ModuleStyleBuildOptions = {}) {
     const rawConfig = options.aukletConfig ?? this.context.aukletConfig ?? {};
     const normalizedConfig = normalizeAukletConfig(rawConfig);
-    const logger = options.logger ?? this.logger;
     const context = this.createBuildContext(normalizedConfig);
     const packageContext = this.createPackageContext(context, normalizedConfig);
     const writerOptions = {
@@ -46,31 +41,18 @@ export class ModuleStyleBuilder {
     const packageOutput = packageWriter.write();
     const outputs = packageOutput ? [packageOutput] : [];
 
-    logger?.log?.(`[auklet:css] build ${path.basename(context.packageRoot)}`);
-
     if (normalizedConfig.modules) {
       outputs.push(...new ModuleStyleOutputWriter(writerOptions).write());
     }
 
-    this.logOutputs(context, packageContext.styleFiles, outputs, logger);
-  }
-
-  private logOutputs(
-    context: ResolvedModuleStyleBuildContext,
-    styleFiles: Array<string>,
-    outputs: Array<string>,
-    logger?: AukletLogger,
-  ) {
-    logger?.log?.(
-      `[auklet:css] ${styleFiles.length} source style file(s), ${outputs.length} output entry file(s)`,
-    );
-    for (const output of outputs) {
-      logger?.log?.(
-        `[auklet:css] + ${toPosixPath(
-          path.relative(context.packageRoot, output),
-        )}`,
-      );
-    }
+    return {
+      packageRoot: context.packageRoot,
+      styleFiles: packageContext.styleFiles,
+      outputs: outputs.map((file) => ({
+        file,
+        size: fs.statSync(file).size,
+      })),
+    };
   }
 
   private createBuildContext(config: NormalizedAukletConfig) {

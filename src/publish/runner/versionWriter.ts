@@ -3,9 +3,13 @@ import {
   writePackageJson,
 } from '#auklet/publish/api/packageJsonApi';
 import type { PublishOptions, PublishPlan } from '#auklet/publish/types';
+import type { AukletLogger } from '#auklet/logger';
 
 export class VersionWriter {
-  constructor(private readonly options: PublishOptions) {}
+  constructor(
+    private readonly options: PublishOptions,
+    private readonly logger: AukletLogger,
+  ) {}
 
   writeBeforeBuild(plan: PublishPlan) {
     if (!plan.dryRun && this.options.version) {
@@ -16,46 +20,61 @@ export class VersionWriter {
   logDryRunPlan(plan: PublishPlan) {
     if (!plan.dryRun || !this.options.version) return;
 
-    console.info(
-      '[auklet:publish] dry-run mode: package.json files will not be changed',
-    );
+    const logger = this.logger;
+    logger.info('dry-run mode: package.json files will not be changed');
     if (plan.workspaceMode === 'monorepo') {
       const rootPackageJson = readPackageJson(plan.root);
-      console.info(
-        `[auklet:publish] planned shared version: ${rootPackageJson.version} -> ${plan.version}`,
-      );
+      logger.summary({
+        title: 'Publish dry-run plan',
+        values: {
+          mode: plan.workspaceMode,
+          sharedVersion: this.formatVersionChange(
+            rootPackageJson.version,
+            plan.version,
+          ),
+          targets: plan.targets.length,
+        },
+      });
       for (const target of plan.targets) {
-        console.info(
-          `[auklet:publish] planned package ${target.packageName}: ${target.version} -> ${target.publishVersion}`,
+        logger.info(
+          'planned package ',
+          this.formatPackage(target.packageName),
+          ': ',
+          ...this.formatVersionChange(target.version, target.publishVersion),
         );
       }
-      console.info(
-        '[auklet:publish] builds will still read each package.json#version',
-      );
-      console.info(
-        '[auklet:publish] pnpm publish --dry-run will still read each package.json#version',
+      logger.info('builds will still read each package.json#version');
+      logger.info(
+        'pnpm publish --dry-run will still read each package.json#version',
       );
       return;
     }
 
     const [target] = plan.targets;
     if (target) {
-      console.info(
-        `[auklet:publish] planned version ${target.packageName}: ${target.version} -> ${target.publishVersion}`,
+      logger.summary({
+        title: 'Publish dry-run plan',
+        values: {
+          package: this.formatPackage(target.packageName),
+          version: this.formatVersionChange(
+            target.version,
+            target.publishVersion,
+          ),
+        },
+      });
+      logger.info(
+        `build will still read package.json#version: ${target.version}`,
       );
-      console.info(
-        `[auklet:publish] build will still read package.json#version: ${target.version}`,
-      );
-      console.info(
-        `[auklet:publish] pnpm publish --dry-run will still read package.json#version: ${target.version}`,
+      logger.info(
+        `pnpm publish --dry-run will still read package.json#version: ${target.version}`,
       );
     }
   }
 
   logWrittenVersionFailure(plan: PublishPlan) {
     if (!plan.dryRun && this.options.version) {
-      console.error(
-        '[auklet:publish] package.json versions may have been written. Auklet will not roll them back; check publish output before retrying.',
+      this.logger.error(
+        'package.json versions may have been written. Auklet will not roll them back; check publish output before retrying.',
       );
     }
   }
@@ -73,12 +92,25 @@ export class VersionWriter {
           ?.packageName ?? (packageRoot === plan.root ? 'root' : packageRoot);
 
       if (packageJson.version !== plan.version) {
-        console.info(
-          `[auklet:publish] writing version ${packageName}: ${packageJson.version} -> ${plan.version}`,
+        this.logger.info(
+          'writing version ',
+          this.formatPackage(packageName),
+          ': ',
+          ...this.formatVersionChange(packageJson.version, plan.version),
         );
       }
       packageJson.version = plan.version;
       writePackageJson(packageRoot, packageJson);
     }
+  }
+
+  private formatPackage(packageName: string) {
+    return this.logger.package(packageName);
+  }
+
+  private formatVersionChange(from: unknown, to: string) {
+    const logger = this.logger;
+    const fromVersion = String(from);
+    return [logger.version(fromVersion), ' -> ', logger.version(to)];
   }
 }

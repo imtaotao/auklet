@@ -7,6 +7,7 @@ import type {
 } from 'vite';
 import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { normalizeFileKey } from '#auklet/utils';
+import { createScopedAukletLogger } from '#auklet/logger';
 
 // package CSS 的 HMR 不能直接走 Vite 原生 CSS 文件链路：
 // - 浏览器 import 的是 auklet-css:* 虚拟 CSS 模块，不是真实的
@@ -16,9 +17,9 @@ import { normalizeFileKey } from '#auklet/utils';
 // - @tailwindcss/vite 会在相关 CSS 变化时主动发 full-reload。package CSS 已由
 //   这个插件接管 HMR 时，需要在一个很短的窗口内吞掉这次 reload。
 
-const HMR_LOG_PREFIX = '[auklet:css:vite]';
 const FULL_RELOAD_SUPPRESS_MS = 100;
 const DUPLICATE_UPDATE_IGNORE_MS = 500;
+const logger = createScopedAukletLogger('css:vite');
 
 const toBrowserVirtualPath = (id: string) => {
   return `/@id/${id.replace('\0', '__x00__')}`;
@@ -97,7 +98,7 @@ export class AukletStyleHmr {
         payload.type === 'full-reload' &&
         this.shouldSuppressFullReload()
       ) {
-        console.info(`${HMR_LOG_PREFIX} suppressed package css full-reload`);
+        logger.info('suppressed package css full-reload');
         return;
       }
       if (typeof payload === 'string') {
@@ -148,10 +149,8 @@ export class AukletStyleHmr {
         isWithinCircularImport: false,
       };
     });
-    console.info(
-      `${HMR_LOG_PREFIX} package css hmr ${getRelativeFile(
-        context.file,
-      )} tracked=${virtualIds.length} updates=${updates.length}`,
+    logger.info(
+      `package css hmr ${getRelativeFile(context.file)} tracked=${virtualIds.length} updates=${updates.length}`,
     );
 
     if (updates.length) {

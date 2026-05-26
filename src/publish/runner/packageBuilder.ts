@@ -1,5 +1,6 @@
 import type { PublishTarget } from '#auklet/publish/types';
 import { runPnpmBuild } from '#auklet/publish/api/pnpmApi';
+import type { AukletLogger } from '#auklet/logger';
 
 export function validateBuildScript(targets: Array<PublishTarget>) {
   for (const target of targets) {
@@ -12,9 +13,12 @@ export function validateBuildScript(targets: Array<PublishTarget>) {
   }
 }
 
-export async function runPackageBuilds(targets: Array<PublishTarget>) {
+export async function runPackageBuilds(
+  targets: Array<PublishTarget>,
+  logger: AukletLogger,
+) {
   for (const target of targets) {
-    console.info(`[auklet:publish] build ${target.packageName}`);
+    logger.step('build ', logger.package(target.packageName));
     await runPnpmBuild(target.packageRoot);
   }
 }

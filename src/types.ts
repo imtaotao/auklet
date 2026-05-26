@@ -94,12 +94,6 @@ export interface AukletConfig {
   build?: PackageBuildOptions;
 }
 
-export type AukletLogger = {
-  log?: (...args: Array<unknown>) => void;
-  info?: (...args: Array<unknown>) => void;
-  error?: (...args: Array<unknown>) => void;
-};
-
 export type LoadAukletConfigOptions = {
   // 配置文件名，默认 auklet.config.ts。
   configFile?: string;
@@ -112,8 +106,6 @@ export interface ModuleStyleBuildContext {
   packageRoot?: string;
   // 已加载的 auklet 配置；未传入时核心 API 使用空配置。
   aukletConfig?: AukletConfig;
-  // 可选日志输出；核心 API 默认静默，CLI 会传入 console。
-  logger?: AukletLogger;
   // API 传入的源码目录，会覆盖包内 auklet.config.ts 的配置。
   source?: string;
   // API 传入的产物目录，会覆盖包内 auklet.config.ts 的配置。
@@ -131,7 +123,15 @@ export interface ResolvedModuleStyleBuildContext {
 
 export type ModuleStyleBuildOptions = {
   aukletConfig?: AukletConfig;
-  logger?: AukletLogger;
+};
+
+export type ModuleStyleBuildResult = {
+  packageRoot: string;
+  styleFiles: Array<string>;
+  outputs: Array<{
+    file: string;
+    size: number;
+  }>;
 };
 
 export interface ModuleStyleBuildOutputConfig {

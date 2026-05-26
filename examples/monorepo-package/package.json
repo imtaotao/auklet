@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter './packages/*' build",
+    "build": "pnpm --stream --filter './packages/*' build",
     "publish:dry-run": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/* --dry-run",
     "publish:local": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/* --version patch --allow-dirty"
   },
