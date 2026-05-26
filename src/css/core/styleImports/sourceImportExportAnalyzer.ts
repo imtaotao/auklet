@@ -180,7 +180,7 @@ const collectExportDeclaration = (
     if (!ts.isStringLiteral(node.moduleSpecifier)) return;
     if (!node.exportClause || !ts.isNamedExports(node.exportClause)) {
       throw new Error(
-        `[auklet:css] Export-all declarations are not supported for CSS auto import: ${node.moduleSpecifier.text}\n` +
+        `[css] Export-all declarations are not supported for CSS auto import: ${node.moduleSpecifier.text}\n` +
           `Use named exports instead, for example: export { Component } from '${node.moduleSpecifier.text}'.\n` +
           `File: ${file}`,
       );
@@ -216,7 +216,7 @@ const collectExportDeclaration = (
 
     if (!localDeclarations.has(localName)) {
       throw new Error(
-        `[auklet:css] Unable to resolve exported symbol "${localName}" for CSS auto import.\n` +
+        `[css] Unable to resolve exported symbol "${localName}" for CSS auto import.\n` +
           `File: ${file}`,
       );
     }

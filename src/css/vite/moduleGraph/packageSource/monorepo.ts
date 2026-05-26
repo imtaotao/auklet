@@ -84,7 +84,7 @@ export class MonorepoPackageSource implements StylePackageSource {
         }));
     } catch (error) {
       throw new Error(
-        '[auklet:css] failed to read pnpm workspace packages for Vite monorepo mode.',
+        '[css] failed to read pnpm workspace packages for Vite monorepo mode.',
         { cause: error },
       );
     }

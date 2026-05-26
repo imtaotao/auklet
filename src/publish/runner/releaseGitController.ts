@@ -45,7 +45,7 @@ export class ReleaseGitController {
     if (changed) {
       if (!this.options.version) {
         throw new Error(
-          '[auklet:publish] build or format changed files. Commit changes before publishing without --version.',
+          '[publish] build or format changed files. Commit changes before publishing without --version.',
         );
       }
       await commitRelease(plan.root, plan.version);

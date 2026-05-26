@@ -25,8 +25,8 @@ catalogs:
       specifier: 1.37.0
       version: 1.37.0
     briefing:
-      specifier: 0.0.4
-      version: 0.0.4
+      specifier: 0.0.5
+      version: 0.0.5
     cac:
       specifier: 7.0.0
       version: 7.0.0
@@ -88,7 +88,7 @@ importers:
         version: 1.37.0
       briefing:
         specifier: 'catalog:'
-        version: 0.0.4
+        version: 0.0.5
       cac:
         specifier: 'catalog:'
         version: 7.0.0
@@ -1030,8 +1030,8 @@ packages:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
 
-  briefing@0.0.4:
-    resolution: {integrity: sha512-lG/mnLrd1lIVWVrp2y3MdtSgaKiZzDBpu89RzP9QJH72eo3gedD2yug9sfjvdz/fnZUIF0ousTM8swU9ZDSK0Q==}
+  briefing@0.0.5:
+    resolution: {integrity: sha512-Ecf1Xcm1l8S2es2MLowEDruFvJYtELLYtkBUGN+VrFZUqYXM3Wa+zyzqhhYn+57r0hvzqZzNIcTt2PTQlE34WA==}
     engines: {node: '>=22', pnpm: '=10.27.0'}
 
   browserify-zlib@0.1.4:
@@ -3501,7 +3501,7 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  briefing@0.0.4:
+  briefing@0.0.5:
     dependencies:
       aidly: 1.37.0
       chalk: 5.6.2
@@ -5075,7 +5075,7 @@ snapshots:
 
   unrun@0.3.0:
     dependencies:
-      rolldown: 1.0.1
+      rolldown: 1.0.2
     optional: true
 
   utf8-byte-length@1.0.5: {}

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import semver from 'semver';
 import { createScopedAukletLogger, type AukletLogger } from '#auklet/logger';
 import { findWorkspaceRoot } from '#auklet/workspace/root';
 import {
@@ -46,7 +47,7 @@ export async function resolveOwnerPackageNames(
 ) {
   if (options.filters.length && options.packages.length) {
     throw new Error(
-      '[auklet:publish] owner command cannot use --filter and --package together.',
+      '[publish] owner command cannot use --filter and --package together.',
     );
   }
 
@@ -62,7 +63,7 @@ export async function resolveOwnerPackageNames(
 
   const packageJson = readPackageJson(options.cwd);
   if (packageJson.private) {
-    throw new Error('[auklet:publish] current package is private.');
+    throw new Error('[publish] current package is private.');
   }
   return [requirePackageName(options.cwd, packageJson)];
 }
@@ -77,7 +78,7 @@ const resolveCurrentPackagePublishPlan = async (
 
   if (workspaceRoot === packageRoot && packageJson.private) {
     throw new Error(
-      '[auklet:publish] current directory is a private monorepo root. Use --filter to select workspace packages.',
+      '[publish] current directory is a private monorepo root. Use --filter to select workspace packages.',
     );
   }
 
@@ -116,12 +117,6 @@ const resolveMonorepoPublishPlan = async (
     workspacePackages,
     options.filters,
   );
-  const publishVersion = await resolvePublishVersion(
-    rootVersion,
-    options.version,
-    root,
-  );
-
   const targets = selectedPackages
     .filter((item) => {
       if (!item.private) return true;
@@ -139,33 +134,56 @@ const resolveMonorepoPublishPlan = async (
       return createPublishTarget({
         packageRoot: item.path,
         packageJson,
-        publishVersion,
+        publishVersion: '',
         workspaceMode: 'monorepo',
       });
     });
+  const versionBase = getMonorepoVersionBase(rootVersion, targets);
+  const publishVersion = await resolvePublishVersion(
+    versionBase,
+    options.version,
+    root,
+  );
+  const publishTargets = targets.map((target) => ({
+    ...target,
+    publishVersion,
+  }));
 
-  validatePublishTargets(targets);
-  validateWorkspaceInternalDependencies(targets);
+  validatePublishTargets(publishTargets);
+  validateWorkspaceInternalDependencies(publishTargets);
   if (!options.version) {
-    validateVersionConsistency(rootVersion, targets);
+    validateVersionConsistency(rootVersion, publishTargets);
   }
 
   return {
     root,
     version: publishVersion,
     dryRun: options.dryRun,
-    targets: sortTargetsByWorkspaceDependencies(targets),
+    targets: sortTargetsByWorkspaceDependencies(publishTargets),
     config: getPublishConfig(rootPackageJson),
     workspaceMode: 'monorepo',
   };
 };
 
+const getMonorepoVersionBase = (
+  rootVersion: string,
+  targets: Array<PublishTarget>,
+) => {
+  return targets.reduce((highest, target) => {
+    return isGreaterVersion(target.version, highest) ? target.version : highest;
+  }, rootVersion);
+};
+
+const isGreaterVersion = (version: string, current: string) => {
+  return semver.valid(version) && semver.valid(current)
+    ? semver.gt(version, current)
+    : false;
+};
+
 const requireWorkspaceRoot = (cwd: string) => {
   const root = findWorkspaceRoot(cwd);
   if (!root) {
-    throw new Error(
-      '[auklet:publish] --filter requires a pnpm workspace root.',
-    );
+    throw new Error('[publish] --filter requires a pnpm workspace root.');
   }
   return root;
 };
@@ -179,7 +197,7 @@ const filterWorkspacePackages = (
   );
   if (!matched.length) {
     throw new Error(
-      `[auklet:publish] no workspace package matched filter: ${filters.join(', ')}`,
+      `[publish] no workspace package matched filter: ${filters.join(', ')}`,
     );
   }
   return matched;
@@ -229,7 +247,7 @@ const createPublishTarget = (options: {
 const validatePublishTargets = (targets: Array<PublishTarget>) => {
   const publishableTargets = targets.filter((target) => !target.private);
   if (!publishableTargets.length) {
-    throw new Error('[auklet:publish] no publishable package found.');
+    throw new Error('[publish] no publishable package found.');
   }
 };
 
@@ -246,7 +264,7 @@ const sortTargetsByWorkspaceDependencies = (targets: Array<PublishTarget>) => {
     if (visited.has(target.packageName)) return;
     if (visiting.has(target.packageName)) {
       throw new Error(
-        `[auklet:publish] circular workspace dependency detected at ${target.packageName}.`,
+        `[publish] circular workspace dependency detected at ${target.packageName}.`,
       );
     }
     visiting.add(target.packageName);
@@ -287,7 +305,7 @@ const validateWorkspaceInternalDependencies = (
         if (!targetNames.has(packageName)) continue;
         if (version === 'workspace:*') continue;
         throw new Error(
-          `[auklet:publish] package ${target.packageName} ${dependencyGroup} ${packageName} must use workspace:* before publishing.`,
+          `[publish] package ${target.packageName} ${dependencyGroup} ${packageName} must use workspace:* before publishing.`,
         );
       }
     }

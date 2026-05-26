@@ -82,6 +82,41 @@ describe('resolvePublishPlan', () => {
     });
   });
 
+  test('increments monorepo publish version from the highest selected package version', async () => {
+    writeWorkspacePackage('theme', '1.0.0');
+    writeWorkspacePackage('ui', '1.0.1');
+    readWorkspacePackages.mockResolvedValue([
+      workspacePackage(
+        '@scope/theme',
+        project.resolve('packages/theme'),
+        '1.0.0',
+      ),
+      workspacePackage('@scope/ui', project.resolve('packages/ui'), '1.0.1'),
+    ]);
+
+    await expect(
+      resolvePublishPlan({
+        cwd: project.root,
+        filters: ['@scope/*'],
+        version: 'patch',
+        dryRun: false,
+      }),
+    ).resolves.toMatchObject({
+      version: '1.0.2',
+      targets: [
+        {
+          packageName: '@scope/theme',
+          publishVersion: '1.0.2',
+        },
+        {
+          packageName: '@scope/ui',
+          version: '1.0.1',
+          publishVersion: '1.0.2',
+        },
+      ],
+    });
+  });
+
   test('silently skips private packages matched by scope filters', async () => {
     writeWorkspacePackage('ui', '1.0.0');
     readWorkspacePackages.mockResolvedValue([

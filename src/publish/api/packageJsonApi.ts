@@ -14,10 +14,9 @@ export function readPackageJson(packageRoot: string) {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8')) as PackageJson;
   } catch (error) {
-    throw new Error(
-      `[auklet:publish] failed to read package.json at ${filePath}.`,
-      { cause: error },
-    );
+    throw new Error(`[publish] failed to read package.json at ${filePath}.`, {
+      cause: error,
+    });
   }
 }
 
@@ -36,9 +35,7 @@ export function requirePackageName(
   if (isString(packageJson.name) && packageJson.name) {
     return packageJson.name;
   }
-  throw new Error(
-    `[auklet:publish] package.json#name is required at ${packageRoot}.`,
-  );
+  throw new Error(`[publish] package.json#name is required at ${packageRoot}.`);
 }
 
 export function requirePackageVersion(
@@ -49,7 +46,7 @@ export function requirePackageVersion(
     return packageJson.version;
   }
   throw new Error(
-    `[auklet:publish] package.json#version is required at ${packageRoot}.`,
+    `[publish] package.json#version is required at ${packageRoot}.`,
   );
 }
 

@@ -70,7 +70,7 @@ export class SinglePackageSource implements StylePackageSource {
     const packageJsonPath = path.join(this.root, 'package.json');
     if (!fs.existsSync(packageJsonPath)) {
       throw new Error(
-        `[auklet:css] package mode requires a package.json at ${this.root}.`,
+        `[css] package mode requires a package.json at ${this.root}.`,
       );
     }
 
@@ -79,7 +79,7 @@ export class SinglePackageSource implements StylePackageSource {
     };
     if (!pkg.name) {
       throw new Error(
-        `[auklet:css] package mode requires package.json#name at ${this.root}.`,
+        `[css] package mode requires package.json#name at ${this.root}.`,
       );
     }
 

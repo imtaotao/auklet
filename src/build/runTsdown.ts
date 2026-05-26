@@ -4,9 +4,8 @@ import { execa } from 'execa';
 
 const require = createRequire(import.meta.url);
 const tsdownRunFile = require.resolve('tsdown/run');
-const currentExtension = import.meta.url.endsWith('.ts') ? 'ts' : 'js';
 const defaultConfigFile = fileURLToPath(
-  new URL(`./tsdownConfig.${currentExtension}`, import.meta.url),
+  new URL('./tsdownConfig.js', import.meta.url),
 );
 
 export function hasTsdownConfigArg(args: Array<string>) {

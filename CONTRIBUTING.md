@@ -32,7 +32,7 @@ Keep `css` only where the API or artifact is explicitly CSS-oriented:
   obvious.
 - File names and import ids: `style.css`, `module.css`, `external.css`,
   `auklet-css:*`.
-- Log prefix: `[auklet:css]`.
+- Log prefix: `[css]`.
 
 ## Repository Layout
 
@@ -441,6 +441,7 @@ ensure pnpm
 resolve publish plan
 validate build scripts
 initial git clean check unless `--dry-run` or `--allow-dirty`
+verify npm authentication for each target with `pnpm whoami` unless `--dry-run`
 log dry-run version plan when needed
 beforeBuild hook
 write package.json versions when `--version` and not `--dry-run`
@@ -464,6 +465,9 @@ real registry publish.
 - Without `--version`, publish uses the versions already in `package.json`.
 - With `--version` and real publish, `VersionWriter` writes the root/current
   package version and every selected target version before build starts.
+- In monorepo mode, `--version patch/minor/major` increments from the highest
+  current version among the root and selected targets. This keeps retries after
+  a partial publish moving forward instead of returning to the old root version.
 - With `--version --dry-run`, versions are only calculated and logged. Build and
   pnpm preflight still read the original package files.
 - A real publish requires a clean git tree before build unless `--allow-dirty`
@@ -473,6 +477,11 @@ real registry publish.
 - Release commit/tag happens after successful preflight and before real
   per-package publish. This keeps version/build/format changes committed before
   anything is pushed to the registry.
+- Authentication preflight runs `pnpm whoami` from each target package root,
+  passing `package.json#publishConfig.registry` when present. Keep the later
+  `pnpm publish --dry-run` preflight too; it catches publish-only checks such as
+  package permissions, registry policy, and some 2FA challenges before
+  commit/tag.
 
 ### Hooks And Failures
 
@@ -493,6 +502,10 @@ only the workspace root publish config is used for orchestration hooks.
 - If real publish partially succeeds, `PackagePublisher` stops on the first
   failed target and `publishFailureReporter` logs already-published packages.
   Auklet never rolls back package versions or registry publishes.
+- npm authentication challenges during target authentication, preflight, or
+  real publish are reported through the publish logger. Users with publish 2FA
+  can retry with `auk publish --otp <code>`; CI should use an npm automation
+  token.
 
 ### Target And Formatting Rules
 

@@ -11,7 +11,7 @@ export class PublishTargetError extends Error {
     readonly publishedTargets: Array<PublishTarget>,
   ) {
     super(
-      `[auklet:publish] ${phase} failed for ${target.packageName} at ${path.relative(process.cwd(), target.packageRoot) || target.packageRoot}.`,
+      `[publish] ${phase} failed for ${target.packageName} at ${path.relative(process.cwd(), target.packageRoot) || target.packageRoot}.`,
     );
   }
 }

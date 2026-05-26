@@ -29,9 +29,7 @@ export async function runPublishCli(args: Array<string>) {
   });
   validateFlags(argv, publishFlags);
   if (argv._.length) {
-    throw new Error(
-      `[auklet:publish] unknown publish argument: ${argv._.join(' ')}`,
-    );
+    throw new Error(`[publish] unknown publish argument: ${argv._.join(' ')}`);
   }
 
   await ensurePnpm();
@@ -57,11 +55,11 @@ export async function runOwnerCli(args: Array<string>) {
   const [subcommand, ...users] = argv._;
   if (subcommand !== 'add') {
     throw new Error(
-      '[auklet:publish] expected owner command: auk owner add <user...>',
+      '[publish] expected owner command: auk owner add <user...>',
     );
   }
   if (!users.length) {
-    throw new Error('[auklet:publish] owner add requires at least one user.');
+    throw new Error('[publish] owner add requires at least one user.');
   }
 
   await ensurePnpm();
@@ -80,7 +78,7 @@ const validateFlags = (
 ) => {
   for (const flag of Object.keys(argv)) {
     if (!allowedFlags.has(flag)) {
-      throw new Error(`[auklet:publish] unknown option: --${flag}`);
+      throw new Error(`[publish] unknown option: --${flag}`);
     }
   }
 };
@@ -93,7 +91,7 @@ const validateNoPrefixedFlags = (
     (arg) => arg.startsWith('--no-') && !allowedFlags.has(arg),
   );
   if (flag) {
-    throw new Error(`[auklet:publish] unknown option: ${flag}`);
+    throw new Error(`[publish] unknown option: ${flag}`);
   }
 };
 

@@ -8,7 +8,7 @@ export class OwnerRunner {
   async run() {
     const packageNames = await resolveOwnerPackageNames(this.options);
     if (!packageNames.length) {
-      throw new Error('[auklet:publish] no owner target package found.');
+      throw new Error('[publish] no owner target package found.');
     }
 
     for (const packageName of packageNames) {

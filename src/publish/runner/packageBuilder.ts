@@ -8,7 +8,7 @@ export function validateBuildScript(targets: Array<PublishTarget>) {
     const buildScript = target.packageJson.scripts?.build;
     if (!isString(buildScript) || !buildScript) {
       throw new Error(
-        `[auklet:publish] package ${target.packageName} must define package.json#scripts.build before publishing.`,
+        `[publish] package ${target.packageName} must define package.json#scripts.build before publishing.`,
       );
     }
   }

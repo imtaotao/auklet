@@ -15,7 +15,7 @@ const parsePnpmWorkspacePackages = (value: string) => {
   try {
     parsed = JSON.parse(value);
   } catch (error) {
-    throw new Error('[auklet:workspace] failed to parse workspace packages.', {
+    throw new Error('[workspace] failed to parse workspace packages.', {
       cause: error,
     });
   }
@@ -40,7 +40,7 @@ export async function readPnpmWorkspacePackageInfo(
     ...options,
   });
   if (result.failed) {
-    throw new Error('[auklet:workspace] failed to read workspace packages.', {
+    throw new Error('[workspace] failed to read workspace packages.', {
       cause: result.stderr || result.stdout,
     });
   }
@@ -53,7 +53,7 @@ export function readPnpmWorkspacePackageInfoSync(root: string) {
     reject: false,
   });
   if (result.failed) {
-    throw new Error('[auklet:workspace] failed to read workspace packages.', {
+    throw new Error('[workspace] failed to read workspace packages.', {
       cause: result.stderr || result.stdout,
     });
   }
@@ -78,7 +78,7 @@ const isWorkspacePackageInfo = (
 
 function throwInvalidWorkspacePackages(): never {
   throw new Error(
-    '[auklet:workspace] failed to read workspace packages.\n' +
-      '[auklet:workspace] Expected `pnpm list -r --depth -1 --json` to return package objects with name/path.',
+    '[workspace] failed to read workspace packages.\n' +
+      '[workspace] Expected `pnpm list -r --depth -1 --json` to return package objects with name/path.',
   );
 }

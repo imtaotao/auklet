@@ -31,7 +31,7 @@ export async function runPublishHook(options: RunPublishHookOptions) {
     });
     if (result.exitCode) {
       throw new Error(
-        `[auklet:publish] publish ${options.status} hook failed: ${command}`,
+        `[publish] publish ${options.status} hook failed: ${command}`,
       );
     }
   }

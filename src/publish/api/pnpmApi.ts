@@ -6,6 +6,15 @@ import { readPnpmWorkspacePackageInfo } from '#auklet/workspace/packages';
 
 const supportedPnpmRange = '>=10.0.0';
 
+export class NpmPublishAuthenticationError extends Error {
+  constructor(packageRoot: string) {
+    super(
+      `[publish] pnpm publish failed at ${packageRoot}: ` +
+        `npm publish requires additional authentication.`,
+    );
+  }
+}
+
 const runPnpm = async (args: Array<string>, options: Options = {}) => {
   return execa('pnpm', args, {
     reject: false,
@@ -18,8 +27,8 @@ export async function ensurePnpm() {
   const stdout = String(result.stdout ?? '');
   if (result.failed || !stdout) {
     throw new Error(
-      '[auklet:publish] pnpm is required for publishing.\n' +
-        '[auklet:publish] Install pnpm first:\n' +
+      '[publish] pnpm is required for publishing.\n' +
+        '[publish] Install pnpm first:\n' +
         '  corepack enable\n' +
         '  corepack prepare pnpm@10 --activate',
     );
@@ -28,8 +37,8 @@ export async function ensurePnpm() {
   const version = stdout.trim();
   if (!semver.satisfies(version, supportedPnpmRange)) {
     throw new Error(
-      `[auklet:publish] unsupported pnpm version: ${version}\n` +
-        `[auklet:publish] expected pnpm ${supportedPnpmRange}`,
+      `[publish] unsupported pnpm version: ${version}\n` +
+        `[publish] expected pnpm ${supportedPnpmRange}`,
     );
   }
 
@@ -43,10 +52,9 @@ export async function readPnpmWorkspacePackages(root: string) {
       return item;
     });
   } catch (error) {
-    throw new Error(
-      '[auklet:publish] failed to read pnpm workspace packages.',
-      { cause: error },
-    );
+    throw new Error('[publish] failed to read pnpm workspace packages.', {
+      cause: error,
+    });
   }
 }
 
@@ -56,28 +64,40 @@ export async function runPnpmBuild(packageRoot: string) {
     stdio: 'inherit',
   });
   if (result.exitCode) {
-    throw new Error(`[auklet:publish] build failed at ${packageRoot}.`);
+    throw new Error(`[publish] build failed at ${packageRoot}.`);
   }
 }
 
 export async function runPnpmPublish(packageRoot: string, args: Array<string>) {
   const result = await runPnpm(['publish', ...args], {
     cwd: packageRoot,
-    stdio: 'inherit',
+    stdio: 'pipe',
   });
+  writeProcessOutput(result);
   if (result.exitCode) {
-    throw new Error(`[auklet:publish] pnpm publish failed at ${packageRoot}.`);
+    if (hasNpmAuthChallenge(result)) {
+      throw new NpmPublishAuthenticationError(packageRoot);
+    }
+    throw new Error(`[publish] pnpm publish failed at ${packageRoot}.`);
   }
 }
 
-export async function runPnpmWhoami(root: string) {
-  const result = await runPnpm(['whoami'], {
-    cwd: root,
+export async function runPnpmWhoami(
+  packageRoot: string,
+  options: { packageName?: string; registry?: string } = {},
+) {
+  const args = ['whoami'];
+  if (options.registry) args.push('--registry', options.registry);
+
+  const result = await runPnpm(args, {
+    cwd: packageRoot,
   });
   if (result.exitCode) {
+    const target = options.packageName ? ` for ${options.packageName}` : '';
+    const registry = options.registry ? ` at ${options.registry}` : '';
     throw new Error(
-      '[auklet:publish] npm authentication is required before publishing.\n' +
-        '[auklet:publish] Run `pnpm login` or configure an npm token before retrying.',
+      `[publish] npm authentication is required${target}${registry} before publishing.\n` +
+        '[publish] Run `pnpm login` or configure an npm token before retrying.',
     );
   }
 
@@ -97,7 +117,7 @@ export async function runPnpmOwnerAdd(
   });
   if (result.exitCode) {
     throw new Error(
-      `[auklet:publish] pnpm owner add failed for ${user} -> ${packageName}.`,
+      `[publish] pnpm owner add failed for ${user} -> ${packageName}.`,
     );
   }
 }
@@ -119,7 +139,35 @@ const isWorkspacePackage = (value: unknown): value is WorkspacePackage => {
 
 function throwInvalidWorkspacePackages(): never {
   throw new Error(
-    '[auklet:publish] failed to read pnpm workspace packages.\n' +
-      '[auklet:publish] Expected `pnpm list -r --depth -1 --json` to return package objects with name/path/version.',
+    '[publish] failed to read pnpm workspace packages.\n' +
+      '[publish] Expected `pnpm list -r --depth -1 --json` to return package objects with name/path/version.',
   );
 }
+
+export function hasNpmAuthChallenge(result: {
+  stdout?: unknown;
+  stderr?: unknown;
+}) {
+  const output = [result.stdout, result.stderr]
+    .map((value) => String(value ?? ''))
+    .join('\n');
+  return isNpmAuthChallenge(output);
+}
+
+const writeProcessOutput = (result: { stdout?: unknown; stderr?: unknown }) => {
+  const stdout = String(result.stdout ?? '');
+  const stderr = String(result.stderr ?? '');
+
+  if (stdout) process.stdout.write(stdout);
+  if (stderr) process.stderr.write(stderr);
+};
+
+const isNpmAuthChallenge = (output: string) => {
+  return [
+    'Authenticate your account',
+    'one-time password',
+    'OTP',
+    'EOTP',
+    'ENEEDAUTH',
+  ].some((text) => output.includes(text));
+};

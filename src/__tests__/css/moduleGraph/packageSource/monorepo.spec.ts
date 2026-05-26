@@ -111,7 +111,7 @@ describe('MonorepoPackageSource', () => {
     });
 
     expect(() => source.getPackages()).toThrow(
-      '[auklet:css] failed to read pnpm workspace packages for Vite monorepo mode.',
+      '[css] failed to read pnpm workspace packages for Vite monorepo mode.',
     );
   });
 

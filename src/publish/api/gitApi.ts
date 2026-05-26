@@ -22,11 +22,11 @@ export async function getGitShortHash(cwd: string) {
 export async function ensureGitClean(cwd: string) {
   const result = await runGit(['status', '--porcelain'], cwd);
   if (result.exitCode) {
-    throw new Error('[auklet:publish] failed to check git status.');
+    throw new Error('[publish] failed to check git status.');
   }
   if (result.stdout.trim()) {
     throw new Error(
-      '[auklet:publish] git working tree must be clean before publishing.',
+      '[publish] git working tree must be clean before publishing.',
     );
   }
 }
@@ -34,7 +34,7 @@ export async function ensureGitClean(cwd: string) {
 export async function hasGitChanges(cwd: string) {
   const result = await runGit(['status', '--porcelain'], cwd);
   if (result.exitCode) {
-    throw new Error('[auklet:publish] failed to check git status.');
+    throw new Error('[publish] failed to check git status.');
   }
   return Boolean(result.stdout.trim());
 }
@@ -42,7 +42,7 @@ export async function hasGitChanges(cwd: string) {
 export async function commitRelease(cwd: string, version: string) {
   const addResult = await runGit(['add', '-A'], cwd);
   if (addResult.exitCode) {
-    throw new Error('[auklet:publish] failed to stage release changes.');
+    throw new Error('[publish] failed to stage release changes.');
   }
 
   const commitResult = await runGit(
@@ -50,7 +50,7 @@ export async function commitRelease(cwd: string, version: string) {
     cwd,
   );
   if (commitResult.exitCode) {
-    throw new Error('[auklet:publish] failed to commit release changes.');
+    throw new Error('[publish] failed to commit release changes.');
   }
 }
 
@@ -72,6 +72,6 @@ export async function createVersionTag(
 
   const result = await runGit(['tag', tagName], cwd);
   if (result.exitCode) {
-    throw new Error(`[auklet:publish] failed to create git tag ${tagName}.`);
+    throw new Error(`[publish] failed to create git tag ${tagName}.`);
   }
 }

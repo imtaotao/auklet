@@ -125,10 +125,16 @@ Publish controls stay on CLI flags:
 auk publish --filter @scope/ui
 auk publish --version patch --dry-run
 auk publish --no-format
+auk publish --otp 123456
 ```
 
 `--no-format` disables auklet's publish output formatter for that run. It is not
 configured in `package.json`.
+Before writing versions, auklet checks npm authentication from each target
+package directory. Package-local `.npmrc` files and
+`package.json#publishConfig.registry` are respected.
+`--otp` is forwarded to `pnpm publish` for npm accounts or organizations that
+require publish 2FA. In CI, prefer an npm automation token.
 
 ## Configuration
 

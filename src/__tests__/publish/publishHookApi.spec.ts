@@ -80,7 +80,7 @@ describe('runPublishHook', () => {
         }),
       }),
     ).rejects.toThrow(
-      '[auklet:publish] publish beforePublish hook failed: check-registry',
+      '[publish] publish beforePublish hook failed: check-registry',
     );
   });
 });

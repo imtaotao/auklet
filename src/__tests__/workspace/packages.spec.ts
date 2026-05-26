@@ -56,7 +56,7 @@ describe('readPnpmWorkspacePackageInfo', () => {
     });
 
     await expect(readPnpmWorkspacePackageInfo('/repo')).rejects.toThrow(
-      '[auklet:workspace] failed to parse workspace packages.',
+      '[workspace] failed to parse workspace packages.',
     );
   });
 
@@ -94,7 +94,7 @@ describe('readPnpmWorkspacePackageInfo', () => {
     });
 
     expect(() => readPnpmWorkspacePackageInfoSync('/repo')).toThrow(
-      '[auklet:workspace] failed to read workspace packages.',
+      '[workspace] failed to read workspace packages.',
     );
   });
 });

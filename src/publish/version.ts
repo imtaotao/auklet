@@ -11,9 +11,7 @@ export async function resolvePublishVersion(
 ) {
   if (!versionSpec) {
     if (!semver.valid(currentVersion)) {
-      throw new Error(
-        `[auklet:publish] invalid package version: ${currentVersion}`,
-      );
+      throw new Error(`[publish] invalid package version: ${currentVersion}`);
     }
     return currentVersion;
   }
@@ -21,16 +19,14 @@ export async function resolvePublishVersion(
   if (releaseIncrements.has(versionSpec)) {
     const parsed = semver.parse(currentVersion);
     if (!parsed) {
-      throw new Error(
-        `[auklet:publish] invalid package version: ${currentVersion}`,
-      );
+      throw new Error(`[publish] invalid package version: ${currentVersion}`);
     }
     const baseVersion = `${parsed.major}.${parsed.minor}.${parsed.patch}`;
     const next = semver.inc(baseVersion, versionSpec as semver.ReleaseType);
 
     if (!next) {
       throw new Error(
-        `[auklet:publish] failed to bump version ${currentVersion} with ${versionSpec}.`,
+        `[publish] failed to bump version ${currentVersion} with ${versionSpec}.`,
       );
     }
     return next;
@@ -39,9 +35,7 @@ export async function resolvePublishVersion(
   if (prereleaseKinds.has(versionSpec)) {
     const parsed = semver.parse(currentVersion);
     if (!parsed) {
-      throw new Error(
-        `[auklet:publish] invalid package version: ${currentVersion}`,
-      );
+      throw new Error(`[publish] invalid package version: ${currentVersion}`);
     }
     const suffix = (await getGitShortHash(cwd)) ?? createTimestamp();
     return `${parsed.major}.${parsed.minor}.${parsed.patch}-${versionSpec}.${suffix}`;
@@ -50,9 +44,7 @@ export async function resolvePublishVersion(
   const explicit = semver.valid(versionSpec);
   if (explicit) return explicit;
 
-  throw new Error(
-    `[auklet:publish] unsupported --version value: ${versionSpec}`,
-  );
+  throw new Error(`[publish] unsupported --version value: ${versionSpec}`);
 }
 
 export function validateVersionConsistency(
@@ -62,7 +54,7 @@ export function validateVersionConsistency(
   for (const item of versions) {
     if (item.version !== expectedVersion) {
       throw new Error(
-        `[auklet:publish] package ${item.packageName} version ${item.version} does not match shared version ${expectedVersion}.`,
+        `[publish] package ${item.packageName} version ${item.version} does not match shared version ${expectedVersion}.`,
       );
     }
   }

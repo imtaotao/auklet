@@ -31,8 +31,8 @@ export class PublishRunner {
     this.logger = createScopedAukletLogger('publish');
     this.summaryLogger = createAukletLogger();
     this.git = new ReleaseGitController(this.options, this.logger);
-    this.publisher = new PackagePublisher(this.options);
-    this.preflight = new PublishPreflight(this.options);
+    this.publisher = new PackagePublisher(this.options, this.logger);
+    this.preflight = new PublishPreflight(this.options, this.logger);
     this.versions = new VersionWriter(this.options, this.logger);
   }
 

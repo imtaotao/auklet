@@ -12,7 +12,11 @@ import {
   hasGitChanges,
 } from '#auklet/publish/api/gitApi';
 import { runPublishHook } from '#auklet/publish/api/publishHookApi';
-import { runPnpmPublish, runPnpmWhoami } from '#auklet/publish/api/pnpmApi';
+import {
+  NpmPublishAuthenticationError,
+  runPnpmPublish,
+  runPnpmWhoami,
+} from '#auklet/publish/api/pnpmApi';
 import { formatPublishOutputs } from '#auklet/publish/runner/publishOutputFormatter';
 import { PublishRunner } from '#auklet/publish/publishRunner';
 
@@ -23,6 +27,7 @@ const runHook = vi.mocked(runPublishHook);
 const formatOutputs = vi.mocked(formatPublishOutputs);
 const commit = vi.mocked(commitRelease);
 const createTag = vi.mocked(createVersionTag);
+const hasChanges = vi.mocked(hasGitChanges);
 const publish = vi.mocked(runPnpmPublish);
 const whoami = vi.mocked(runPnpmWhoami);
 
@@ -95,6 +100,7 @@ vi.mock('#auklet/publish/api/packageJsonApi', () => ({
 }));
 
 vi.mock('#auklet/publish/api/pnpmApi', () => ({
+  NpmPublishAuthenticationError: class NpmPublishAuthenticationError extends Error {},
   runPnpmOwnerAdd: vi.fn(),
   runPnpmPublish: vi.fn(),
   runPnpmWhoami: vi.fn(),
@@ -218,7 +224,51 @@ describe('PublishRunner', () => {
     }).run();
 
     expect(order).toEqual(['whoami', 'write']);
-    expect(whoami).toHaveBeenCalledWith(process.cwd());
+    expect(whoami).toHaveBeenCalledWith(process.cwd(), {
+      packageName: '@scope/ui',
+      registry: undefined,
+    });
+  });
+
+  test('checks npm authentication with target package registry before version writes', async () => {
+    const order: Array<string> = [];
+    resolvePlan.mockResolvedValueOnce({
+      root: process.cwd(),
+      version: '1.0.1',
+      dryRun: false,
+      config: {},
+      workspaceMode: 'single',
+      targets: [
+        createTarget('@scope/ui', {
+          publishConfig: {
+            registry: 'https://registry.example.test',
+          },
+        }),
+      ],
+    });
+    whoami.mockImplementationOnce(async () => {
+      order.push('whoami');
+      return 'publisher';
+    });
+    writePackage.mockImplementationOnce(() => {
+      order.push('write');
+    });
+
+    await new PublishRunner({
+      cwd: process.cwd(),
+      filters: [],
+      version: 'patch',
+      dryRun: false,
+      format: true,
+      ignoreScripts: false,
+      allowDirty: false,
+    }).run();
+
+    expect(order).toEqual(['whoami', 'write']);
+    expect(whoami).toHaveBeenCalledWith(process.cwd(), {
+      packageName: '@scope/ui',
+      registry: 'https://registry.example.test',
+    });
   });
 
   test('does not write versions when npm authentication is missing', async () => {
@@ -238,6 +288,61 @@ describe('PublishRunner', () => {
 
     expect(writePackage).not.toHaveBeenCalled();
     expect(runPnpmPublish).not.toHaveBeenCalled();
+  });
+
+  test('logs npm publish authentication guidance with the publish logger', async () => {
+    const writeError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    publish.mockRejectedValueOnce(
+      new NpmPublishAuthenticationError(process.cwd()),
+    );
+
+    await expect(
+      new PublishRunner({
+        cwd: process.cwd(),
+        filters: [],
+        dryRun: false,
+        format: true,
+        ignoreScripts: false,
+        allowDirty: false,
+      }).run(),
+    ).rejects.toThrow('preflight failed for @scope/ui');
+
+    expect(getConsoleMessages(writeError)).toEqual(
+      expect.arrayContaining([
+        'publish › npm publish requires additional authentication.',
+        'publish › If publish 2FA is enabled, retry with `auk publish --otp <code>`.',
+        'publish › For CI, use an npm automation token.',
+      ]),
+    );
+  });
+
+  test('runs publish preflight before release commit and tag', async () => {
+    const order: Array<string> = [];
+
+    hasChanges.mockResolvedValueOnce(true);
+    publish.mockImplementation(async (_packageRoot, args) => {
+      order.push(args.includes('--dry-run') ? 'preflight' : 'publish');
+    });
+    commit.mockImplementation(async () => {
+      order.push('commit');
+    });
+    createTag.mockImplementation(async () => {
+      order.push('tag');
+    });
+
+    await new PublishRunner({
+      cwd: process.cwd(),
+      filters: [],
+      version: 'patch',
+      dryRun: false,
+      format: true,
+      ignoreScripts: false,
+      allowDirty: false,
+    }).run();
+
+    expect(order).toEqual(['preflight', 'commit', 'tag', 'publish']);
   });
 
   test('prints a final success summary with version changes', async () => {
@@ -470,7 +575,10 @@ const getHookStatuses = () => {
   return runHook.mock.calls.map(([options]) => options.status);
 };
 
-const createTarget = (packageName: string) => ({
+const createTarget = (
+  packageName: string,
+  packageJson: Record<string, unknown> = {},
+) => ({
   packageRoot: process.cwd(),
   packageName,
   version: '1.0.0',
@@ -484,5 +592,6 @@ const createTarget = (packageName: string) => ({
     scripts: {
       build: 'auk build',
     },
+    ...packageJson,
   },
 });
