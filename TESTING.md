@@ -23,7 +23,10 @@ style.
 src/__tests__/
   e2e/
     moduleStyleProject.spec.ts
-    packageModeSmoke.spec.ts
+    monorepoLibSmoke.spec.ts
+    monorepoPackageSmoke.spec.ts
+    singleLibSmoke.spec.ts
+    singlePackageSmoke.spec.ts
   fixtures/
     virtualProject.ts
     styleProjectTemplate.ts
@@ -36,6 +39,10 @@ src/__tests__/
       collectorDependencies.spec.ts
       collectorSource.spec.ts
       collectorSyntax.spec.ts
+    resolvers/
+      packageImports.spec.ts
+      relative.spec.ts
+      tsconfigPaths.spec.ts
     builder/
       dependencyStyles.spec.ts
       moduleOutput.spec.ts
@@ -48,7 +55,9 @@ src/__tests__/
         monorepo.spec.ts
         singlePackage.spec.ts
     watcher.spec.ts
+    hmr.spec.ts
     path.spec.ts
+    styleSpecifier.spec.ts
   build/
     cleanOutput.spec.ts
     runTsdown.spec.ts
@@ -57,6 +66,12 @@ src/__tests__/
       configureTsdown.spec.ts
       iife.spec.ts
       options.spec.ts
+  publish/
+    cli.spec.ts
+    runner.spec.ts
+    targetResolver.spec.ts
+    version.spec.ts
+  cli.spec.ts
   configLoader.spec.ts
   index.spec.ts
 ```
@@ -67,8 +82,10 @@ src/__tests__/
   templates, and structure normalization helpers.
 - `css/`: CSS/style module unit tests.
 - `build/`: tsdown/build config unit tests.
+- `publish/`: publish option parsing, target resolution, version planning, and
+  publish runner state tests.
 - Root-level specs: lightweight smoke/boundary tests for cross-module APIs and
-  config loading.
+  CLI config override parsing, public API exports, and config loading.
 
 ## Choosing a Test Layer
 
@@ -166,6 +183,10 @@ so a failure points at the affected mode instead of a horizontal output layer.
   default cwd.
 - `ModuleStyleWatcher`: watch roots, debounce, logger, and builder invocation
   parameters.
+- `cli.spec.ts`: build override parsing and guardrails shared by `build`,
+  `build-js`, `build-css`, and `dev`.
+- `publish/`: publish/owner CLI flag parsing, target selection, dry-run/version
+  planning, and runner phase ordering.
 - `configLoader`: config module shapes, TypeScript config loading, missing
   config, and temporary file cleanup.
 - `cleanOutput`: `auk build` output cleanup boundaries, including default
@@ -379,12 +400,14 @@ After implementing or changing behavior, add tests in this order:
 
 The current test architecture still does not cover:
 
-- full CLI behavior;
+- full spawned CLI command behavior;
 - real Vite dev server;
 - published package tarball.
 
-If CLI tests are added later, create a dedicated test file and keep it to command
-entry smoke tests, such as:
+CLI tests should stay focused unless a full process boundary is required.
+Prefer parser/runner unit tests for behavior such as build overrides and publish
+flag validation. Add spawned command smoke tests only for process-level behavior,
+such as:
 
 - `auk --help` prints usage;
 - `auk build-css` triggers the build flow;

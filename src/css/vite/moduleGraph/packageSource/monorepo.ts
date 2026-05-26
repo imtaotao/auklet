@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { aukletConfigFile } from '#auklet/config';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
-import { normalizeFileKey, toWatchPath } from '#auklet/utils';
+import { normalizeFileKey, toPosixPath, toWatchPath } from '#auklet/utils';
+import { readPnpmWorkspacePackageInfoSync } from '#auklet/workspace/packages';
+import type { WorkspacePackageInfo } from '#auklet/workspace/packages';
 import type {
   StylePackageInfo,
   StylePackageSource,
@@ -10,48 +12,24 @@ import type {
 
 export type MonorepoPackageSourceOptions = {
   root: string;
-  packagesDir: string;
   styleExtensions: Array<string>;
+  readWorkspacePackages?: (root: string) => Array<WorkspacePackageInfo>;
 };
 
 export class MonorepoPackageSource implements StylePackageSource {
   private packages?: Array<StylePackageInfo>;
   private packageNames?: Array<string>;
   private readonly root: string;
+  private readonly rawRoot: string;
 
   constructor(private readonly options: MonorepoPackageSourceOptions) {
     this.root = normalizeFileKey(options.root);
+    this.rawRoot = toPosixPath(path.resolve(options.root));
   }
 
   getPackages() {
     if (this.packages) return this.packages;
-
-    const packagesRoot = path.join(this.root, this.options.packagesDir);
-    if (!fs.existsSync(packagesRoot)) {
-      this.packages = [];
-      return this.packages;
-    }
-
-    this.packages = fs
-      .readdirSync(packagesRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .flatMap((entry) => {
-        const packageRoot = path.join(packagesRoot, entry.name);
-        const packageJsonPath = path.join(packageRoot, 'package.json');
-        if (!fs.existsSync(packageJsonPath)) return [];
-
-        const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {
-          name?: string;
-        };
-        if (!pkg.name) return [];
-
-        return [
-          {
-            packageName: pkg.name,
-            packageRoot,
-          },
-        ];
-      });
+    this.packages = this.getWorkspacePackages() ?? [];
 
     return this.packages;
   }
@@ -67,10 +45,8 @@ export class MonorepoPackageSource implements StylePackageSource {
 
   isSourceGraphFile(file: string) {
     const normalizedFile = normalizeFileKey(file);
-    const packagesRoot = normalizeFileKey(
-      path.join(this.root, this.options.packagesDir),
-    );
-    if (!normalizedFile.startsWith(`${packagesRoot}/`)) {
+    const packages = this.getPackages();
+    if (!packages.some((item) => isPackageFile(item, normalizedFile))) {
       return false;
     }
     if (normalizedFile.endsWith(aukletConfigFile)) return true;
@@ -82,10 +58,51 @@ export class MonorepoPackageSource implements StylePackageSource {
   }
 
   async getWatchRoots() {
-    const packagesRoot = path.join(this.root, this.options.packagesDir);
-    return [
-      toWatchPath(packagesRoot, '*', 'src'),
-      toWatchPath(packagesRoot, '*', aukletConfigFile),
-    ];
+    return this.getPackages().flatMap((item) => [
+      toWatchPath(item.packageRoot, 'src'),
+      toWatchPath(item.packageRoot, aukletConfigFile),
+    ]);
+  }
+
+  private getWorkspacePackages() {
+    const readWorkspacePackages = this.options.readWorkspacePackages;
+    if (
+      !readWorkspacePackages &&
+      !fs.existsSync(path.join(this.options.root, 'pnpm-workspace.yaml'))
+    ) {
+      return null;
+    }
+
+    try {
+      const readPackages =
+        readWorkspacePackages ?? readPnpmWorkspacePackageInfoSync;
+      return readPackages(this.options.root)
+        .filter((item) => !this.isWorkspaceRootPackage(item))
+        .map((item) => ({
+          packageName: item.name,
+          packageRoot: normalizeFileKey(item.path),
+        }));
+    } catch (error) {
+      throw new Error(
+        '[auklet:css] failed to read pnpm workspace packages for Vite monorepo mode.',
+        { cause: error },
+      );
+    }
+  }
+
+  private isWorkspaceRootPackage(item: WorkspacePackageInfo) {
+    const normalizedPackageRoot = normalizeFileKey(item.path);
+    const rawPackageRoot = toPosixPath(path.resolve(item.path));
+    return (
+      normalizedPackageRoot === this.root || rawPackageRoot === this.rawRoot
+    );
   }
 }
+
+const isPackageFile = (item: StylePackageInfo, normalizedFile: string) => {
+  const packageRoot = normalizeFileKey(item.packageRoot);
+  return (
+    normalizedFile === packageRoot ||
+    normalizedFile.startsWith(`${packageRoot}/`)
+  );
+};

@@ -31,7 +31,6 @@ export class ModuleStyleGraph {
       (options.mode ?? 'package') === 'monorepo'
         ? new MonorepoPackageSource({
             root: normalizeFileKey(options.root),
-            packagesDir: options.packagesDir ?? 'packages',
             styleExtensions: this.config.styleExtensions,
           })
         : new SinglePackageSource({

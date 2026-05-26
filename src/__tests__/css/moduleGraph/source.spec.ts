@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
+import { MonorepoPackageSource } from '#auklet/css/vite/moduleGraph/packageSource/monorepo';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -20,9 +21,19 @@ describe('ModuleStyleGraph source boundaries', () => {
   });
 
   test('normalizes slash styles for workspace source graph checks and watch roots', async () => {
-    const graph = new ModuleStyleGraph({
+    const source = new MonorepoPackageSource({
       root: 'C:\\repo\\workspace',
-      mode: 'monorepo',
+      styleExtensions: ['.css'],
+      readWorkspacePackages: () => [
+        {
+          name: '@scope/app',
+          path: 'C:\\repo\\workspace\\packages\\app-package',
+        },
+        {
+          name: '@scope/shared',
+          path: 'C:/repo/workspace/packages/shared',
+        },
+      ],
     });
 
     const sourceGraphFiles = [
@@ -32,17 +43,19 @@ describe('ModuleStyleGraph source boundaries', () => {
     ];
 
     for (const file of sourceGraphFiles) {
-      expect(graph.isSourceGraphFile(file)).toBe(true);
+      expect(source.isSourceGraphFile(file)).toBe(true);
     }
     expect(
-      graph.isSourceGraphFile(
+      source.isSourceGraphFile(
         'C:/repo/workspace/packages/app-package/src/pages/Blog/data.ts',
       ),
     ).toBe(false);
 
-    expect(await graph.getWatchRoots()).toEqual([
-      'C:/repo/workspace/packages/*/src',
-      'C:/repo/workspace/packages/*/auklet.config.ts',
+    expect(await source.getWatchRoots()).toEqual([
+      'C:/repo/workspace/packages/app-package/src',
+      'C:/repo/workspace/packages/app-package/auklet.config.ts',
+      'C:/repo/workspace/packages/shared/src',
+      'C:/repo/workspace/packages/shared/auklet.config.ts',
     ]);
   });
 

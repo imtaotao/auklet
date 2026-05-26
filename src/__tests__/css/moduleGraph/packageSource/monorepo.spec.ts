@@ -20,64 +20,117 @@ describe('MonorepoPackageSource', () => {
   const createSource = () => {
     return new MonorepoPackageSource({
       root: project.root,
-      packagesDir: 'packages',
       styleExtensions: ['.css'],
     });
   };
 
-  const packagePath = (relativePath: string) => {
-    return project.resolve('packages', relativePath);
-  };
-
-  test('discovers named packages from the monorepo packages directory', () => {
-    project.writeJson('packages/app/package.json', { name: '@scope/app' });
-    project.writeJson('packages/ui/package.json', { name: '@scope/ui' });
-    project.writeJson('packages/anonymous/package.json', {});
-    project.writeFile('packages/not-a-package/README.md', '');
-
-    const source = createSource();
+  test('discovers named packages from pnpm workspace package list', () => {
+    const source = new MonorepoPackageSource({
+      root: project.root,
+      styleExtensions: ['.css'],
+      readWorkspacePackages: () => [
+        {
+          name: '@scope/root',
+          path: project.root,
+        },
+        {
+          name: '@scope/app',
+          path: project.resolve('apps/app'),
+        },
+        {
+          name: '@scope/ui',
+          path: project.resolve('components/ui'),
+        },
+      ],
+    });
 
     expect(source.getPackages()).toEqual([
       {
         packageName: '@scope/app',
-        packageRoot: path.join(project.root, 'packages/app'),
+        packageRoot: path.join(project.root, 'apps/app'),
       },
       {
         packageName: '@scope/ui',
-        packageRoot: path.join(project.root, 'packages/ui'),
+        packageRoot: path.join(project.root, 'components/ui'),
       },
     ]);
-    expect(source.getPackageNames()).toEqual(['@scope/app', '@scope/ui']);
+    expect(source.isKnownPackageName('@scope/root')).toBe(false);
     expect(source.isKnownPackageName('@scope/ui')).toBe(true);
+    expect(source.isSourceGraphFile(project.resolve('src/internal.tsx'))).toBe(
+      false,
+    );
+    expect(
+      source.isSourceGraphFile(project.resolve('apps/app/src/App.tsx')),
+    ).toBe(true);
     expect(source.isKnownPackageName('@scope/missing')).toBe(false);
   });
 
-  test('returns empty packages when the packages directory is missing', () => {
+  test('returns watch roots for workspace packages', async () => {
+    const source = new MonorepoPackageSource({
+      root: project.root,
+      styleExtensions: ['.css'],
+      readWorkspacePackages: () => [
+        {
+          name: '@scope/app',
+          path: project.resolve('apps/app'),
+        },
+        {
+          name: '@scope/ui',
+          path: project.resolve('components/ui'),
+        },
+      ],
+    });
+
+    expect(await source.getWatchRoots()).toEqual([
+      path.join(project.root, 'apps/app/src'),
+      path.join(project.root, 'apps/app/auklet.config.ts'),
+      path.join(project.root, 'components/ui/src'),
+      path.join(project.root, 'components/ui/auklet.config.ts'),
+    ]);
+  });
+
+  test('returns empty packages when the workspace package list is unavailable', async () => {
     const source = createSource();
 
     expect(source.getPackages()).toEqual([]);
     expect(source.getPackageNames()).toEqual([]);
+    await expect(source.getWatchRoots()).resolves.toEqual([]);
   });
 
-  test('returns current monorepo watch roots', async () => {
-    const source = createSource();
+  test('throws workspace read errors in monorepo workspace mode', () => {
+    project.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
 
-    expect(await source.getWatchRoots()).toEqual([
-      path.join(project.root, 'packages/*/src'),
-      path.join(project.root, 'packages/*/auklet.config.ts'),
-    ]);
+    const source = new MonorepoPackageSource({
+      root: project.root,
+      styleExtensions: ['.css'],
+      readWorkspacePackages: () => {
+        throw new Error('workspace list failed');
+      },
+    });
+
+    expect(() => source.getPackages()).toThrow(
+      '[auklet:css] failed to read pnpm workspace packages for Vite monorepo mode.',
+    );
   });
 
   test('recognizes graph files under monorepo packages', () => {
-    const source = createSource();
-    const isGraphFile = (relativePath: string) => {
-      return source.isSourceGraphFile(packagePath(relativePath));
-    };
+    const source = new MonorepoPackageSource({
+      root: project.root,
+      styleExtensions: ['.css'],
+      readWorkspacePackages: () => [
+        {
+          name: '@scope/app',
+          path: project.resolve('apps/app'),
+        },
+      ],
+    });
+    const isGraphFile = (relativePath: string) =>
+      source.isSourceGraphFile(project.resolve('apps/app', relativePath));
 
-    expect(isGraphFile('app/auklet.config.ts')).toBe(true);
-    expect(isGraphFile('app/src/Button.tsx')).toBe(true);
-    expect(isGraphFile('app/src/Button.css')).toBe(true);
-    expect(isGraphFile('app/src/Button.ts')).toBe(false);
+    expect(isGraphFile('auklet.config.ts')).toBe(true);
+    expect(isGraphFile('src/Button.tsx')).toBe(true);
+    expect(isGraphFile('src/Button.css')).toBe(true);
+    expect(isGraphFile('src/Button.ts')).toBe(false);
     expect(source.isSourceGraphFile(project.resolve('README.md'))).toBe(false);
   });
 });

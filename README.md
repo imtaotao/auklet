@@ -78,13 +78,15 @@ See the "Vite Plugin" section for dev plugin setup.
 The package exposes both `auk` and `auklet` commands:
 
 ```bash
-pnpm auk --help
-pnpm auk dev
-pnpm auk build
-pnpm auk build-js
-pnpm auk build-js --watch
-pnpm auk build-css
-pnpm auk build-css --watch
+auk --help
+auk dev
+auk build
+auk build-js
+auk build-js --watch
+auk build-css
+auk build-css --watch
+auk publish --dry-run
+auk owner add npm-user
 ```
 
 Commands:
@@ -98,15 +100,18 @@ Commands:
   builds.
 - `build-css`: generates CSS output.
 - `build-css --watch`: watches source/config/style files and rebuilds CSS.
+- `publish`: runs the auklet publish workflow through pnpm.
+- `owner add`: adds npm package owners through pnpm.
 
-Build commands can override the top-level package config for a single run:
+Build and dev commands can override the top-level package config for a single
+run:
 
 ```bash
-pnpm auk build --source source --output build --modules
-pnpm auk build --build.formats esm,cjs
-pnpm auk build --build.target es2022
-pnpm auk build --build.platform node
-pnpm auk build --build.tsconfig tsconfig.build.json
+auk build --source source --output build --modules
+auk build --build.formats esm,cjs
+auk build --build.target es2022
+auk build --build.platform node
+auk build --build.tsconfig tsconfig.build.json
 ```
 
 Supported build override flags:
@@ -126,22 +131,32 @@ Config precedence is:
 CLI flags > auklet.config.ts > auklet defaults
 ```
 
-These flags are supported by `build`, `build-js`, and `build-css`. `dev` does
-not currently accept build override flags.
+These flags are supported by `build`, `build-js`, `build-css`, and `dev`.
 
 `build-js` still passes unknown flags through to tsdown, but auklet build
 override flags cannot be combined with tsdown custom config flags:
 
 ```bash
 # not allowed
-pnpm auk build-js --source source --config tsdown.config.ts
-pnpm auk build-js --output build -c tsdown.config.ts
-pnpm auk build-js --modules --no-config
+auk build-js --source source --config tsdown.config.ts
+auk build-js --output build -c tsdown.config.ts
+auk build-js --modules --no-config
 ```
 
 When `--config`, `-c`, or `--no-config` is used, tsdown owns the full build
 config. In that mode, use `auklet.config.ts` or tsdown config code directly
 instead of auklet CLI overrides.
+
+Publish uses pnpm and keeps publish-specific controls on CLI flags:
+
+```bash
+auk publish --filter @scope/ui
+auk publish --version patch --dry-run
+auk publish --no-format
+```
+
+`--no-format` disables auklet's publish output formatter for that run. It is not
+configured in `package.json`.
 
 ## Configuration Example
 
@@ -554,13 +569,17 @@ export default {
 };
 ```
 
-`mode: 'monorepo'` walks upward from Vite root to find `pnpm-workspace.yaml`,
-then scans workspace packages.
+`mode: 'monorepo'` walks upward from Vite root to find `pnpm-workspace.yaml`.
+When a workspace root is found, auklet reads the package list through pnpm
+workspace discovery. The workspace root package itself is not exposed as a
+virtual CSS package.
 
 ### Plugin Options
 
+Primary options:
+
 ```ts
-export type AukletStylePluginOptions = {
+type AukletStylePluginOptions = {
   mode?: 'package' | 'monorepo';
   root?: string;
 };
@@ -569,9 +588,13 @@ export type AukletStylePluginOptions = {
 - `mode: 'package'`: default. Vite root is the current package root. This is
   intended for single-package component libraries.
 - `mode: 'monorepo'`: walks upward from Vite root to find `pnpm-workspace.yaml`
-  and scans workspace packages.
-- `root`: custom graph root. This is usually unnecessary; use it only when a
-  monorepo root cannot be inferred automatically.
+  and reads workspace packages through pnpm. If no workspace file is found,
+  auklet falls back to `process.cwd()` as the graph root.
+- `root`: custom graph root. This is usually unnecessary; use it when the graph
+  root should be different from Vite root or the inferred workspace root.
+
+The implementation also accepts advanced graph options used by tests and
+internal integrations, such as custom style graph config and config loading.
 
 ### Supported CSS Imports
 
@@ -607,9 +630,10 @@ Vitest uses test-friendly values with the same names: `__DEV__` is `true`,
 
 ## Programmatic API
 
-The root package entry only exposes user-facing configuration types and the
-Vite plugin. Build, CSS output, publish, and owner workflows are CLI/internal
-implementation details.
+The root package entry exposes the Vite plugin, configuration helpers, and a
+small set of build helpers used by projects that need to compose auklet
+programmatically. Publish and owner workflows remain CLI/internal implementation
+details.
 
 ```ts
 import { aukletStylePlugin } from 'auklet';
@@ -622,6 +646,11 @@ export default {
 Public exports include:
 
 - `aukletStylePlugin`
+- `loadAukletConfig`
+- `runTsdown`
+- `defineKernelPackageConfigFromFile`
+- `defineKernelPackageConfigFromOptions`
+- `runAukletCli`
 - `AukletStylePluginOptions`
 - `AukletConfig`
 - `PackageBuildOptions`

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { resolveBuildCliArgs } from '#auklet/cli';
+import { resolveBuildCliArgs } from '#auklet/cli/buildArgs';
 
 describe('resolveBuildCliArgs', () => {
   test('extracts auklet config overrides and keeps non-auklet args', () => {

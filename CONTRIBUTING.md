@@ -55,6 +55,7 @@ src/
 ├── types.ts              # User config, internal config, and build context types
 ├── config.ts             # Defaults and config normalization
 ├── configLoader.ts       # Loads auklet.config.ts
+├── cli/                  # CLI command registration and command runners
 ├── utils.ts              # Shared path and file utilities
 ├── build/                # JavaScript build flow
 └── css/                  # Style build flow
@@ -100,7 +101,7 @@ tsdown. `cleanOutput` only serves `auk build`; it removes the current package's
 configured `output` directory. `tsdownConfig` is the config translation layer
 that maps auklet `build` options to tsdown config.
 
-Build CLI overrides are parsed in `src/cli.ts`. Top-level flags such as
+Build CLI overrides are parsed in `src/cli/buildArgs.ts`. Top-level flags such as
 `--source`, `--output`, `--modules`, and namespaced flags such as
 `--build.formats`, `--build.target`, `--build.platform`, and
 `--build.tsconfig` override `auklet.config.ts` for the current command. The JS
@@ -108,6 +109,23 @@ build path passes those overrides to the tsdown child process through
 `AUKLET_CONFIG_OVERRIDES`, which is read by the built-in auklet tsdown config.
 Do not combine these flags with tsdown `--config`, `-c`, or `--no-config`; a
 custom tsdown config owns its own config loading behavior.
+
+### CLI Modules
+
+```text
+src/cli/
+├── main.ts               # Command registration and top-level error boundary
+├── build.ts              # build/build-js command orchestration
+├── buildCss.ts           # build-css command orchestration and watch lifecycle
+├── dev.ts                # dev command process orchestration
+├── publish.ts            # publish and owner command orchestration
+└── buildArgs.ts          # auklet build override parsing and validation
+```
+
+`bin/entry.mjs` should stay a bootstrap file that imports the built public API.
+`src/cli/main.ts` owns command registration, while command-specific business
+logic should live in the dedicated runner files above. `src/cli/publish.ts` is
+only top-level CLI glue; publish argument parsing lives in `src/publish/cli.ts`.
 
 ### Style Core Modules
 
@@ -259,7 +277,9 @@ invalidate when source, config, or style files change.
   lost `node_modules` resolution context from virtual modules.
 - `moduleGraph/packageSource/`: abstracts where dev graph packages come from.
   `singlePackage.ts` uses Vite root as the current package root; `monorepo.ts`
-  scans workspace packages.
+  reads pnpm workspace packages, filters out the workspace root package, and
+  surfaces workspace read failures instead of silently treating the workspace as
+  empty.
 
 ### Watch Module
 
@@ -392,13 +412,14 @@ flowchart TD
 ## Publish Flow
 
 Publish is an auxiliary workflow layered on top of auklet builds. Keep publish
-orchestration in `src/publish/` rather than in `bin/entry.mjs`; the CLI should
-only parse auklet-owned flags, ensure pnpm exists, and hand a `PublishOptions`
-object to `PublishRunner`.
+orchestration in `src/publish/` rather than in `bin/entry.mjs`. The top-level
+`src/cli/publish.ts` runner should only delegate into this subdomain;
+`src/publish/cli.ts` owns publish/owner subcommand argument parsing, pnpm
+preflight, and handing typed options to the runners.
 
 ```text
 src/publish/
-├── cli.ts                 # publish/owner CLI flags and validation
+├── cli.ts                 # publish/owner subcommand flags and validation
 ├── publishRunner.ts       # top-level publish state machine
 ├── targetResolver.ts      # package target discovery, filtering, and ordering
 ├── version.ts             # --version resolution
@@ -587,7 +608,7 @@ The Vite plugin supports two package sources:
 - `mode: 'package'`: default. Vite root is the current package root, intended
   for single-package component libraries.
 - `mode: 'monorepo'`: walks upward from Vite root to find `pnpm-workspace.yaml`
-  and scans workspace packages.
+  and reads workspace packages through pnpm.
 
 ## Examples
 

@@ -1,6 +1,7 @@
 import { execa, type Options } from 'execa';
 import semver from 'semver';
 import type { WorkspacePackage } from '#auklet/publish/types';
+import { readPnpmWorkspacePackageInfo } from '#auklet/workspace/packages';
 
 const supportedPnpmRange = '>=10.0.0';
 
@@ -16,22 +17,18 @@ export async function ensurePnpm() {
   const stdout = String(result.stdout ?? '');
   if (result.failed || !stdout) {
     throw new Error(
-      [
-        '[auklet:publish] pnpm is required for publishing.',
-        '[auklet:publish] Install pnpm first:',
-        '  corepack enable',
+      '[auklet:publish] pnpm is required for publishing.\n' +
+        '[auklet:publish] Install pnpm first:\n' +
+        '  corepack enable\n' +
         '  corepack prepare pnpm@10 --activate',
-      ].join('\n'),
     );
   }
 
   const version = stdout.trim();
   if (!semver.satisfies(version, supportedPnpmRange)) {
     throw new Error(
-      [
-        `[auklet:publish] unsupported pnpm version: ${version}`,
+      `[auklet:publish] unsupported pnpm version: ${version}\n` +
         `[auklet:publish] expected pnpm ${supportedPnpmRange}`,
-      ].join('\n'),
     );
   }
 
@@ -39,34 +36,17 @@ export async function ensurePnpm() {
 }
 
 export async function readPnpmWorkspacePackages(root: string) {
-  const result = await runPnpm(['list', '-r', '--depth', '-1', '--json'], {
-    cwd: root,
-  });
-  if (result.failed) {
-    throw new Error(
-      '[auklet:publish] failed to read pnpm workspace packages.',
-      { cause: result.stderr || result.stdout },
-    );
-  }
-
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(String(result.stdout ?? ''));
+    return (await readPnpmWorkspacePackageInfo(root)).map((item) => {
+      if (!isWorkspacePackage(item)) throwInvalidWorkspacePackages();
+      return item;
+    });
   } catch (error) {
     throw new Error(
-      '[auklet:publish] failed to parse pnpm workspace package list.',
+      '[auklet:publish] failed to read pnpm workspace packages.',
       { cause: error },
     );
   }
-
-  if (!Array.isArray(parsed)) {
-    throwInvalidWorkspacePackages();
-  }
-
-  return parsed.map((item) => {
-    if (!isWorkspacePackage(item)) throwInvalidWorkspacePackages();
-    return item;
-  });
 }
 
 export async function runPnpmBuild(packageRoot: string) {
@@ -125,9 +105,7 @@ const isWorkspacePackage = (value: unknown): value is WorkspacePackage => {
 
 function throwInvalidWorkspacePackages(): never {
   throw new Error(
-    [
-      '[auklet:publish] failed to read pnpm workspace packages.',
+    '[auklet:publish] failed to read pnpm workspace packages.\n' +
       '[auklet:publish] Expected `pnpm list -r --depth -1 --json` to return package objects with name/path/version.',
-    ].join('\n'),
   );
 }

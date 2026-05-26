@@ -11,7 +11,7 @@ export type {
 } from '#auklet/types';
 export type { AukletStylePluginOptions } from '#auklet/css/vite/vitePlugin';
 
-export { runAukletCli } from '#auklet/cli';
+export { runAukletCli } from '#auklet/cli/main';
 export { runTsdown } from '#auklet/build/runTsdown';
 export { loadAukletConfig } from '#auklet/configLoader';
 export { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
