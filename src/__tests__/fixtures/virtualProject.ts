@@ -56,7 +56,7 @@ export function createVirtualProject(prefix = 'auklet-project-') {
   };
 
   const writeAukletConfig = (content: string) => {
-    return writeFile('auklet.config.ts', content);
+    return writeFile('auklet.config.js', content);
   };
 
   const readFile = (relativePath: string) => {

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isString } from 'aidly';
 import type { PackageJson } from '#auklet/publish/types';
 
 const packageJsonFile = 'package.json';
@@ -32,7 +33,7 @@ export function requirePackageName(
   packageRoot: string,
   packageJson: PackageJson,
 ) {
-  if (typeof packageJson.name === 'string' && packageJson.name) {
+  if (isString(packageJson.name) && packageJson.name) {
     return packageJson.name;
   }
   throw new Error(
@@ -44,7 +45,7 @@ export function requirePackageVersion(
   packageRoot: string,
   packageJson: PackageJson,
 ) {
-  if (typeof packageJson.version === 'string' && packageJson.version) {
+  if (isString(packageJson.version) && packageJson.version) {
     return packageJson.version;
   }
   throw new Error(

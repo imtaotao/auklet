@@ -67,7 +67,8 @@ describe('SinglePackageSource', () => {
 
     expect(await source.getWatchRoots()).toEqual([
       path.join(project.root, 'source'),
-      path.join(project.root, 'auklet.config.ts'),
+      path.join(project.root, 'auklet.config.js'),
+      path.join(project.root, 'auklet.config.mjs'),
     ]);
     expect(loadAukletConfig).toHaveBeenCalledWith(project.root, {
       cacheBust: true,
@@ -77,7 +78,7 @@ describe('SinglePackageSource', () => {
   test('recognizes graph files under the package root', () => {
     project.writePackageJson({ name: '@scope/app' });
 
-    expect(isGraphFile('auklet.config.ts')).toBe(true);
+    expect(isGraphFile('auklet.config.js')).toBe(true);
     expect(isGraphFile('src/Button.tsx')).toBe(true);
     expect(isGraphFile('src/Button.css')).toBe(true);
     expect(isGraphFile('src/Button.ts')).toBe(false);

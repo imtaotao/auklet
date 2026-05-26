@@ -95,7 +95,7 @@ export interface AukletConfig {
 }
 
 export type LoadAukletConfigOptions = {
-  // 配置文件名，默认 auklet.config.ts。
+  // 配置文件名；默认自动查找 auklet.config.js 和 auklet.config.mjs。
   configFile?: string;
   // 是否绕开 ESM import cache。
   cacheBust?: boolean;
@@ -106,9 +106,9 @@ export interface ModuleStyleBuildContext {
   packageRoot?: string;
   // 已加载的 auklet 配置；未传入时核心 API 使用空配置。
   aukletConfig?: AukletConfig;
-  // API 传入的源码目录，会覆盖包内 auklet.config.ts 的配置。
+  // API 传入的源码目录，会覆盖包内 auklet 配置文件的配置。
   source?: string;
-  // API 传入的产物目录，会覆盖包内 auklet.config.ts 的配置。
+  // API 传入的产物目录，会覆盖包内 auklet 配置文件的配置。
   output?: string;
 }
 

@@ -31,11 +31,9 @@ describe('ModuleStyleGraph entries', () => {
 
   test('creates dev external CSS through recursive workspace kernel dependencies', async () => {
     fixture.writeFile(
-      'packages/app-package/auklet.config.ts',
+      'packages/app-package/auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'src',
           output: 'dist',
           styles: {
@@ -53,11 +51,9 @@ describe('ModuleStyleGraph entries', () => {
       `,
     );
     fixture.writeFile(
-      'packages/ui-package/auklet.config.ts',
+      'packages/ui-package/auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'src',
           output: 'dist',
           styles: {
@@ -80,13 +76,13 @@ describe('ModuleStyleGraph entries', () => {
       result.watchFiles,
       fixture,
       appPackageRoot,
-      'auklet.config.ts',
+      'auklet.config.js',
     );
     expectWatchFile(
       result.watchFiles,
       fixture,
       uiPackageRoot,
-      'auklet.config.ts',
+      'auklet.config.js',
     );
     expect(result.watchFiles).toContain(
       normalizeFileKey(getKatexStylePath(fixture)),
@@ -95,11 +91,9 @@ describe('ModuleStyleGraph entries', () => {
 
   test('creates dev style CSS with themes before module styles', async () => {
     fixture.writeFile(
-      'packages/app-package/auklet.config.ts',
+      'packages/app-package/auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'src',
           output: 'dist',
           styles: {
@@ -121,11 +115,9 @@ describe('ModuleStyleGraph entries', () => {
       `,
     );
     fixture.writeFile(
-      'packages/ui-package/auklet.config.ts',
+      'packages/ui-package/auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'src',
           output: 'dist',
           styles: {
@@ -210,7 +202,7 @@ describe('ModuleStyleGraph entries', () => {
       result.watchFiles,
       fixture,
       appPackageRoot,
-      'auklet.config.ts',
+      'auklet.config.js',
     );
 
     const lightTheme = await graph.createPackageStyleCode(
@@ -238,11 +230,9 @@ describe('ModuleStyleGraph entries', () => {
 
   test('creates dev theme CSS from dependency themes without local theme files', async () => {
     fixture.writeFile(
-      'packages/app-package/auklet.config.ts',
+      'packages/app-package/auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'src',
           output: 'dist',
           styles: {
@@ -259,11 +249,9 @@ describe('ModuleStyleGraph entries', () => {
       `,
     );
     fixture.writeFile(
-      'packages/ui-package/auklet.config.ts',
+      'packages/ui-package/auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'src',
           output: 'dist',
           styles: {
@@ -290,7 +278,7 @@ describe('ModuleStyleGraph entries', () => {
       result.watchFiles,
       fixture,
       appPackageRoot,
-      'auklet.config.ts',
+      'auklet.config.js',
     );
     expectWatchFile(
       result.watchFiles,
@@ -302,11 +290,9 @@ describe('ModuleStyleGraph entries', () => {
 
   test('creates source module CSS with dependency modules before own styles', async () => {
     fixture.writeFile(
-      'packages/app-package/auklet.config.ts',
+      'packages/app-package/auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'src',
           output: 'dist',
           styles: {
@@ -325,11 +311,9 @@ describe('ModuleStyleGraph entries', () => {
       `,
     );
     fixture.writeFile(
-      'packages/ui-package/auklet.config.ts',
+      'packages/ui-package/auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'src',
           output: 'dist',
           styles: {

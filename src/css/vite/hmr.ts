@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { isString } from 'aidly';
 import type {
   HotPayload,
   HotUpdateOptions,
@@ -94,14 +95,14 @@ export class AukletStyleHmr {
     const send = server.ws.send.bind(server.ws) as ViteDevServer['ws']['send'];
     server.ws.send = ((payload: HotPayload, data?: unknown) => {
       if (
-        typeof payload !== 'string' &&
+        !isString(payload) &&
         payload.type === 'full-reload' &&
         this.shouldSuppressFullReload()
       ) {
         logger.info('suppressed package css full-reload');
         return;
       }
-      if (typeof payload === 'string') {
+      if (isString(payload)) {
         send(payload, data as never);
         return;
       }

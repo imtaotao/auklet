@@ -83,9 +83,11 @@ describe('MonorepoPackageSource', () => {
 
     expect(await source.getWatchRoots()).toEqual([
       path.join(project.root, 'apps/app/src'),
-      path.join(project.root, 'apps/app/auklet.config.ts'),
+      path.join(project.root, 'apps/app/auklet.config.js'),
+      path.join(project.root, 'apps/app/auklet.config.mjs'),
       path.join(project.root, 'components/ui/src'),
-      path.join(project.root, 'components/ui/auklet.config.ts'),
+      path.join(project.root, 'components/ui/auklet.config.js'),
+      path.join(project.root, 'components/ui/auklet.config.mjs'),
     ]);
   });
 
@@ -127,7 +129,7 @@ describe('MonorepoPackageSource', () => {
     const isGraphFile = (relativePath: string) =>
       source.isSourceGraphFile(project.resolve('apps/app', relativePath));
 
-    expect(isGraphFile('auklet.config.ts')).toBe(true);
+    expect(isGraphFile('auklet.config.js')).toBe(true);
     expect(isGraphFile('src/Button.tsx')).toBe(true);
     expect(isGraphFile('src/Button.css')).toBe(true);
     expect(isGraphFile('src/Button.ts')).toBe(false);

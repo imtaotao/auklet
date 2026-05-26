@@ -1,7 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
-import { aukletConfigFile, aukletDefaultOptions } from '#auklet/config';
+import { isString } from 'aidly';
+import {
+  aukletConfigFiles,
+  aukletDefaultOptions,
+  isAukletConfigFile,
+} from '#auklet/config';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
@@ -57,8 +62,10 @@ export class ModuleStyleWatcher {
     const sourceDir =
       this.context.source ?? aukletConfig.source ?? aukletDefaultOptions.source;
     const sourceRoot = path.join(this.context.packageRoot, sourceDir);
-    const configPath = path.join(this.context.packageRoot, aukletConfigFile);
-    const watchPaths = [sourceRoot, configPath].filter((file) =>
+    const configPaths = aukletConfigFiles.map((file) =>
+      path.join(this.context.packageRoot, file),
+    );
+    const watchPaths = [sourceRoot, ...configPaths].filter((file) =>
       fs.existsSync(file),
     );
 
@@ -70,7 +77,7 @@ export class ModuleStyleWatcher {
       usePolling: true,
     });
     this.watcher.on('all', (_event, file) => {
-      if (typeof file === 'string' && !this.shouldRebuildForFile(file)) {
+      if (isString(file) && !this.shouldRebuildForFile(file)) {
         return;
       }
       this.scheduleBuild();
@@ -87,7 +94,7 @@ export class ModuleStyleWatcher {
   }
 
   private shouldRebuildForFile(file: string) {
-    if (path.basename(file) === aukletConfigFile) return true;
+    if (isAukletConfigFile(path.basename(file))) return true;
     if (SOURCE_MODULE_RE.test(file)) return true;
     return this.config.styleExtensions.includes(path.extname(file));
   }

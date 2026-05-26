@@ -24,17 +24,18 @@ Requirements:
 
 ## Quick Start
 
-`auklet.config.ts` is optional. Without it, auklet uses `src` as source,
-`dist` as output, no module output, and default JavaScript formats.
+`auklet.config.js` or `auklet.config.mjs` is optional. Without it, auklet uses
+`src` as source, `dist` as output, no module output, and default JavaScript
+formats.
 
 For a component package, a minimal config usually looks like this:
 
-```ts
-import type { AukletConfig } from 'auklet';
+```js
+import { defineConfig } from 'auklet';
 
-export const config: AukletConfig = {
+export const config = defineConfig({
   modules: true,
-};
+});
 ```
 
 Build JavaScript and CSS output:
@@ -101,7 +102,7 @@ Supported build override flags:
 Config precedence:
 
 ```text
-CLI flags > auklet.config.ts > auklet defaults
+CLI flags > auklet.config.js / auklet.config.mjs > auklet defaults
 ```
 
 `build-js` passes unknown flags through to tsdown. Auklet build override flags
@@ -115,8 +116,8 @@ auk build-js --modules --no-config
 ```
 
 When `--config`, `-c`, or `--no-config` is used, tsdown owns the full build
-config. Use `auklet.config.ts` or tsdown config code directly instead of auklet
-CLI overrides.
+config. Use auklet config files or tsdown config code directly instead of
+auklet CLI overrides.
 
 Publish controls stay on CLI flags:
 
@@ -131,12 +132,13 @@ configured in `package.json`.
 
 ## Configuration
 
-`auklet.config.ts` is loaded from the current package root:
+`auklet.config.js` or `auklet.config.mjs` is loaded from the current package
+root. Config files must export a named `config` binding:
 
-```ts
-import type { AukletConfig } from 'auklet';
+```js
+import { defineConfig } from 'auklet';
 
-export const config: AukletConfig = {
+export const config = defineConfig({
   source: 'src',
   output: 'dist',
   modules: true,
@@ -155,7 +157,7 @@ export const config: AukletConfig = {
       },
     },
   },
-};
+});
 ```
 
 Configuration reference:

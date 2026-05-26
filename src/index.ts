@@ -14,6 +14,7 @@ export type { AukletStylePluginOptions } from '#auklet/css/vite/vitePlugin';
 export { runAukletCli } from '#auklet/cli/main';
 export { runTsdown } from '#auklet/build/runTsdown';
 export { loadAukletConfig } from '#auklet/configLoader';
+export { defineConfig } from '#auklet/config';
 export { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
 export {
   defineKernelPackageConfigFromFile,

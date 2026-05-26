@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { aukletConfigFile, normalizeAukletConfig } from '#auklet/config';
+import {
+  aukletConfigFiles,
+  isAukletConfigFile,
+  normalizeAukletConfig,
+} from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { normalizeFileKey, toWatchPath } from '#auklet/utils';
@@ -41,7 +45,7 @@ export class SinglePackageSource implements StylePackageSource {
   isSourceGraphFile(file: string) {
     const normalizedFile = normalizeFileKey(file);
     if (!this.isInsidePackage(normalizedFile)) return false;
-    if (normalizedFile.endsWith(aukletConfigFile)) return true;
+    if (isAukletConfigFile(path.basename(normalizedFile))) return true;
     if (SOURCE_MODULE_RE.test(normalizedFile)) return true;
 
     return this.options.styleExtensions.some((extension) =>
@@ -56,7 +60,7 @@ export class SinglePackageSource implements StylePackageSource {
 
     return [
       toWatchPath(this.root, normalizedConfig.source),
-      toWatchPath(this.root, aukletConfigFile),
+      ...aukletConfigFiles.map((file) => toWatchPath(this.root, file)),
     ];
   }
 

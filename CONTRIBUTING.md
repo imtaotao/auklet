@@ -54,7 +54,7 @@ src/
 ├── index.ts              # Public API exports
 ├── types.ts              # User config, internal config, and build context types
 ├── config.ts             # Defaults and config normalization
-├── configLoader.ts       # Loads auklet.config.ts
+├── configLoader.ts       # Loads auklet.config.js / auklet.config.mjs
 ├── cli/                  # CLI command registration and command runners
 ├── utils.ts              # Shared path and file utilities
 ├── build/                # JavaScript build flow
@@ -67,8 +67,9 @@ src/
   `PackageBuildOptions`, `ModuleStyleBuildConfig`, and related types.
 - `config.ts` defines defaults and normalizes user config into a stable internal
   shape.
-- `configLoader.ts` loads `auklet.config.ts` from a package root. It supports
-  TypeScript config files and cache busting.
+- `configLoader.ts` loads `auklet.config.js` or `auklet.config.mjs` from a
+  package root. It supports cache busting for watch mode and does not transpile
+  TypeScript config files.
 
 Config rules:
 
@@ -104,7 +105,7 @@ that maps auklet `build` options to tsdown config.
 Build CLI overrides are parsed in `src/cli/buildArgs.ts`. Top-level flags such as
 `--source`, `--output`, `--modules`, and namespaced flags such as
 `--build.formats`, `--build.target`, `--build.platform`, and
-`--build.tsconfig` override `auklet.config.ts` for the current command. The JS
+`--build.tsconfig` override auklet config files for the current command. The JS
 build path passes those overrides to the tsdown child process through
 `AUKLET_CONFIG_OVERRIDES`, which is read by the built-in auklet tsdown config.
 Do not combine these flags with tsdown `--config`, `-c`, or `--no-config`; a

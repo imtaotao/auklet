@@ -1,4 +1,5 @@
 import minimist from 'minimist';
+import { isArray } from 'aidly';
 import { OwnerRunner } from '#auklet/publish/ownerRunner';
 import { PublishRunner } from '#auklet/publish/publishRunner';
 import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
@@ -102,13 +103,13 @@ const stripLeadingArgsSeparator = (args: Array<string>) => {
 
 const toArray = (value: unknown) => {
   if (value === undefined) return [];
-  return Array.isArray(value)
+  return isArray(value)
     ? value.map(String).filter(Boolean)
     : [String(value)].filter(Boolean);
 };
 
 const stringOption = (value: unknown) => {
   if (value === undefined) return undefined;
-  if (Array.isArray(value)) return String(value.at(-1));
+  if (isArray(value)) return String(value.at(-1));
   return String(value);
 };

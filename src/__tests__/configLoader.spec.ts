@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import {
   loadAukletConfig,
@@ -25,7 +24,13 @@ describe('loadAukletConfig', () => {
     await expect(loadAukletConfig(project.root)).resolves.toEqual({});
   });
 
-  test('loads TypeScript auklet config as an ES module', async () => {
+  test('returns empty config when the package root is missing', async () => {
+    await expect(
+      loadAukletConfig(project.resolve('missing-package')),
+    ).resolves.toEqual({});
+  });
+
+  test('loads JavaScript auklet config as an ES module', async () => {
     project.writeFile(
       'dependency.mjs',
       `
@@ -35,12 +40,10 @@ describe('loadAukletConfig', () => {
       `,
     );
     project.writeFile(
-      'auklet.config.ts',
+      'auklet.config.js',
       `
         import { dependency } from './dependency.mjs';
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'source',
           output: 'output',
           build: {
@@ -73,9 +76,9 @@ describe('loadAukletConfig', () => {
     });
   });
 
-  test('removes the temporary module generated for TypeScript config', async () => {
+  test('loads .mjs auklet config as an ES module', async () => {
     project.writeFile(
-      'auklet.config.ts',
+      'auklet.config.mjs',
       `
         export const config = {
           source: 'source',
@@ -83,15 +86,26 @@ describe('loadAukletConfig', () => {
       `,
     );
 
-    await loadAukletConfig(project.root, { cacheBust: true });
+    await expect(loadAukletConfig(project.root)).resolves.toEqual({
+      source: 'source',
+    });
+  });
 
-    expect(
-      fs
-        .readdirSync(project.root)
-        .some(
-          (file) => file.startsWith('.auklet.config.') && file.endsWith('.mjs'),
-        ),
-    ).toBe(false);
+  test('rejects multiple JavaScript config files', async () => {
+    project.writeFile('auklet.config.js', 'export const config = {};');
+    project.writeFile('auklet.config.mjs', 'export const config = {};');
+
+    await expect(loadAukletConfig(project.root)).rejects.toThrow(
+      'found multiple config files',
+    );
+  });
+
+  test('rejects TypeScript auklet config files', async () => {
+    project.writeFile('auklet.config.ts', 'export const config = {};');
+
+    await expect(loadAukletConfig(project.root)).rejects.toThrow(
+      'unsupported config file: auklet.config.ts',
+    );
   });
 });
 
@@ -110,8 +124,10 @@ describe('resolveAukletConfigModule', () => {
     });
   });
 
-  test('falls back to empty config for unsupported module shapes', () => {
-    expect(resolveAukletConfigModule({ default: null })).toEqual({});
+  test('requires a named config export', () => {
+    expect(() => resolveAukletConfigModule({ default: null })).toThrow(
+      'config file must export `config`',
+    );
   });
 });
 

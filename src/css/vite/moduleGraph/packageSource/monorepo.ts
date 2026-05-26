@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { aukletConfigFile } from '#auklet/config';
+import { aukletConfigFiles, isAukletConfigFile } from '#auklet/config';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { normalizeFileKey, toPosixPath, toWatchPath } from '#auklet/utils';
 import { readPnpmWorkspacePackageInfoSync } from '#auklet/workspace/packages';
@@ -49,7 +49,7 @@ export class MonorepoPackageSource implements StylePackageSource {
     if (!packages.some((item) => isPackageFile(item, normalizedFile))) {
       return false;
     }
-    if (normalizedFile.endsWith(aukletConfigFile)) return true;
+    if (isAukletConfigFile(path.basename(normalizedFile))) return true;
     if (SOURCE_MODULE_RE.test(normalizedFile)) return true;
 
     return this.options.styleExtensions.some((extension) =>
@@ -60,7 +60,7 @@ export class MonorepoPackageSource implements StylePackageSource {
   async getWatchRoots() {
     return this.getPackages().flatMap((item) => [
       toWatchPath(item.packageRoot, 'src'),
-      toWatchPath(item.packageRoot, aukletConfigFile),
+      ...aukletConfigFiles.map((file) => toWatchPath(item.packageRoot, file)),
     ]);
   }
 

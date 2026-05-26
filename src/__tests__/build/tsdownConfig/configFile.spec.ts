@@ -27,7 +27,7 @@ describe('defineKernelPackageConfigFromFile', () => {
 
   test('loads auklet config from the package root', async () => {
     project.writeFile(
-      'auklet.config.ts',
+      'auklet.config.js',
       `
         export const config = {
           build: {
@@ -53,7 +53,7 @@ describe('defineKernelPackageConfigFromFile', () => {
 
   test('applies cli config overrides after package config', async () => {
     project.writeFile(
-      'auklet.config.ts',
+      'auklet.config.js',
       `
         export const config = {
           output: 'dist',

@@ -1,3 +1,4 @@
+import { isPlainObject, isString } from 'aidly';
 import { execa, type Options } from 'execa';
 import semver from 'semver';
 import type { WorkspacePackage } from '#auklet/publish/types';
@@ -88,18 +89,17 @@ export async function runPnpmOwnerAdd(
 }
 
 const isWorkspacePackage = (value: unknown): value is WorkspacePackage => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     return false;
   }
-  const item = value as Record<string, unknown>;
   return (
-    typeof item.name === 'string' &&
-    item.name.length > 0 &&
-    typeof item.path === 'string' &&
-    item.path.length > 0 &&
-    typeof item.version === 'string' &&
-    item.version.length > 0 &&
-    (item.private === undefined || typeof item.private === 'boolean')
+    isString(value.name) &&
+    value.name.length > 0 &&
+    isString(value.path) &&
+    value.path.length > 0 &&
+    isString(value.version) &&
+    value.version.length > 0 &&
+    (value.private === undefined || typeof value.private === 'boolean')
   );
 };
 

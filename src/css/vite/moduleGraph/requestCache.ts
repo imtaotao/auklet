@@ -1,6 +1,9 @@
 import path from 'node:path';
-import { aukletConfigFile, normalizeAukletConfig } from '#auklet/config';
-import { loadAukletConfig } from '#auklet/configLoader';
+import {
+  loadAukletConfig,
+  resolveAukletConfigPath,
+} from '#auklet/configLoader';
+import { aukletConfigFiles, normalizeAukletConfig } from '#auklet/config';
 import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import type {
   ModuleStyleBuildConfig,
@@ -20,7 +23,7 @@ export type PackageStyleContext = {
   context: ResolvedModuleStyleBuildContext;
   packageContext: StylePackageContext;
   packageName: string;
-  configPath: string;
+  configPaths: Array<string>;
   resolver: WorkspaceStyleResolver;
   sourceRoot: string;
   styleProcessor: StyleProcessor;
@@ -68,6 +71,10 @@ export class ModuleStyleGraphRequestCache {
     if (!stylePackage) return null;
 
     const packageRoot = stylePackage.packageRoot;
+    const configPath = resolveAukletConfigPath(packageRoot);
+    const configPaths = configPath
+      ? [configPath]
+      : aukletConfigFiles.map((file) => path.join(packageRoot, file));
 
     const rawConfig = await this.loadAukletConfig(packageRoot, {
       cacheBust: true,
@@ -85,11 +92,11 @@ export class ModuleStyleGraphRequestCache {
     });
 
     return {
-      normalizedConfig,
       context,
+      configPaths,
       packageContext,
+      normalizedConfig,
       packageName: parsed.packageName,
-      configPath: path.join(packageRoot, aukletConfigFile),
       resolver: packageContext.resolver,
       sourceRoot: packageContext.sourceRoot,
       styleProcessor: packageContext.styleProcessor,

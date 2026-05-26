@@ -1,3 +1,4 @@
+import { isArray } from 'aidly';
 import type { UserConfig } from 'tsdown/config';
 import type { BuildContext, TsdownFormat } from '#auklet/build/tsdown/types';
 import { getBundleEntry } from '#auklet/build/tsdown/entries';
@@ -49,7 +50,7 @@ export function createBundleConfigs(
 
   for (const format of formats) {
     const extnames = formatMap[format];
-    for (const extname of Array.isArray(extnames) ? extnames : [extnames]) {
+    for (const extname of isArray(extnames) ? extnames : [extnames]) {
       const emitDts: boolean = !hasDtsConfig;
 
       outputConfigs.push({ format, extname, dts: emitDts });

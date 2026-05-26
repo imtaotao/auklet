@@ -6,6 +6,7 @@ describe('auklet public api', () => {
     expect(auklet.aukletStylePlugin).toEqual(expect.any(Function));
     expect(auklet.runAukletCli).toEqual(expect.any(Function));
     expect(auklet.loadAukletConfig).toEqual(expect.any(Function));
+    expect(auklet.defineConfig).toEqual(expect.any(Function));
     expect(auklet.runTsdown).toEqual(expect.any(Function));
     expect(auklet.defineKernelPackageConfigFromFile).toEqual(
       expect.any(Function),

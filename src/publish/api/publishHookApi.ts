@@ -1,3 +1,4 @@
+import { isArray } from 'aidly';
 import { execa } from 'execa';
 import type {
   HookStatus,
@@ -19,7 +20,7 @@ export async function runPublishHook(options: RunPublishHookOptions) {
   const hook = getHook(options.plan.config, options.status);
   if (!hook) return;
 
-  const commands = Array.isArray(hook) ? hook : [hook];
+  const commands = isArray(hook) ? hook : [hook];
   for (const command of commands) {
     const result = await execa(command, {
       cwd: options.plan.root,

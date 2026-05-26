@@ -19,7 +19,7 @@ describe('ModuleStyleBuilder package output', () => {
   });
 
   test('uses process cwd as the default package root', async () => {
-    fixture.writeFile('auklet.config.ts', 'export const config = {};');
+    fixture.writeFile('auklet.config.js', 'export const config = {};');
     fixture.writeFile('src/index.tsx', 'export const value = 1;');
     fixture.writeFile('src/index.css', '.root { color: red; }');
 

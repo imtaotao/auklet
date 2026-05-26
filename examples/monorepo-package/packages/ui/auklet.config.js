@@ -1,6 +1,6 @@
-import type { AukletConfig } from 'auklet';
+import { defineConfig } from 'auklet';
 
-export const config: AukletConfig = {
+export const config = defineConfig({
   modules: true,
   build: {
     formats: ['esm', 'cjs'],
@@ -20,4 +20,4 @@ export const config: AukletConfig = {
       },
     },
   },
-};
+});

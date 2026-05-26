@@ -28,7 +28,7 @@ export function writeComponentPackage(
     name: packageName,
   });
   project.writeFile(
-    path.join(packageRoot, 'auklet.config.ts'),
+    path.join(packageRoot, 'auklet.config.js'),
     `
       export const config = {
         source: 'src',

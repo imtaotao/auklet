@@ -1,6 +1,6 @@
 {
   "name": "auklet",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "type": "module",
   "author": "chentao.arthur",
   "packageManager": "pnpm@10.27.0",
@@ -67,7 +67,6 @@
   ],
   "dependencies": {
     "cac": "catalog:",
-    "unrun": "catalog:",
     "tsdown": "catalog:",
     "aidly": "catalog:",
     "execa": "catalog:",

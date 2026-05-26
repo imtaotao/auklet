@@ -69,9 +69,6 @@ catalogs:
     typescript:
       specifier: 6.0.3
       version: 6.0.3
-    unrun:
-      specifier: 0.3.0
-      version: 0.3.0
     verdaccio:
       specifier: 6.7.1
       version: 6.7.1
@@ -128,9 +125,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
-      unrun:
-        specifier: 'catalog:'
-        version: 0.3.0
     devDependencies:
       '@types/minimist':
         specifier: 'catalog:'
@@ -5082,6 +5076,7 @@ snapshots:
   unrun@0.3.0:
     dependencies:
       rolldown: 1.0.1
+    optional: true
 
   utf8-byte-length@1.0.5: {}
 

@@ -103,7 +103,7 @@ export class StyleCodeFactory {
   ) {
     const results: Array<PackageStyleLoadResult> = [];
     const imports: Array<string> = [];
-    const watchFiles: Array<string> = [context.configPath];
+    const watchFiles: Array<string> = [...context.configPaths];
 
     for (const specifier of specifiers) {
       const outputSpecifier = mapSpecifier(specifier);
@@ -160,7 +160,7 @@ export class StyleCodeFactory {
     const { themeFiles } = context.packageContext;
     const targetThemeNames = themeNames ?? context.packageContext.themeNames;
     const root = context.styleProcessor.createRoot();
-    const watchFiles = [context.configPath, ...themeFiles.values()];
+    const watchFiles = [...context.configPaths, ...themeFiles.values()];
     const dependencyResults: Array<PackageStyleLoadResult> = [];
 
     for (const themeName of targetThemeNames) {
@@ -218,7 +218,7 @@ export class StyleCodeFactory {
 
     return {
       code: root.nodes?.length ? context.styleProcessor.stringify(root) : '',
-      watchFiles: [context.configPath, ...styleFiles],
+      watchFiles: [...context.configPaths, ...styleFiles],
     };
   }
 
@@ -281,7 +281,7 @@ export class StyleCodeFactory {
         .filter((code) => code.trim())
         .join('\n'),
       watchFiles: [
-        context.configPath,
+        ...context.configPaths,
         ...styleFiles,
         ...moduleStyleWatchFiles,
         ...sourceFiles.filter((file) => /\.(ts|tsx)$/.test(file)),

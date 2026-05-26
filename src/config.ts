@@ -4,7 +4,11 @@ import type {
   StyleDependencyGroup,
 } from '#auklet/types';
 
-export const aukletConfigFile = 'auklet.config.ts';
+export const aukletConfigFiles = ['auklet.config.js', 'auklet.config.mjs'];
+
+export function isAukletConfigFile(file: string) {
+  return aukletConfigFiles.includes(file);
+}
 
 export const aukletDefaultOptions = {
   source: 'src',
@@ -65,4 +69,8 @@ export function normalizeAukletConfig(config: AukletConfig = {}) {
       ),
     },
   } satisfies NormalizedAukletConfig;
+}
+
+export function defineConfig(config: AukletConfig) {
+  return config;
 }

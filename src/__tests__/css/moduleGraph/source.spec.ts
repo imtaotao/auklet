@@ -53,20 +53,20 @@ describe('ModuleStyleGraph source boundaries', () => {
 
     expect(await source.getWatchRoots()).toEqual([
       'C:/repo/workspace/packages/app-package/src',
-      'C:/repo/workspace/packages/app-package/auklet.config.ts',
+      'C:/repo/workspace/packages/app-package/auklet.config.js',
+      'C:/repo/workspace/packages/app-package/auklet.config.mjs',
       'C:/repo/workspace/packages/shared/src',
-      'C:/repo/workspace/packages/shared/auklet.config.ts',
+      'C:/repo/workspace/packages/shared/auklet.config.js',
+      'C:/repo/workspace/packages/shared/auklet.config.mjs',
     ]);
   });
 
   test('uses package mode by default', async () => {
     fixture.writeJson('package.json', { name: '@scope/single' });
     fixture.writeFile(
-      'auklet.config.ts',
+      'auklet.config.js',
       `
-        import type { AukletConfig } from '/auklet';
-
-        export const config: AukletConfig = {
+        export const config = {
           source: 'source',
           output: 'dist',
         };
@@ -81,7 +81,8 @@ describe('ModuleStyleGraph source boundaries', () => {
     expect(graph.getPackageNames()).toEqual(['@scope/single']);
     expect(await graph.getWatchRoots()).toEqual([
       path.join(fixture.root, 'source'),
-      path.join(fixture.root, 'auklet.config.ts'),
+      path.join(fixture.root, 'auklet.config.js'),
+      path.join(fixture.root, 'auklet.config.mjs'),
     ]);
 
     const result = await graph.createPackageStyleCode(
@@ -89,5 +90,35 @@ describe('ModuleStyleGraph source boundaries', () => {
     );
 
     expect(result.code).toContain('.single { color: red; }');
+  });
+
+  test('uses .mjs config files as virtual CSS watch dependencies', async () => {
+    fixture.writeJson('package.json', { name: '@scope/single' });
+    fixture.writeFile(
+      'auklet.config.mjs',
+      `
+        export const config = {
+          source: 'source',
+          output: 'dist',
+        };
+      `,
+    );
+    fixture.writeFile('source/index.css', '.single { color: red; }');
+    expect(fixture.exists('auklet.config.js')).toBe(false);
+
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+    });
+    const result = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/single/style.css')!,
+    );
+
+    expect(result.watchFiles).toEqual([
+      path.join(fixture.root, 'auklet.config.mjs'),
+      path.join(fixture.root, 'source/index.css'),
+    ]);
+    expect(result.watchFiles).not.toContain(
+      path.join(fixture.root, 'auklet.config.js'),
+    );
   });
 });

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { aukletConfigFile } from '#auklet/config';
+import { isAukletConfigFile } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
@@ -49,7 +49,7 @@ export class ModuleStyleGraph {
   }
 
   isStyleConfigFile(file: string) {
-    return normalizeFileKey(file).endsWith(aukletConfigFile);
+    return isAukletConfigFile(path.basename(normalizeFileKey(file)));
   }
 
   isStyleFile(file: string) {

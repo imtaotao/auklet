@@ -59,7 +59,7 @@ export function createStyleProject() {
       '#fixture/*': './source/*.js',
     },
   });
-  project.writeFile(fromPackageRoot('auklet.config.ts'), createAukletConfig());
+  project.writeFile(fromPackageRoot('auklet.config.js'), createAukletConfig());
 
   project.writeFiles({
     [fromPackageRoot('node_modules/@scope/theme/style.css')]: `

@@ -80,7 +80,7 @@ describe('ModuleStyleWatcher', () => {
       source: 'source',
     };
     project.writeFile('source/index.tsx', 'export const value = 1;');
-    project.writeFile('auklet.config.ts', 'export const config = {};');
+    project.writeFile('auklet.config.js', 'export const config = {};');
 
     const watcher = new ModuleStyleWatcher({
       packageRoot: project.root,
@@ -96,7 +96,7 @@ describe('ModuleStyleWatcher', () => {
     expect(mocks.watch).toHaveBeenCalledWith(
       [
         path.join(project.root, 'source'),
-        path.join(project.root, 'auklet.config.ts'),
+        path.join(project.root, 'auklet.config.js'),
       ],
       {
         ignoreInitial: true,
@@ -127,7 +127,7 @@ describe('ModuleStyleWatcher', () => {
     project.writeFile('src/index.tsx', 'export const value = 1;');
     project.writeFile('src/index.css', '.root {}');
     project.writeFile('src/data.ts', 'export const value = 1;');
-    project.writeFile('auklet.config.ts', 'export const config = {};');
+    project.writeFile('auklet.config.js', 'export const config = {};');
     const watcher = new ModuleStyleWatcher({
       packageRoot: project.root,
     });
@@ -147,7 +147,7 @@ describe('ModuleStyleWatcher', () => {
     await vi.advanceTimersByTimeAsync(80);
     expect(mocks.build).toHaveBeenCalledTimes(3);
 
-    mocks.events.get('all')?.('change', project.resolve('auklet.config.ts'));
+    mocks.events.get('all')?.('change', project.resolve('auklet.config.js'));
     await vi.advanceTimersByTimeAsync(80);
     expect(mocks.build).toHaveBeenCalledTimes(4);
 
