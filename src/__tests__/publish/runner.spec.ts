@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { Logger } from 'briefing';
 import { resolvePublishPlan } from '#auklet/publish/targetResolver';
 import {
   readPackageJson,
@@ -24,10 +25,14 @@ const stripAnsi = (value: string) => {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
 };
 
-const getConsoleMessages = (spy: {
-  mock: { calls: Array<Array<unknown>> };
-}) => {
-  return spy.mock.calls.map(([message]) => stripAnsi(String(message)));
+const getConsoleMessages = (
+  ...spies: Array<{
+    mock: { calls: Array<Array<unknown>> };
+  }>
+) => {
+  return spies.flatMap((spy) =>
+    spy.mock.calls.map(([message]) => stripAnsi(String(message))),
+  );
 };
 
 vi.mock('#auklet/publish/targetResolver', () => ({
@@ -186,11 +191,57 @@ describe('PublishRunner', () => {
     ]);
   });
 
+  test('prints a final success summary with version changes', async () => {
+    const writeResult = vi.spyOn(Logger.prototype, 'result');
+    const writeRows = vi.spyOn(Logger.prototype, 'rows');
+    const writeTasks = vi.spyOn(Logger.prototype, 'tasks');
+
+    await new PublishRunner({
+      cwd: process.cwd(),
+      filters: [],
+      dryRun: false,
+      format: true,
+      ignoreScripts: false,
+      allowDirty: false,
+    }).run();
+
+    expect(writeResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringContaining('Publish complete'),
+        status: 'success',
+        details: expect.objectContaining({
+          mode: 'publish',
+          packages: '1',
+          published: '1',
+        }),
+      }),
+    );
+    expect(writeTasks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tasks: [
+          expect.objectContaining({
+            status: 'success',
+            title: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'package',
+                value: '@scope/ui',
+              }),
+            ]),
+          }),
+        ],
+      }),
+    );
+    expect(writeRows).not.toHaveBeenCalled();
+  });
+
   test('reports published packages when real publish partially fails', async () => {
     const error = new Error('registry failed');
     const writeError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
+    const writeResult = vi.spyOn(Logger.prototype, 'result');
+    const writeRows = vi.spyOn(Logger.prototype, 'rows');
+    const writeTasks = vi.spyOn(Logger.prototype, 'tasks');
 
     resolvePlan.mockResolvedValueOnce({
       root: process.cwd(),
@@ -227,6 +278,98 @@ describe('PublishRunner', () => {
         'publish › - @scope/widgets@1.0.1',
         'publish › package.json versions may have been written. Auklet will not roll them back; check publish output before retrying.',
       ]),
+    );
+    expect(writeResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringContaining('Publish failed'),
+        status: 'error',
+        details: expect.objectContaining({
+          mode: 'publish',
+          packages: '2',
+          published: '1',
+        }),
+      }),
+    );
+    expect(writeTasks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tasks: [
+          expect.objectContaining({
+            status: 'success',
+            title: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'package',
+                value: '@scope/theme',
+              }),
+            ]),
+          }),
+          expect.objectContaining({
+            status: 'error',
+            title: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'package',
+                value: '@scope/widgets',
+              }),
+            ]),
+          }),
+        ],
+      }),
+    );
+    expect(writeRows).not.toHaveBeenCalled();
+  });
+
+  test('prints dry-run version changes as skipped tasks', async () => {
+    const writeResult = vi.spyOn(Logger.prototype, 'result');
+    const writeTasks = vi.spyOn(Logger.prototype, 'tasks');
+
+    resolvePlan.mockResolvedValueOnce({
+      root: process.cwd(),
+      version: '1.0.1',
+      dryRun: true,
+      config: {},
+      workspaceMode: 'single',
+      targets: [createTarget('@scope/ui')],
+    });
+
+    await new PublishRunner({
+      cwd: process.cwd(),
+      filters: [],
+      dryRun: true,
+      format: true,
+      ignoreScripts: false,
+      allowDirty: false,
+    }).run();
+
+    expect(writeResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringContaining('Publish dry-run complete'),
+        details: expect.objectContaining({
+          mode: 'dry-run',
+          published: '0',
+        }),
+      }),
+    );
+    expect(writeTasks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tasks: [
+          expect.objectContaining({
+            status: 'skipped',
+            title: expect.arrayContaining([
+              expect.objectContaining({
+                type: 'package',
+                value: '@scope/ui',
+              }),
+              expect.objectContaining({
+                type: 'version',
+                value: '1.0.0',
+              }),
+              expect.objectContaining({
+                type: 'version',
+                value: '1.0.1',
+              }),
+            ]),
+          }),
+        ],
+      }),
     );
   });
 

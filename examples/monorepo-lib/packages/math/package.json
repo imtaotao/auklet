@@ -1,6 +1,6 @@
 {
   "name": "@demo/math",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "build": "auk build"
