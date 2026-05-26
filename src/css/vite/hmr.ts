@@ -10,11 +10,11 @@ import { normalizeFileKey } from '#auklet/utils';
 import { createScopedAukletLogger } from '#auklet/logger';
 
 // package CSS 的 HMR 不能直接走 Vite 原生 CSS 文件链路：
-// - 浏览器 import 的是 auklet-css:* 虚拟 CSS 模块，不是真实的
+// 1. 浏览器 import 的是 auklet-css:* 虚拟 CSS 模块，不是真实的
 //   packages/*/src/**/*.css 文件，所以真实 CSS 变化时 Vite 的 modules 可能为空。
-// - Vite dev 会把 CSS 转成自接受的 JS 模块，重新执行模块里的 updateStyle()
+// 2. Vite dev 会把 CSS 转成自接受的 JS 模块，重新执行模块里的 updateStyle()
 //   才能更新样式，因此这里手动发送 js-update，而不是 css-update。
-// - @tailwindcss/vite 会在相关 CSS 变化时主动发 full-reload。package CSS 已由
+// 3. @tailwindcss/vite 会在相关 CSS 变化时主动发 full-reload。package CSS 已由
 //   这个插件接管 HMR 时，需要在一个很短的窗口内吞掉这次 reload。
 
 const FULL_RELOAD_SUPPRESS_MS = 100;

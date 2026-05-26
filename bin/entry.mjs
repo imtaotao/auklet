@@ -88,6 +88,7 @@ const runBuild = async (args) => {
   const jsExitCode = await runBuildJs(args);
   if (jsExitCode) return jsExitCode;
 
+  createLogger().newline();
   return runBuildStyle([], { aukletConfig });
 };
 

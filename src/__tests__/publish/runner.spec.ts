@@ -11,12 +11,14 @@ import {
 } from '#auklet/publish/api/gitApi';
 import { runPublishHook } from '#auklet/publish/api/publishHookApi';
 import { runPnpmPublish } from '#auklet/publish/api/pnpmApi';
+import { formatPublishOutputs } from '#auklet/publish/runner/publishOutputFormatter';
 import { PublishRunner } from '#auklet/publish/publishRunner';
 
 const readPackage = vi.mocked(readPackageJson);
 const writePackage = vi.mocked(writePackageJson);
 const resolvePlan = vi.mocked(resolvePublishPlan);
 const runHook = vi.mocked(runPublishHook);
+const formatOutputs = vi.mocked(formatPublishOutputs);
 
 const stripAnsi = (value: string) => {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
@@ -101,6 +103,7 @@ describe('PublishRunner', () => {
       cwd: process.cwd(),
       filters: [],
       dryRun: false,
+      format: true,
       ignoreScripts: false,
       allowDirty: true,
     }).run();
@@ -125,6 +128,7 @@ describe('PublishRunner', () => {
       filters: [],
       version: 'patch',
       dryRun: false,
+      format: true,
       ignoreScripts: false,
       allowDirty: true,
     }).run();
@@ -155,6 +159,7 @@ describe('PublishRunner', () => {
         filters: [],
         version: 'patch',
         dryRun: false,
+        format: true,
         ignoreScripts: false,
         allowDirty: false,
       }).run(),
@@ -168,6 +173,7 @@ describe('PublishRunner', () => {
       cwd: process.cwd(),
       filters: [],
       dryRun: false,
+      format: true,
       ignoreScripts: false,
       allowDirty: false,
     }).run();
@@ -206,6 +212,7 @@ describe('PublishRunner', () => {
         filters: ['@scope/*'],
         version: 'patch',
         dryRun: false,
+        format: true,
         ignoreScripts: false,
         allowDirty: false,
       }).run(),
@@ -221,6 +228,19 @@ describe('PublishRunner', () => {
         'publish › package.json versions may have been written. Auklet will not roll them back; check publish output before retrying.',
       ]),
     );
+  });
+
+  test('passes the cli format switch to publish output formatting', async () => {
+    await new PublishRunner({
+      cwd: process.cwd(),
+      filters: [],
+      dryRun: false,
+      format: false,
+      ignoreScripts: false,
+      allowDirty: false,
+    }).run();
+
+    expect(formatOutputs).toHaveBeenCalledWith(expect.any(Array), false);
   });
 });
 

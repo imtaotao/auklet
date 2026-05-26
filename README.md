@@ -561,33 +561,26 @@ Vitest uses test-friendly values with the same names: `__DEV__` is `true`,
 
 ## Programmatic API
 
+The root package entry only exposes user-facing configuration types and the
+Vite plugin. Build, CSS output, publish, and owner workflows are CLI/internal
+implementation details.
+
 ```ts
-import {
-  ModuleStyleBuilder,
-  ModuleStyleWatcher,
-  aukletStylePlugin,
-  loadAukletConfig,
-  runTsdown,
-} from 'auklet';
+import { aukletStylePlugin } from 'auklet';
 
-const aukletConfig = await loadAukletConfig(process.cwd());
-
-await new ModuleStyleBuilder({
-  packageRoot: process.cwd(),
-  aukletConfig,
-}).build();
+export default {
+  plugins: [aukletStylePlugin()],
+};
 ```
 
 Public exports include:
 
-- `ModuleStyleBuilder`
-- `ModuleStyleWatcher`
 - `aukletStylePlugin`
-- `loadAukletConfig`
-- `resolveAukletConfigModule`
-- `createTsdownArgs`
-- `runTsdown`
-- related TypeScript types
+- `AukletStylePluginOptions`
+- `AukletConfig`
+- `PackageBuildOptions`
+- `StyleOptions`
+- related user-facing TypeScript types
 
 ## Development
 

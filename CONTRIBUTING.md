@@ -262,6 +262,88 @@ src/css/watch/
 `ModuleStyleWatcher` powers `auk build-css --watch` and `auk dev`. It watches
 package source/config/style changes and debounces calls to `ModuleStyleBuilder`.
 
+## CSS Capability Boundaries
+
+The CSS subsystem is a rule-based style entry generator, not a full CSS bundler
+or a replacement for Vite/PostCSS. Keep this boundary clear when changing
+behavior or documentation: auklet decides which style entry files exist, which
+dependencies participate in those entries, and how production output and Vite
+dev virtual CSS stay aligned. It does not aim to implement every CSS language
+feature.
+
+### Supported Model
+
+auklet supports this user model:
+
+- package style entry: package-level aggregate CSS such as `dist/index.css`;
+- module style entry: per-source-module CSS such as
+  `dist/es/components/Button/style/index.css`;
+- theme style entry: configured theme files and their dependency themes;
+- external style entry: configured third-party or workspace package style
+  dependencies;
+- Vite dev virtual entries for the same package/module/theme/external model.
+
+The supported input surface is intentionally narrow:
+
+- Source style files are regular CSS files discovered under the configured
+  source root.
+- Current package theme entries come from `styles.themes`.
+- External package style entries, theme entries, and component auto-import rules
+  come from `styles.dependencies`.
+- Module auto imports are inferred from `.tsx` imports and named re-exports.
+  `.ts`, `.d.ts`, and `export * from` are outside the inference model.
+- Same-package source specifiers may resolve through relative paths,
+  `package.json#imports`, or `tsconfig.compilerOptions.paths`, but resolved
+  files must stay inside the current package source root.
+
+### Import Semantics
+
+`StyleProcessor` expands local CSS `@import` rules so generated entries can
+merge source styles and avoid duplicate content. Treat this as source-file
+composition, not as full CSS bundling.
+
+Supported import behavior:
+
+- local relative CSS imports inside source style files;
+- recursive local imports with circular import protection;
+- duplicate local import/content suppression for generated output stability;
+- generated `@import` paths between auklet output entries, produced by
+  `style/entries.ts` and the production/dev writers.
+
+Out of scope:
+
+- URL rebasing for `url(...)`;
+- CSS Modules class name transformation;
+- Sass/Less/Stylus or other preprocessors;
+- minification, autoprefixing, nesting transforms, or other PostCSS plugin
+  behavior;
+- arbitrary package CSS bundling beyond configured style dependencies;
+- semantic handling of conditional CSS imports such as media, supports, or
+  layer-specific import conditions.
+
+If support for a new CSS syntax or transform is added later, decide whether it
+belongs in auklet core or should stay delegated to the consumer's build stack.
+Do not silently add partial bundler behavior inside entry writers.
+
+### Production And Dev Alignment
+
+Production output and Vite dev virtual CSS must share the same entry semantics:
+
+- entry composition order lives in `src/css/core/style/entries.ts`;
+- production writers should not invent ordering that the Vite graph cannot
+  reproduce;
+- Vite graph code should not accept package/style ids that production output
+  cannot represent;
+- third-party CSS dependencies in dev should keep resolving from the package
+  root that declares them, usually through Vite `/@fs/...` imports;
+- workspace package style dependencies in dev should stay virtual and recursive
+  so HMR can track source changes across packages.
+
+When changing CSS behavior, update both production and dev paths or explicitly
+document why the behavior is production-only or dev-only. Broad semantic changes
+usually need project-level tests that compare normalized production output and
+Vite/dev graph output.
+
 ## CLI Flow
 
 The CLI entry is `bin/entry.mjs`, exposed as `auk` and `auklet` after
@@ -297,6 +379,101 @@ flowchart TD
   Dev --> StyleWatch["ModuleStyleWatcher"]
   StyleWatch --> StyleBuilder
 ```
+
+## Publish Flow
+
+Publish is an auxiliary workflow layered on top of auklet builds. Keep publish
+orchestration in `src/publish/` rather than in `bin/entry.mjs`; the CLI should
+only parse auklet-owned flags, ensure pnpm exists, and hand a `PublishOptions`
+object to `PublishRunner`.
+
+```text
+src/publish/
+├── cli.ts                 # publish/owner CLI flags and validation
+├── publishRunner.ts       # top-level publish state machine
+├── targetResolver.ts      # package target discovery, filtering, and ordering
+├── version.ts             # --version resolution
+├── api/                   # git, package.json, pnpm, and hook command adapters
+└── runner/                # build, format, preflight, git, version, publish stages
+```
+
+`PublishRunner` owns the state machine. Other publish modules should keep a
+single responsibility and avoid deciding cross-stage order.
+
+### State Order
+
+Normal publish order:
+
+```text
+parse CLI flags
+ensure pnpm
+resolve publish plan
+validate build scripts
+initial git clean check unless `--dry-run` or `--allow-dirty`
+log dry-run version plan when needed
+beforeBuild hook
+write package.json versions when `--version` and not `--dry-run`
+pnpm run build for each target
+afterBuild hook
+format publish outputs unless `--no-format` is set
+beforePublish hook
+pnpm publish `--dry-run` preflight for each target
+commit release changes and create tag when real publish can use git
+pnpm publish for each target when not `--dry-run`
+afterPublish hook with success result
+```
+
+Dry-run stops after the preflight publish loop. It still resolves versions,
+runs build, runs hooks, and formats outputs unless `--no-format` is set, but it
+does not write `package.json#version`, create a git commit/tag, or perform a
+real registry publish.
+
+### Version And Git Rules
+
+- Without `--version`, publish uses the versions already in `package.json`.
+- With `--version` and real publish, `VersionWriter` writes the root/current
+  package version and every selected target version before build starts.
+- With `--version --dry-run`, versions are only calculated and logged. Build and
+  pnpm preflight still read the original package files.
+- A real publish requires a clean git tree before build unless `--allow-dirty`
+  is set.
+- `--allow-dirty` skips the initial clean check, the post-build dirty check, the
+  release commit, and the tag. It can still write versions and publish.
+- Release commit/tag happens after successful preflight and before real
+  per-package publish. This keeps version/build/format changes committed before
+  anything is pushed to the registry.
+
+### Hooks And Failures
+
+Publish hooks are read from `package.json#auklet.publish`. In monorepo publish,
+only the workspace root publish config is used for orchestration hooks.
+
+- `beforeBuild` runs after the plan is valid and before any version write.
+- If `beforeBuild` fails, publish stops immediately and does not run
+  `afterPublish`.
+- `afterBuild` runs after all package builds complete and before output
+  formatting.
+- `beforePublish` runs after build and formatting complete, but before pnpm
+  preflight.
+- `afterPublish` runs once after publish/preflight finishes or after a later
+  failure. It receives `AUKLET_PUBLISH_RESULT=success` or `failure`.
+- If `afterBuild`, formatting, `beforePublish`, preflight, git commit/tag, or
+  real publish fails, `afterPublish` still runs with failure metadata.
+- If real publish partially succeeds, `PackagePublisher` stops on the first
+  failed target and `publishFailureReporter` logs already-published packages.
+  Auklet never rolls back package versions or registry publishes.
+
+### Target And Formatting Rules
+
+- No `--filter`: publish the current package root.
+- With `--filter`: require a pnpm workspace root, select matching workspace
+  packages, skip private packages, and publish selected packages in workspace
+  dependency order.
+- Selected workspace packages must depend on each other with `workspace:*`;
+  non-workspace ranges are rejected before build.
+- Built-in output formatting is controlled by the CLI option, not package
+  config. Default is enabled; `--no-format` disables only auklet's output
+  formatter and does not affect user build scripts or publish lifecycle scripts.
 
 ## JavaScript Build Flow
 

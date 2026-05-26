@@ -9,6 +9,7 @@ const publishFlags = new Set([
   'filter',
   'version',
   'dry-run',
+  'format',
   'otp',
   'ignore-scripts',
   'allow-dirty',
@@ -17,10 +18,13 @@ const ownerFlags = new Set(['_', 'filter', 'package', 'otp']);
 
 export async function runPublishCli(args: Array<string>) {
   const cliArgs = stripLeadingArgsSeparator(args);
-  validateNoPrefixedFlags(cliArgs);
+  validateNoPrefixedFlags(cliArgs, new Set(['--no-format']));
   const argv = minimist(cliArgs, {
     string: ['filter', 'version', 'otp'],
-    boolean: ['dry-run', 'ignore-scripts', 'allow-dirty'],
+    boolean: ['dry-run', 'format', 'ignore-scripts', 'allow-dirty'],
+    default: {
+      format: true,
+    },
   });
   validateFlags(argv, publishFlags);
   if (argv._.length) {
@@ -35,6 +39,7 @@ export async function runPublishCli(args: Array<string>) {
     filters: toArray(argv.filter),
     version: stringOption(argv.version),
     dryRun: argv['dry-run'] === true,
+    format: argv.format !== false,
     otp: stringOption(argv.otp),
     ignoreScripts: argv['ignore-scripts'] === true,
     allowDirty: argv['allow-dirty'] === true,
@@ -43,7 +48,7 @@ export async function runPublishCli(args: Array<string>) {
 
 export async function runOwnerCli(args: Array<string>) {
   const cliArgs = stripLeadingArgsSeparator(args);
-  validateNoPrefixedFlags(cliArgs);
+  validateNoPrefixedFlags(cliArgs, new Set());
   const argv = minimist(cliArgs, {
     string: ['filter', 'package', 'otp'],
   });
@@ -79,8 +84,13 @@ const validateFlags = (
   }
 };
 
-const validateNoPrefixedFlags = (args: Array<string>) => {
-  const flag = args.find((arg) => arg.startsWith('--no-'));
+const validateNoPrefixedFlags = (
+  args: Array<string>,
+  allowedFlags: Set<string>,
+) => {
+  const flag = args.find(
+    (arg) => arg.startsWith('--no-') && !allowedFlags.has(arg),
+  );
   if (flag) {
     throw new Error(`[auklet:publish] unknown option: ${flag}`);
   }

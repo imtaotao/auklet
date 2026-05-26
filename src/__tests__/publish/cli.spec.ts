@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
 import { runPublishCli } from '#auklet/publish/cli';
 import { PublishRunner } from '#auklet/publish/publishRunner';
@@ -21,6 +21,10 @@ const ensurePnpmExists = vi.mocked(ensurePnpm);
 const createPublishRunner = vi.mocked(PublishRunner);
 
 describe('runPublishCli', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   test('ignores a leading args separator from package scripts', async () => {
     await runPublishCli([
       '--filter',
@@ -36,8 +40,25 @@ describe('runPublishCli', () => {
       expect.objectContaining({
         version: 'patch',
         allowDirty: true,
+        format: true,
         filters: ['@scope/*'],
       }),
+    );
+  });
+
+  test('passes --no-format as the publish output format switch', async () => {
+    await runPublishCli(['--no-format']);
+
+    expect(createPublishRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: false,
+      }),
+    );
+  });
+
+  test('rejects unknown --no-prefixed flags', async () => {
+    await expect(runPublishCli(['--no-build'])).rejects.toThrow(
+      'unknown option: --no-build',
     );
   });
 });

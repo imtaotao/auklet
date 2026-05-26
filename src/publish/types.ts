@@ -20,7 +20,6 @@ export type PackageJson = {
 };
 
 export type PublishPackageConfig = {
-  format?: boolean;
   beforeBuild?: PublishHookConfig;
   afterBuild?: PublishHookConfig;
   beforePublish?: PublishHookConfig;
@@ -52,6 +51,7 @@ export type PublishOptions = {
   filters: Array<string>;
   version?: string;
   dryRun: boolean;
+  format: boolean;
   otp?: string;
   ignoreScripts: boolean;
   allowDirty: boolean;

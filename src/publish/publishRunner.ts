@@ -43,7 +43,7 @@ export class PublishRunner {
       this.versions.writeBeforeBuild(plan);
       await runPackageBuilds(plan.targets, this.logger);
       await runPublishHook({ status: 'afterBuild', plan });
-      await formatPublishOutputs(plan.targets, plan.config.format !== false);
+      await formatPublishOutputs(plan.targets, this.options.format);
       await runPublishHook({ status: 'beforePublish', plan });
       await this.publishWithPlan(plan);
     } catch (error) {
