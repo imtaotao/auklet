@@ -1,6 +1,6 @@
 {
   "name": "auklet",
-  "version": "0.0.29",
+  "version": "0.1.0",
   "type": "module",
   "author": "chentao.arthur",
   "packageManager": "pnpm@10.27.0",
@@ -24,8 +24,8 @@
     "dev:registry-login": "npm adduser --registry http://127.0.0.1:4873 --auth-type=legacy",
     "dev:examples": "pnpm --filter './examples/*' --if-present dev",
     "build:examples": "pnpm --filter './examples/*' build",
-    "format:md": "prettier --write \"*.md\" \"examples/**/*.md\"",
-    "format": "prettier --write \"package.json\" \"pnpm-workspace.yaml\" \"(bin|src|dist|examples)/**/*.{js,mjs,cjs,ts,tsx,json,md,yaml,css}\""
+    "format:md": "prettier --write \"*.md\" \"docs/**/*.md\" \"examples/**/*.md\"",
+    "format": "prettier --write \"package.json\" \"pnpm-workspace.yaml\" \"*.md\" \"docs/**/*.md\" \"(bin|src|dist|examples)/**/*.{js,mjs,cjs,ts,tsx,json,md,yaml,css}\""
   },
   "exports": {
     ".": {

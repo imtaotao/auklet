@@ -17,7 +17,11 @@ style.
 - Test helpers use `style` semantics to leave room for future style languages
   such as Less.
 
-## Directory Structure
+## Representative Test Entry Points
+
+The list below is a map of the important test areas, not a complete file
+inventory. Do not update this document every time a focused spec file is added.
+Update it only when the test architecture or responsibilities change.
 
 ```text
 src/__tests__/
@@ -68,10 +72,15 @@ src/__tests__/
       options.spec.ts
   publish/
     cli.spec.ts
+    pnpmApi.spec.ts
     runner.spec.ts
     targetResolver.spec.ts
     version.spec.ts
+  workspace/
+    packages.spec.ts
   cli.spec.ts
+  cliBuild.spec.ts
+  cliDev.spec.ts
   configLoader.spec.ts
   index.spec.ts
 ```
@@ -84,6 +93,7 @@ src/__tests__/
 - `build/`: tsdown/build config unit tests.
 - `publish/`: publish option parsing, target resolution, version planning, and
   publish runner state tests.
+- `workspace/`: shared pnpm workspace parsing and validation behavior.
 - Root-level specs: lightweight smoke/boundary tests for cross-module APIs and
   CLI config override parsing, public API exports, and config loading.
 

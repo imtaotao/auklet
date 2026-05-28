@@ -433,4 +433,4 @@ Notes:
 
 - `pnpm build` rewrites `dist`.
 - `pnpm run format` formats `bin`, `src`, `dist`, `examples`, and related files.
-- Read `TESTING.md` before changing tests.
+- Read `docs/testing.md` before changing tests.
