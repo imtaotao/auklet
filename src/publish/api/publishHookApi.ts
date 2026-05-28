@@ -12,8 +12,8 @@ type RunPublishHookOptions = {
   status: HookStatus;
   plan: PublishPlan;
   result?: HookResult;
-  failedTarget?: PublishTarget;
-  error?: unknown;
+  failedTarget?: PublishTarget | null;
+  error?: unknown | null;
 };
 
 export async function runPublishHook(options: RunPublishHookOptions) {

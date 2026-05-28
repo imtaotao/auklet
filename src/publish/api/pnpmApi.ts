@@ -15,6 +15,15 @@ export class NpmPublishAuthenticationError extends Error {
   }
 }
 
+export class NpmPackageVersionExistsError extends Error {
+  constructor(packageName: string, version: string, registry?: string) {
+    const location = registry ? ` at ${registry}` : '';
+    super(
+      `[publish] package ${packageName}@${version}${location} already exists.`,
+    );
+  }
+}
+
 const runPnpm = async (args: Array<string>, options: Options = {}) => {
   return execa('pnpm', args, {
     reject: false,
@@ -104,6 +113,26 @@ export async function runPnpmWhoami(
   return String(result.stdout ?? '').trim();
 }
 
+export async function hasPublishedPackageVersion(
+  packageRoot: string,
+  packageName: string,
+  version: string,
+  options: { registry?: string } = {},
+) {
+  const args = ['view', `${packageName}@${version}`, 'version'];
+  if (options.registry) args.push('--registry', options.registry);
+
+  const result = await runPnpm(args, {
+    cwd: packageRoot,
+  });
+  if (!result.exitCode) return String(result.stdout ?? '').trim() === version;
+  if (isPackageNotFound(result)) return false;
+
+  throw new Error(
+    `[publish] failed to check published version for ${packageName}@${version}.`,
+  );
+}
+
 export async function runPnpmOwnerAdd(
   packageName: string,
   user: string,
@@ -169,5 +198,17 @@ const isNpmAuthChallenge = (output: string) => {
     'OTP',
     'EOTP',
     'ENEEDAUTH',
+  ].some((text) => output.includes(text));
+};
+
+const isPackageNotFound = (result: { stdout?: unknown; stderr?: unknown }) => {
+  const output = [result.stdout, result.stderr]
+    .map((value) => String(value ?? ''))
+    .join('\n');
+  return [
+    'E404',
+    '404 Not Found',
+    'is not in this registry',
+    'No match found for version',
   ].some((text) => output.includes(text));
 };

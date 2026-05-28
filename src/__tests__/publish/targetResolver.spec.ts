@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { readPnpmWorkspacePackages } from '#auklet/publish/api/pnpmApi';
-import { resolvePublishPlan } from '#auklet/publish/targetResolver';
+import {
+  resolveOwnerPackageNames,
+  resolvePublishPlan,
+} from '#auklet/publish/targetResolver';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -54,6 +57,41 @@ describe('resolvePublishPlan', () => {
       }),
     ).rejects.toThrow(
       'package @scope/ui version 0.9.0 does not match shared version 1.0.0',
+    );
+  });
+
+  test('targets the current package when publish runs without filters', async () => {
+    const packageRoot = project.resolve('packages/ui');
+    writeWorkspacePackage('ui', '1.0.0');
+
+    await expect(
+      resolvePublishPlan({
+        cwd: packageRoot,
+        filters: [],
+        dryRun: false,
+      }),
+    ).resolves.toMatchObject({
+      root: packageRoot,
+      workspaceMode: 'single',
+      targets: [
+        {
+          packageName: '@scope/ui',
+          packageRoot,
+          publishVersion: '1.0.0',
+        },
+      ],
+    });
+  });
+
+  test('rejects publishing the private monorepo root without filters', async () => {
+    await expect(
+      resolvePublishPlan({
+        cwd: project.root,
+        filters: [],
+        dryRun: false,
+      }),
+    ).rejects.toThrow(
+      'current directory is a private monorepo root. Use --filter to select workspace packages.',
     );
   });
 
@@ -288,6 +326,61 @@ describe('resolvePublishPlan', () => {
       ...fields,
     });
   }
+});
+
+describe('resolveOwnerPackageNames', () => {
+  let project: VirtualProject;
+
+  beforeEach(() => {
+    project = createVirtualProject('auklet-owner-');
+    project.writePackageJson({
+      name: '@scope/ui',
+      version: '1.0.0',
+    });
+  });
+
+  afterEach(() => {
+    project.cleanup();
+    vi.clearAllMocks();
+  });
+
+  test('targets the current package when owner add runs without package selectors', async () => {
+    await expect(
+      resolveOwnerPackageNames({
+        cwd: project.root,
+        filters: [],
+        packages: [],
+      }),
+    ).resolves.toEqual(['@scope/ui']);
+  });
+
+  test('rejects owner add on a private current package without package selectors', async () => {
+    project.writePackageJson({
+      name: '@scope/private',
+      version: '1.0.0',
+      private: true,
+    });
+
+    await expect(
+      resolveOwnerPackageNames({
+        cwd: project.root,
+        filters: [],
+        packages: [],
+      }),
+    ).rejects.toThrow('current package is private');
+  });
+
+  test('rejects owner add when filter and package selectors are combined', async () => {
+    await expect(
+      resolveOwnerPackageNames({
+        cwd: project.root,
+        filters: ['@scope/*'],
+        packages: ['@scope/ui'],
+      }),
+    ).rejects.toThrow(
+      'owner command cannot use --filter and --package together',
+    );
+  });
 });
 
 function workspacePackage(

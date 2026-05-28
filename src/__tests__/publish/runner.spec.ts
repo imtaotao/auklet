@@ -13,6 +13,7 @@ import {
 } from '#auklet/publish/api/gitApi';
 import { runPublishHook } from '#auklet/publish/api/publishHookApi';
 import {
+  hasPublishedPackageVersion,
   NpmPublishAuthenticationError,
   runPnpmPublish,
   runPnpmWhoami,
@@ -28,6 +29,7 @@ const formatOutputs = vi.mocked(formatPublishOutputs);
 const commit = vi.mocked(commitRelease);
 const createTag = vi.mocked(createVersionTag);
 const hasChanges = vi.mocked(hasGitChanges);
+const hasPublishedVersion = vi.mocked(hasPublishedPackageVersion);
 const publish = vi.mocked(runPnpmPublish);
 const whoami = vi.mocked(runPnpmWhoami);
 
@@ -101,6 +103,12 @@ vi.mock('#auklet/publish/api/packageJsonApi', () => ({
 
 vi.mock('#auklet/publish/api/pnpmApi', () => ({
   NpmPublishAuthenticationError: class NpmPublishAuthenticationError extends Error {},
+  NpmPackageVersionExistsError: class NpmPackageVersionExistsError extends Error {
+    constructor(packageName: string, version: string) {
+      super(`[publish] package ${packageName}@${version} already exists.`);
+    }
+  },
+  hasPublishedPackageVersion: vi.fn(() => false),
   runPnpmOwnerAdd: vi.fn(),
   runPnpmPublish: vi.fn(),
   runPnpmWhoami: vi.fn(),
@@ -290,6 +298,53 @@ describe('PublishRunner', () => {
     expect(runPnpmPublish).not.toHaveBeenCalled();
   });
 
+  test('does not write versions when target publish version already exists', async () => {
+    const writeError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const writeResult = vi.spyOn(Logger.prototype, 'result');
+    hasPublishedVersion.mockResolvedValueOnce(true);
+
+    await expect(
+      new PublishRunner({
+        cwd: process.cwd(),
+        filters: [],
+        version: 'patch',
+        dryRun: false,
+        format: true,
+        ignoreScripts: false,
+        allowDirty: false,
+      }).run(),
+    ).rejects.toThrow('preflight failed for @scope/ui');
+
+    expect(writePackage).not.toHaveBeenCalled();
+    expect(runPnpmPublish).not.toHaveBeenCalled();
+    expect(getConsoleMessages(writeError)).toEqual(
+      expect.arrayContaining([
+        'publish › package version already exists: @scope/ui@1.0.1',
+      ]),
+    );
+    expect(writeResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringContaining('Publish failed'),
+        body: expect.arrayContaining([
+          expect.arrayContaining([
+            expect.stringContaining('Failed at '),
+            expect.objectContaining({
+              type: 'package',
+              value: '@scope/ui',
+            }),
+            '.',
+          ]),
+          expect.arrayContaining([
+            expect.stringContaining('Reason: '),
+            expect.stringContaining('@scope/ui@1.0.1'),
+          ]),
+        ]),
+      }),
+    );
+  });
+
   test('logs npm publish authentication guidance with the publish logger', async () => {
     const writeError = vi
       .spyOn(console, 'error')
@@ -441,6 +496,20 @@ describe('PublishRunner', () => {
       expect.objectContaining({
         title: expect.stringContaining('Publish failed'),
         status: 'error',
+        body: expect.arrayContaining([
+          expect.arrayContaining([
+            expect.stringContaining('Failed at '),
+            expect.objectContaining({
+              type: 'package',
+              value: '@scope/widgets',
+            }),
+            '.',
+          ]),
+          expect.arrayContaining([
+            expect.stringContaining('Reason: '),
+            expect.stringContaining('registry failed'),
+          ]),
+        ]),
         details: expect.objectContaining({
           mode: expect.stringContaining('publish'),
           packages: expect.stringContaining('2'),

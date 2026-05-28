@@ -1,4 +1,4 @@
-import { createAukletLogger, createScopedAukletLogger } from '#auklet/logger';
+import { createScopedAukletLogger } from '#auklet/logger';
 import { runPublishHook } from '#auklet/publish/api/publishHookApi';
 import {
   runPackageBuilds,
@@ -22,14 +22,12 @@ export class PublishRunner {
   private readonly preflight: PublishPreflight;
   private readonly versions: VersionWriter;
   private readonly logger: AukletLogger;
-  private readonly summaryLogger: AukletLogger;
 
   private readonly options: PublishOptions;
 
   constructor(options: PublishOptions) {
     this.options = options;
     this.logger = createScopedAukletLogger('publish');
-    this.summaryLogger = createAukletLogger();
     this.git = new ReleaseGitController(this.options, this.logger);
     this.publisher = new PackagePublisher(this.options, this.logger);
     this.preflight = new PublishPreflight(this.options, this.logger);
@@ -37,10 +35,14 @@ export class PublishRunner {
   }
 
   async run() {
-    const plan = await this.preparePlan();
+    const plan = await resolvePublishPlan(this.options, this.logger);
     let failureHookEnabled = false;
 
     try {
+      validateBuildScript(plan.targets);
+      await this.git.checkBeforePublish(plan);
+      await this.preflight.verifyBeforeBuild(plan);
+      this.versions.logDryRunPlan(plan);
       await runPublishHook({ status: 'beforeBuild', plan });
       failureHookEnabled = true;
       this.versions.writeBeforeBuild(plan);
@@ -51,7 +53,7 @@ export class PublishRunner {
       await this.publishWithPlan(plan);
     } catch (error) {
       if (!failureHookEnabled) {
-        reportPublishSummary(this.summaryLogger, {
+        reportPublishSummary({
           plan,
           status: 'failure',
           error,
@@ -62,17 +64,6 @@ export class PublishRunner {
     }
 
     await this.runAfterPublishSuccess(plan);
-  }
-
-  private async preparePlan() {
-    const plan = await resolvePublishPlan(this.options, this.logger);
-    validateBuildScript(plan.targets);
-
-    await this.git.checkBeforePublish(plan);
-    await this.preflight.verifyAuthentication(plan);
-    this.versions.logDryRunPlan(plan);
-
-    return plan;
   }
 
   private async publishWithPlan(plan: PublishPlan) {
@@ -88,7 +79,7 @@ export class PublishRunner {
 
   private async handleFailure(plan: PublishPlan, error: unknown) {
     const failedTarget =
-      error instanceof PublishTargetError ? error.target : undefined;
+      error instanceof PublishTargetError ? error.target : null;
     try {
       await runPublishHook({
         status: 'afterPublish',
@@ -105,7 +96,7 @@ export class PublishRunner {
     if (error instanceof PublishTargetError) {
       reportPublishFailure(error, plan.version, this.logger);
     }
-    reportPublishSummary(this.summaryLogger, {
+    reportPublishSummary({
       plan,
       status: 'failure',
       error,
@@ -120,9 +111,10 @@ export class PublishRunner {
       plan,
       result: 'success',
     });
-    reportPublishSummary(this.summaryLogger, {
+    reportPublishSummary({
       plan,
       status: 'success',
+      error: null,
     });
   }
 }

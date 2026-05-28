@@ -122,10 +122,28 @@ auklet CLI overrides.
 Publish controls stay on CLI flags:
 
 ```bash
+auk publish
 auk publish --filter @scope/ui
 auk publish --version patch --dry-run
 auk publish --no-format
 auk publish --otp 123456
+auk owner add alice
+auk owner add alice --filter @scope/ui --otp 123456
+```
+
+Target selection:
+
+```text
+auk publish
+├─ --filter <pattern>      publish matching workspace packages
+└─ no --filter             publish the current package
+   └─ private monorepo root -> fail; use --filter
+
+auk owner add <user...>
+├─ --filter <pattern>      add owners to matching workspace packages
+├─ --package <name>        add owners to explicit npm packages
+└─ no selector             add owners to the current package
+   └─ private package -> fail
 ```
 
 `--no-format` disables auklet's publish output formatter for that run. It is not
@@ -134,7 +152,8 @@ Before writing versions, auklet checks npm authentication from each target
 package directory. Package-local `.npmrc` files and
 `package.json#publishConfig.registry` are respected.
 `--otp` is forwarded to `pnpm publish` for npm accounts or organizations that
-require publish 2FA. In CI, prefer an npm automation token.
+require publish 2FA, and to `pnpm owner add` for owner management 2FA. In CI,
+prefer an npm automation token.
 
 ## Configuration
 

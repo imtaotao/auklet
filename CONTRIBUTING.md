@@ -513,6 +513,9 @@ only the workspace root publish config is used for orchestration hooks.
 - With `--filter`: require a pnpm workspace root, select matching workspace
   packages, skip private packages, and publish selected packages in workspace
   dependency order.
+- Owner commands use the same target selection rules: without `--filter` or
+  `--package`, `auk owner add <user...>` targets the current package. `--otp`
+  is passed to `pnpm owner add` when provided.
 - Selected workspace packages must depend on each other with `workspace:*`;
   non-workspace ranges are rejected before build.
 - Built-in output formatting is controlled by the CLI option, not package
