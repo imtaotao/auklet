@@ -364,9 +364,13 @@ describe('PublishRunner', () => {
         title: expect.stringContaining('Publish complete'),
         status: 'success',
         details: expect.objectContaining({
-          mode: 'publish',
-          packages: '1',
-          published: '1',
+          mode: expect.stringContaining('publish'),
+          packages: expect.stringContaining('1'),
+          published: expect.stringContaining('1'),
+          version: expect.objectContaining({
+            type: 'version',
+            value: '1.0.1',
+          }),
         }),
       }),
     );
@@ -438,9 +442,13 @@ describe('PublishRunner', () => {
         title: expect.stringContaining('Publish failed'),
         status: 'error',
         details: expect.objectContaining({
-          mode: 'publish',
-          packages: '2',
-          published: '1',
+          mode: expect.stringContaining('publish'),
+          packages: expect.stringContaining('2'),
+          published: expect.stringContaining('1'),
+          version: expect.objectContaining({
+            type: 'version',
+            value: '1.0.1',
+          }),
         }),
       }),
     );
@@ -497,8 +505,12 @@ describe('PublishRunner', () => {
       expect.objectContaining({
         title: expect.stringContaining('Publish dry-run complete'),
         details: expect.objectContaining({
-          mode: 'dry-run',
-          published: '0',
+          mode: expect.stringContaining('dry-run'),
+          published: expect.stringContaining('0'),
+          version: expect.objectContaining({
+            type: 'version',
+            value: '1.0.1',
+          }),
         }),
       }),
     );

@@ -14,7 +14,7 @@ export async function isGitRepository(cwd: string) {
 }
 
 export async function getGitShortHash(cwd: string) {
-  const result = await runGit(['rev-parse', '--short=6', 'HEAD'], cwd);
+  const result = await runGit(['rev-parse', '--short=7', 'HEAD'], cwd);
   if (result.exitCode) return null;
   return result.stdout.trim() || null;
 }

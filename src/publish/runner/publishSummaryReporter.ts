@@ -17,6 +17,7 @@ export function reportPublishSummary(
 ) {
   const publishError =
     options.error instanceof PublishTargetError ? options.error : undefined;
+
   const failedTarget = publishError?.target;
   const publishedTargets = publishError?.publishedTargets ?? [];
   const publishedTargetRoots = new Set(
@@ -36,12 +37,18 @@ export function reportPublishSummary(
     status: options.status === 'success' ? 'success' : 'error',
     body: getSummaryBody(options.status, options.plan, failedTarget),
     details: {
-      mode: options.plan.dryRun ? 'dry-run' : 'publish',
-      packages: String(options.plan.targets.length),
+      mode: formatSummaryValue(
+        logger,
+        options.plan.dryRun ? 'dry-run' : 'publish',
+      ),
+      packages: formatSummaryValue(logger, options.plan.targets.length),
+      published: formatSummaryValue(logger, publishedCount),
       version: logger.version(options.plan.version),
-      published: String(publishedCount),
     },
   });
+
+  logger.newline();
+
   logger.tasks({
     tasks: getVersionChangeTasks(logger, {
       targets: options.plan.targets,
@@ -127,4 +134,8 @@ const formatVersionChange = (
   to: string,
 ) => {
   return [logger.version(from), logger.colors.gray(' -> '), logger.version(to)];
+};
+
+const formatSummaryValue = (logger: AukletLogger, value: string | number) => {
+  return logger.colors.bold(logger.colors.cyan(String(value)));
 };

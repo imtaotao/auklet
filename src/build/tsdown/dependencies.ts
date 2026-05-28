@@ -1,7 +1,7 @@
+import { parseModuleId } from 'conditional-export';
+import { createScopedAukletLogger } from '#auklet/logger';
 import type { PackageBuildOptions } from '#auklet/types';
 import type { BuildContext, PackageJsonLike } from '#auklet/build/tsdown/types';
-import { parseModuleId } from '#auklet/build/tsdown/parseModuleId';
-import { createScopedAukletLogger } from '#auklet/logger';
 
 const logger = createScopedAukletLogger('build');
 

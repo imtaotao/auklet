@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { resolvePublishVersion } from '#auklet/publish/version';
 
 vi.mock('#auklet/publish/api/gitApi', () => ({
-  getGitShortHash: vi.fn(() => 'a1b2c3'),
+  getGitShortHash: vi.fn(() => 'a1b2c3d'),
 }));
 
 describe('resolvePublishVersion', () => {
@@ -21,9 +21,9 @@ describe('resolvePublishVersion', () => {
   test('uses git hash suffix for alpha and beta versions', async () => {
     await expect(
       resolvePublishVersion('0.1.0-beta.abcdef', 'alpha', process.cwd()),
-    ).resolves.toBe('0.1.0-alpha.a1b2c3');
+    ).resolves.toBe('0.1.0-alpha.a1b2c3d');
     await expect(
       resolvePublishVersion('0.1.0-alpha.abcdef', 'beta', process.cwd()),
-    ).resolves.toBe('0.1.0-beta.a1b2c3');
+    ).resolves.toBe('0.1.0-beta.a1b2c3d');
   });
 });
