@@ -3,7 +3,7 @@ import { isArray } from 'aidly';
 import { OwnerRunner } from '#auklet/publish/ownerRunner';
 import { PublishRunner } from '#auklet/publish/publishRunner';
 import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
-import type { OwnerOptions, PublishOptions } from '#auklet/publish/types';
+import type { OwnerOptions } from '#auklet/publish/types';
 
 const publishFlags = new Set([
   '_',
@@ -33,6 +33,7 @@ export async function runPublishCli(args: Array<string>) {
   }
 
   await ensurePnpm();
+
   await new PublishRunner({
     cwd: process.cwd(),
     filters: toArray(argv.filter),
@@ -40,9 +41,9 @@ export async function runPublishCli(args: Array<string>) {
     dryRun: argv['dry-run'] === true,
     format: argv.format !== false,
     otp: stringOption(argv.otp),
-    ignoreScripts: argv['ignore-scripts'] === true,
     allowDirty: argv['allow-dirty'] === true,
-  } satisfies PublishOptions).run();
+    ignoreScripts: argv['ignore-scripts'] === true,
+  }).run();
 }
 
 export async function runOwnerCli(args: Array<string>) {

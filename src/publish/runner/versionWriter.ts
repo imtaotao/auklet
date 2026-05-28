@@ -2,6 +2,7 @@ import {
   readPackageJson,
   writePackageJson,
 } from '#auklet/publish/api/packageJsonApi';
+import { createAukletLogger } from '#auklet/logger';
 import type { PublishOptions, PublishPlan } from '#auklet/publish/types';
 import type { AukletLogger } from '#auklet/logger';
 
@@ -73,9 +74,24 @@ export class VersionWriter {
 
   logWrittenVersionFailure(plan: PublishPlan) {
     if (!plan.dryRun && this.options.version) {
-      this.logger.error(
-        'package.json versions may have been written. Auklet will not roll them back; check publish output before retrying.',
-      );
+      const logger = createAukletLogger();
+      const noteBody = logger.colors.rgb(184, 140, 40);
+
+      logger.newline();
+      logger.note({
+        title: logger.colors.yellow(
+          logger.colors.bold('Version files may have changed'),
+        ),
+        body: [
+          [noteBody('  package.json versions may have been written.')],
+          [
+            noteBody(
+              '  Auklet will not roll them back; check publish output before retrying.',
+            ),
+          ],
+        ],
+      });
+      logger.newline();
     }
   }
 

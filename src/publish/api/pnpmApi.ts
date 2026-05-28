@@ -7,11 +7,8 @@ import { readPnpmWorkspacePackageInfo } from '#auklet/workspace/packages';
 const supportedPnpmRange = '>=10.0.0';
 
 export class NpmPublishAuthenticationError extends Error {
-  constructor(packageRoot: string) {
-    super(
-      `[publish] pnpm publish failed at ${packageRoot}: ` +
-        `npm publish requires additional authentication.`,
-    );
+  constructor(readonly packageRoot: string) {
+    super('npm publish requires additional authentication.');
   }
 }
 
@@ -87,7 +84,7 @@ export async function runPnpmPublish(packageRoot: string, args: Array<string>) {
     if (hasNpmAuthChallenge(result)) {
       throw new NpmPublishAuthenticationError(packageRoot);
     }
-    throw new Error(`[publish] pnpm publish failed at ${packageRoot}.`);
+    throw new Error('pnpm publish failed.');
   }
 }
 
@@ -187,8 +184,12 @@ const writeProcessOutput = (result: { stdout?: unknown; stderr?: unknown }) => {
   const stdout = String(result.stdout ?? '');
   const stderr = String(result.stderr ?? '');
 
-  if (stdout) process.stdout.write(stdout);
-  if (stderr) process.stderr.write(stderr);
+  if (stdout) process.stdout.write(withTrailingLineBreak(stdout));
+  if (stderr) process.stderr.write(withTrailingLineBreak(stderr));
+};
+
+const withTrailingLineBreak = (value: string) => {
+  return value.endsWith('\n') ? value : `${value}\n`;
 };
 
 const isNpmAuthChallenge = (output: string) => {

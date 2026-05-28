@@ -367,7 +367,7 @@ describe('PublishRunner', () => {
     expect(getConsoleMessages(writeError)).toEqual(
       expect.arrayContaining([
         'publish › npm publish requires additional authentication.',
-        'publish › If publish 2FA is enabled, retry with `auk publish --otp <code>`.',
+        'publish › If publish 2FA is enabled, retry with `--otp <code>`.',
         'publish › For CI, use an npm automation token.',
       ]),
     );
@@ -455,6 +455,7 @@ describe('PublishRunner', () => {
     const writeResult = vi.spyOn(Logger.prototype, 'result');
     const writeRows = vi.spyOn(Logger.prototype, 'rows');
     const writeTasks = vi.spyOn(Logger.prototype, 'tasks');
+    const writeNote = vi.spyOn(Logger.prototype, 'note');
 
     resolvePlan.mockResolvedValueOnce({
       root: process.cwd(),
@@ -482,16 +483,33 @@ describe('PublishRunner', () => {
       }).run(),
     ).rejects.toThrow('publish failed for @scope/widgets');
 
-    expect(getConsoleMessages(writeError)).toEqual(
-      expect.arrayContaining([
-        'publish › partial publish detected',
-        'publish › published packages:',
-        'publish › - @scope/theme@1.0.1',
-        'publish › failed package:',
-        'publish › - @scope/widgets@1.0.1',
-        'publish › package.json versions may have been written. Auklet will not roll them back; check publish output before retrying.',
-      ]),
-    );
+    expect(getConsoleMessages(writeError)).toEqual([]);
+    expect(writeNote).toHaveBeenCalledWith({
+      title: expect.stringContaining('Partial publish detected'),
+      body: [
+        expect.stringContaining(
+          'Some packages were already published before the failure.',
+        ),
+        '',
+        expect.stringContaining('published  @scope/theme@1.0.1'),
+        expect.stringContaining('failed     @scope/widgets@1.0.1'),
+      ],
+    });
+    expect(writeNote).toHaveBeenCalledWith({
+      title: expect.stringContaining('Version files may have changed'),
+      body: [
+        [
+          expect.stringContaining(
+            'package.json versions may have been written.',
+          ),
+        ],
+        [
+          expect.stringContaining(
+            'Auklet will not roll them back; check publish output before retrying.',
+          ),
+        ],
+      ],
+    });
     expect(writeResult).toHaveBeenCalledWith(
       expect.objectContaining({
         title: expect.stringContaining('Publish failed'),
@@ -546,6 +564,34 @@ describe('PublishRunner', () => {
       }),
     );
     expect(writeRows).not.toHaveBeenCalled();
+  });
+
+  test('previews publish failure output style', async () => {
+    resolvePlan.mockResolvedValueOnce({
+      root: process.cwd(),
+      version: '1.0.1',
+      dryRun: false,
+      config: {},
+      workspaceMode: 'monorepo',
+      targets: [createTarget('@scope/theme'), createTarget('@scope/widgets')],
+    });
+    vi.mocked(runPnpmPublish)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('registry failed'));
+
+    await expect(
+      new PublishRunner({
+        cwd: process.cwd(),
+        filters: ['@scope/*'],
+        version: 'patch',
+        dryRun: false,
+        format: true,
+        ignoreScripts: false,
+        allowDirty: false,
+      }).run(),
+    ).rejects.toThrow('publish failed for @scope/widgets');
   });
 
   test('prints dry-run version changes as skipped tasks', async () => {

@@ -94,7 +94,7 @@ export class PublishRunner {
     }
 
     if (error instanceof PublishTargetError) {
-      reportPublishFailure(error, plan.version, this.logger);
+      reportPublishFailure(error, plan.version);
     }
     reportPublishSummary({
       plan,

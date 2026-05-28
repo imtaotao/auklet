@@ -504,8 +504,8 @@ only the workspace root publish config is used for orchestration hooks.
   Auklet never rolls back package versions or registry publishes.
 - npm authentication challenges during target authentication, preflight, or
   real publish are reported through the publish logger. Users with publish 2FA
-  can retry with `auk publish --otp <code>`; CI should use an npm automation
-  token.
+  can retry with `--otp <code>` added to the original command; CI should use an
+  npm automation token.
 
 ### Target And Formatting Rules
 

@@ -38,10 +38,7 @@ export class PackagePublisher {
 
 export function logAuthenticationError(logger: AukletLogger, error: unknown) {
   if (!(error instanceof NpmPublishAuthenticationError)) return;
-
   logger.error('npm publish requires additional authentication.');
-  logger.error(
-    'If publish 2FA is enabled, retry with `auk publish --otp <code>`.',
-  );
+  logger.error('If publish 2FA is enabled, retry with `--otp <code>`.');
   logger.error('For CI, use an npm automation token.');
 }

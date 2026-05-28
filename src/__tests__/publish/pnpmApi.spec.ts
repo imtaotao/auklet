@@ -24,10 +24,15 @@ describe('runPnpmPublish', () => {
       stderr:
         'Authenticate your account at:\nhttps://www.npmjs.com/auth/cli/token',
     } as never);
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const writeStderr = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
 
     await expect(runPnpmPublish(process.cwd(), [])).rejects.toThrow(
       NpmPublishAuthenticationError,
+    );
+    expect(writeStderr).toHaveBeenCalledWith(
+      'Authenticate your account at:\nhttps://www.npmjs.com/auth/cli/token\n',
     );
   });
 });

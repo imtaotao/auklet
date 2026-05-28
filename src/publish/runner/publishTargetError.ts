@@ -11,7 +11,7 @@ export class PublishTargetError extends Error {
     readonly publishedTargets: Array<PublishTarget>,
   ) {
     super(
-      `[publish] ${phase} failed for ${target.packageName} at ${path.relative(process.cwd(), target.packageRoot) || target.packageRoot}.`,
+      `${phase} failed for ${target.packageName} at ${path.relative(process.cwd(), target.packageRoot) || target.packageRoot}.`,
     );
   }
 }
