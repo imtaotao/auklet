@@ -115,6 +115,7 @@ export async function runAukletCli(argv = process.argv) {
   } catch (error) {
     const logger = createAukletLogger({ scope: 'cli' });
     logger.error(error);
+    logger.newline();
     process.exit(1);
   }
 }

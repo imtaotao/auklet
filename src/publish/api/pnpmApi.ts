@@ -75,11 +75,12 @@ export async function runPnpmBuild(packageRoot: string) {
 }
 
 export async function runPnpmPublish(packageRoot: string, args: Array<string>) {
+  const isDryRun = args.includes('--dry-run');
   const result = await runPnpm(['publish', ...args], {
     cwd: packageRoot,
-    stdio: 'pipe',
+    stdio: isDryRun ? 'pipe' : 'inherit',
   });
-  writeProcessOutput(result);
+  if (isDryRun) writeProcessOutput(result);
   if (result.exitCode) {
     if (hasNpmAuthChallenge(result)) {
       throw new NpmPublishAuthenticationError(packageRoot);

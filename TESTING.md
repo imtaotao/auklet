@@ -298,6 +298,16 @@ Usage rules:
 
 Keep tests tidy, direct, and low-noise.
 
+- Treat existing tests as behavior documentation. Do not rewrite or relax an
+  existing test just to make a new implementation pass.
+- When an existing test fails, first decide whether the test describes the
+  intended public behavior. If it does, fix the source code. Change the test
+  only when the expected behavior has intentionally changed, the assertion was
+  wrong, or the test is coupled to an implementation detail that no longer
+  matters.
+- Prefer adding focused tests for new behavior instead of editing broad existing
+  cases. Editing existing tests is fine, but the diff should make the behavioral
+  change explicit.
 - Read the same file content once, assign it to a variable, then make multiple
   assertions.
 - Use loops or table-driven tests for isomorphic output, such as

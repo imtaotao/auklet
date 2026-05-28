@@ -362,7 +362,7 @@ describe('PublishRunner', () => {
         ignoreScripts: false,
         allowDirty: false,
       }).run(),
-    ).rejects.toThrow('preflight failed for @scope/ui');
+    ).rejects.toThrow('publish failed for @scope/ui');
 
     expect(getConsoleMessages(writeError)).toEqual(
       expect.arrayContaining([
@@ -373,7 +373,7 @@ describe('PublishRunner', () => {
     );
   });
 
-  test('runs publish preflight before release commit and tag', async () => {
+  test('runs real publish after release commit and tag without dry-run publish preflight', async () => {
     const order: Array<string> = [];
 
     hasChanges.mockResolvedValueOnce(true);
@@ -397,7 +397,7 @@ describe('PublishRunner', () => {
       allowDirty: false,
     }).run();
 
-    expect(order).toEqual(['preflight', 'commit', 'tag', 'publish']);
+    expect(order).toEqual(['commit', 'tag', 'publish']);
   });
 
   test('prints a final success summary with version changes', async () => {
@@ -466,8 +466,6 @@ describe('PublishRunner', () => {
       targets: [createTarget('@scope/theme'), createTarget('@scope/widgets')],
     });
     vi.mocked(runPnpmPublish)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(error);
 
@@ -576,8 +574,6 @@ describe('PublishRunner', () => {
       targets: [createTarget('@scope/theme'), createTarget('@scope/widgets')],
     });
     vi.mocked(runPnpmPublish)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('registry failed'));
 

@@ -5,6 +5,8 @@ export function reportPublishFailure(
   error: PublishTargetError,
   version: string,
 ) {
+  if (!error.publishedTargets.length) return;
+
   const logger = createAukletLogger();
   const noteBody = logger.colors.rgb(184, 140, 40);
   const body = [

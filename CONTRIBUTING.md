@@ -684,6 +684,9 @@ src/__tests__/
 - Changes that affect final output structure or dev/production semantic
   alignment need project-level e2e coverage.
 - Single-module boundary behavior belongs in that module's unit tests.
+- Existing tests document intended behavior. Prefer adding focused tests for new
+  behavior; only change existing tests after checking that the expectation is
+  intentionally changing rather than exposing a source-code bug.
 - File-system tests use `src/__tests__/fixtures/virtualProject.ts`; temporary
   files live in `src/__tests__/.tmp/`.
 - Prefer normalizing real build output and Vite/dev graph output into the same

@@ -28,11 +28,31 @@ describe('runPnpmPublish', () => {
       .spyOn(process.stderr, 'write')
       .mockImplementation(() => true);
 
-    await expect(runPnpmPublish(process.cwd(), [])).rejects.toThrow(
+    await expect(runPnpmPublish(process.cwd(), ['--dry-run'])).rejects.toThrow(
       NpmPublishAuthenticationError,
     );
     expect(writeStderr).toHaveBeenCalledWith(
       'Authenticate your account at:\nhttps://www.npmjs.com/auth/cli/token\n',
+    );
+  });
+
+  test('inherits stdio for real publish so npm authentication can stay interactive', async () => {
+    run.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    } as never);
+
+    await runPnpmPublish(process.cwd(), ['--no-git-checks']);
+
+    expect(run).toHaveBeenCalledWith(
+      'pnpm',
+      ['publish', '--no-git-checks'],
+      expect.objectContaining({
+        cwd: process.cwd(),
+        reject: false,
+        stdio: 'inherit',
+      }),
     );
   });
 });

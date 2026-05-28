@@ -72,7 +72,6 @@ export class PublishRunner {
       return;
     }
 
-    await this.preflight.run(plan);
     await this.git.commitAndTag(plan);
     await this.publisher.run(plan);
   }
