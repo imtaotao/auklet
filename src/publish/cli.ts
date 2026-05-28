@@ -11,6 +11,7 @@ const publishFlags = new Set([
   'version',
   'dry-run',
   'format',
+  'git',
   'otp',
   'ignore-scripts',
   'allow-dirty',
@@ -19,11 +20,12 @@ const ownerFlags = new Set(['_', 'filter', 'package', 'otp']);
 
 export async function runPublishCli(args: Array<string>) {
   const cliArgs = stripLeadingArgsSeparator(args);
-  validateNoPrefixedFlags(cliArgs, new Set(['--no-format']));
+  validateNoPrefixedFlags(cliArgs, new Set(['--no-format', '--no-git']));
   const argv = minimist(cliArgs, {
     string: ['filter', 'version', 'otp'],
-    boolean: ['dry-run', 'format', 'ignore-scripts', 'allow-dirty'],
+    boolean: ['dry-run', 'format', 'git', 'ignore-scripts', 'allow-dirty'],
     default: {
+      git: true,
       format: true,
     },
   });
@@ -36,11 +38,12 @@ export async function runPublishCli(args: Array<string>) {
 
   await new PublishRunner({
     cwd: process.cwd(),
+    otp: stringOption(argv.otp),
     filters: toArray(argv.filter),
     version: stringOption(argv.version),
-    dryRun: argv['dry-run'] === true,
+    git: argv.git !== false,
     format: argv.format !== false,
-    otp: stringOption(argv.otp),
+    dryRun: argv['dry-run'] === true,
     allowDirty: argv['allow-dirty'] === true,
     ignoreScripts: argv['ignore-scripts'] === true,
   }).run();

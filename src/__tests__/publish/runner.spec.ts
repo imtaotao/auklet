@@ -171,6 +171,29 @@ describe('PublishRunner', () => {
     );
   });
 
+  test('keeps git clean check but skips release commit and tag with --no-git', async () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await new PublishRunner({
+      cwd: process.cwd(),
+      filters: [],
+      version: 'patch',
+      dryRun: false,
+      format: true,
+      git: false,
+      ignoreScripts: false,
+      allowDirty: false,
+    }).run();
+
+    expect(ensureGitClean).toHaveBeenCalledWith(process.cwd());
+    expect(hasGitChanges).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+    expect(createVersionTag).not.toHaveBeenCalled();
+    expect(getConsoleMessages(warn)).toContain(
+      'publish › --no-git enabled, skipping git commit and tag.',
+    );
+  });
+
   test('does not write versions when beforeBuild fails', async () => {
     runHook.mockImplementation(async (options) => {
       if (options.status === 'beforeBuild') {

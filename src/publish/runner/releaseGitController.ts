@@ -30,6 +30,11 @@ export class ReleaseGitController {
 
   async commitAndTag(plan: PublishPlan) {
     const git = await isGitRepository(plan.root);
+    if (git && this.options.git === false) {
+      this.warnOnce('--no-git enabled, skipping git commit and tag.');
+      return;
+    }
+
     if (git && this.options.allowDirty) {
       this.warnOnce('--allow-dirty enabled, skipping git commit and tag.');
       return;

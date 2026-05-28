@@ -111,6 +111,14 @@ build path passes those overrides to the tsdown child process through
 Do not combine these flags with tsdown `--config`, `-c`, or `--no-config`; a
 custom tsdown config owns its own config loading behavior.
 
+Build configuration is shared between CLI overrides and `auklet.config.js`.
+Publish controls are intentionally CLI-only because they describe one publish
+operation rather than stable package build shape. Keep flags such as `--filter`,
+`--version`, `--dry-run`, `--otp`, `--no-format`, `--no-git`,
+`--ignore-scripts`, and `--allow-dirty` out of auklet config. Publish hooks are
+the exception: they live in `package.json#auklet.publish` because they are
+package lifecycle behavior.
+
 ### CLI Modules
 
 ```text
@@ -449,16 +457,17 @@ pnpm run build for each target
 afterBuild hook
 format publish outputs unless `--no-format` is set
 beforePublish hook
-pnpm publish `--dry-run` preflight for each target
 commit release changes and create tag when real publish can use git
 pnpm publish for each target when not `--dry-run`
+pnpm publish `--dry-run` for each target when `--dry-run`
 afterPublish hook with success result
 ```
 
-Dry-run stops after the preflight publish loop. It still resolves versions,
-runs build, runs hooks, and formats outputs unless `--no-format` is set, but it
-does not write `package.json#version`, create a git commit/tag, or perform a
-real registry publish.
+Dry-run runs the publish dry-run loop instead of release git operations and real
+registry publish. It still resolves versions, runs build, runs hooks, and
+formats outputs unless `--no-format` is set, but it does not write
+`package.json#version`, create a git commit/tag, or perform a real registry
+publish.
 
 ### Version And Git Rules
 
@@ -521,6 +530,9 @@ only the workspace root publish config is used for orchestration hooks.
 - Built-in output formatting is controlled by the CLI option, not package
   config. Default is enabled; `--no-format` disables only auklet's output
   formatter and does not affect user build scripts or publish lifecycle scripts.
+- Release git operations are enabled by default. `--no-git` skips auklet's
+  release commit and tag but still keeps the clean-worktree check; `--allow-dirty`
+  skips the clean check, commit, and tag.
 
 ## JavaScript Build Flow
 

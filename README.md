@@ -126,6 +126,7 @@ auk publish
 auk publish --filter @scope/ui
 auk publish --version patch --dry-run
 auk publish --no-format
+auk publish --no-git
 auk publish --otp 123456
 auk owner add alice
 auk owner add alice --filter @scope/ui --otp 123456
@@ -148,6 +149,8 @@ auk owner add <user...>
 
 `--no-format` disables auklet's publish output formatter for that run. It is not
 configured in `package.json`.
+`--no-git` skips auklet's release commit and tag for that run. The publish flow
+still checks that the git worktree is clean unless `--allow-dirty` is also set.
 Before writing versions, auklet checks npm authentication from each target
 package directory. Package-local `.npmrc` files and
 `package.json#publishConfig.registry` are respected.

@@ -48,13 +48,14 @@ export type WorkspacePackage = {
 
 export type PublishOptions = {
   cwd: string;
-  filters: Array<string>;
-  version?: string;
   dryRun: boolean;
   format: boolean;
-  otp?: string;
-  ignoreScripts: boolean;
   allowDirty: boolean;
+  ignoreScripts: boolean;
+  filters: Array<string>;
+  git?: boolean;
+  otp?: string;
+  version?: string;
 };
 
 export type OwnerOptions = {

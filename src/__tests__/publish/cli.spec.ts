@@ -60,6 +60,16 @@ describe('runPublishCli', () => {
     );
   });
 
+  test('passes --no-git as the publish release git switch', async () => {
+    await runPublishCli(['--no-git']);
+
+    expect(createPublishRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        git: false,
+      }),
+    );
+  });
+
   test('rejects unknown --no-prefixed flags', async () => {
     await expect(runPublishCli(['--no-build'])).rejects.toThrow(
       'unknown option: --no-build',
