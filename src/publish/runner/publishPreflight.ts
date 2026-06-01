@@ -1,10 +1,10 @@
-import { isPlainObject, isString } from 'aidly';
 import { PnpmPublishApi } from '#auklet/publish/api/pnpmPublishApi';
 import {
   hasPublishedPackageVersion,
   NpmPackageVersionExistsError,
   runPnpmWhoami,
 } from '#auklet/publish/api/pnpmApi';
+import { getPublishRegistry } from '#auklet/publish/api/registry';
 import { logAuthenticationError } from '#auklet/publish/runner/packagePublisher';
 import { PublishTargetError } from '#auklet/publish/runner/publishTargetError';
 import type { AukletLogger } from '#auklet/logger';
@@ -100,9 +100,3 @@ export class PublishPreflight {
     }
   }
 }
-
-const getPublishRegistry = (publishConfig: unknown) => {
-  if (!isPlainObject(publishConfig)) return undefined;
-  const registry = Reflect.get(publishConfig, 'registry');
-  return isString(registry) && registry.length > 0 ? registry : undefined;
-};

@@ -8,6 +8,9 @@ orchestration in `src/publish/` rather than in `bin/entry.mjs`.
 ```text
 src/publish/
 ├── cli.ts                 # publish/owner subcommand flags and validation
+├── inspect.ts             # inspect publish orchestration
+├── inspectPack.ts         # package entry/export/file checks
+├── inspectRegistry.ts     # registry auth and version checks for inspect
 ├── publishRunner.ts       # top-level publish state machine
 ├── targetResolver.ts      # package target discovery, filtering, and ordering
 ├── version.ts             # --version resolution
@@ -40,6 +43,23 @@ Keep these flags out of auklet config:
 
 Publish hooks are the exception: they live in `package.json#auklet.publish`
 because they are package lifecycle behavior.
+
+## Inspect Commands
+
+Inspect commands are read-only checks for publish readiness. They do not write
+versions, run hooks, build, format, commit, tag, or publish packages.
+
+- `auk inspect pack` checks `package.json` entry fields, `exports`, `bin`,
+  `types`/`typings`, CSS entry fields, and declared `files` paths for selected
+  targets.
+- `auk inspect publish` resolves the publish plan, runs the same package file
+  checks first, and stops before registry checks if local files are missing.
+- If package file checks pass, `auk inspect publish` checks registry
+  authentication and target version availability. Registry requests use a short
+  timeout and two retries so network stalls fail clearly.
+- Inspect publish accepts publish selection and version flags for plan
+  compatibility. Side-effect flags such as `--dry-run`, `--no-git`, and
+  `--no-format` only affect the displayed plan.
 
 ## State Order
 

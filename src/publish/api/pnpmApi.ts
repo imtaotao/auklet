@@ -5,6 +5,7 @@ import type { WorkspacePackage } from '#auklet/publish/types';
 import { readPnpmWorkspacePackageInfo } from '#auklet/workspace/packages';
 
 const supportedPnpmRange = '>=10.0.0';
+type PnpmResult = Awaited<ReturnType<typeof execa>>;
 
 export class NpmPublishAuthenticationError extends Error {
   constructor(readonly packageRoot: string) {
@@ -22,16 +23,48 @@ export class NpmPackageVersionExistsError extends Error {
 }
 
 const runPnpm = async (args: Array<string>, options: Options = {}) => {
-  return execa('pnpm', args, {
+  const timeout = options.timeout;
+  const subprocess = execa('pnpm', args, {
     reject: false,
     ...options,
+    timeout: undefined,
   });
+  if (!timeout) return subprocess;
+
+  return withPnpmTimeout(subprocess, timeout);
 };
+
+export async function withPnpmTimeout(
+  subprocess: ReturnType<typeof execa>,
+  timeout: number,
+) {
+  let timeoutId: NodeJS.Timeout | null = null;
+  const result = await Promise.race([
+    subprocess,
+    new Promise<PnpmResult>((resolve) => {
+      timeoutId = setTimeout(() => {
+        const error = new Error(`pnpm command timed out after ${timeout}ms.`);
+        subprocess.kill('SIGKILL', error);
+        resolve({
+          failed: true,
+          timedOut: true,
+          exitCode: undefined,
+          stdout: '',
+          stderr: error.message,
+        } as PnpmResult);
+      }, timeout);
+    }),
+  ]);
+
+  if (timeoutId) clearTimeout(timeoutId);
+  subprocess.catch(() => {});
+  return result;
+}
 
 export async function ensurePnpm() {
   const result = await runPnpm(['--version']);
   const stdout = String(result.stdout ?? '');
-  if (result.failed || !stdout) {
+  if (hasFailedPnpmResult(result) || !stdout) {
     throw new Error(
       '[publish] pnpm is required for publishing.\n' +
         '[publish] Install pnpm first:\n' +
@@ -69,7 +102,7 @@ export async function runPnpmBuild(packageRoot: string) {
     cwd: packageRoot,
     stdio: 'inherit',
   });
-  if (result.exitCode) {
+  if (hasFailedPnpmResult(result)) {
     throw new Error(`[publish] build failed at ${packageRoot}.`);
   }
 }
@@ -81,7 +114,7 @@ export async function runPnpmPublish(packageRoot: string, args: Array<string>) {
     stdio: isDryRun ? 'pipe' : 'inherit',
   });
   if (isDryRun) writeProcessOutput(result);
-  if (result.exitCode) {
+  if (hasFailedPnpmResult(result)) {
     if (hasNpmAuthChallenge(result)) {
       throw new NpmPublishAuthenticationError(packageRoot);
     }
@@ -91,20 +124,23 @@ export async function runPnpmPublish(packageRoot: string, args: Array<string>) {
 
 export async function runPnpmWhoami(
   packageRoot: string,
-  options: { packageName?: string; registry?: string } = {},
+  options: { packageName?: string; registry?: string; timeout?: number } = {},
 ) {
   const args = ['whoami'];
   if (options.registry) args.push('--registry', options.registry);
 
   const result = await runPnpm(args, {
     cwd: packageRoot,
+    timeout: options.timeout,
   });
-  if (result.exitCode) {
+  if (hasFailedPnpmResult(result)) {
     const target = options.packageName ? ` for ${options.packageName}` : '';
     const registry = options.registry ? ` at ${options.registry}` : '';
+    const reason = getPnpmFailureReason(result);
     throw new Error(
       `[publish] npm authentication is required${target}${registry} before publishing.\n` +
-        '[publish] Run `pnpm login` or configure an npm token before retrying.',
+        '[publish] Run `pnpm login` or configure an npm token before retrying.' +
+        (reason ? `\n[publish] Reason: ${reason}` : ''),
     );
   }
 
@@ -115,19 +151,24 @@ export async function hasPublishedPackageVersion(
   packageRoot: string,
   packageName: string,
   version: string,
-  options: { registry?: string } = {},
+  options: { registry?: string; timeout?: number } = {},
 ) {
   const args = ['view', `${packageName}@${version}`, 'version'];
   if (options.registry) args.push('--registry', options.registry);
 
   const result = await runPnpm(args, {
     cwd: packageRoot,
+    timeout: options.timeout,
   });
-  if (!result.exitCode) return String(result.stdout ?? '').trim() === version;
+  if (!hasFailedPnpmResult(result)) {
+    return String(result.stdout ?? '').trim() === version;
+  }
   if (isPackageNotFound(result)) return false;
 
+  const reason = getPnpmFailureReason(result);
   throw new Error(
-    `[publish] failed to check published version for ${packageName}@${version}.`,
+    `[publish] failed to check published version for ${packageName}@${version}.` +
+      (reason ? `\n[publish] Reason: ${reason}` : ''),
   );
 }
 
@@ -142,7 +183,7 @@ export async function runPnpmOwnerAdd(
     cwd: options.cwd,
     stdio: 'inherit',
   });
-  if (result.exitCode) {
+  if (hasFailedPnpmResult(result)) {
     throw new Error(
       `[publish] pnpm owner add failed for ${user} -> ${packageName}.`,
     );
@@ -162,6 +203,24 @@ const isWorkspacePackage = (value: unknown): value is WorkspacePackage => {
     value.version.length > 0 &&
     (value.private === undefined || typeof value.private === 'boolean')
   );
+};
+
+const hasFailedPnpmResult = (result: {
+  failed?: boolean;
+  exitCode?: unknown;
+}) => {
+  return result.failed === true || result.exitCode !== 0;
+};
+
+const getPnpmFailureReason = (result: {
+  stdout?: unknown;
+  stderr?: unknown;
+}) => {
+  const stderr = String(result.stderr ?? '').trim();
+  if (stderr) return stderr;
+
+  const stdout = String(result.stdout ?? '').trim();
+  return stdout || null;
 };
 
 function throwInvalidWorkspacePackages(): never {

@@ -72,6 +72,9 @@ src/__tests__/
       options.spec.ts
   publish/
     cli.spec.ts
+    inspect.spec.ts
+    inspectPack.spec.ts
+    inspectRegistry.spec.ts
     pnpmApi.spec.ts
     runner.spec.ts
     targetResolver.spec.ts
@@ -91,8 +94,8 @@ src/__tests__/
   templates, and structure normalization helpers.
 - `css/`: CSS/style module unit tests.
 - `build/`: tsdown/build config unit tests.
-- `publish/`: publish option parsing, target resolution, version planning, and
-  publish runner state tests.
+- `publish/`: publish option parsing, inspect checks, target resolution,
+  version planning, and publish runner state tests.
 - `workspace/`: shared pnpm workspace parsing and validation behavior.
 - Root-level specs: lightweight smoke/boundary tests for cross-module APIs and
   CLI config override parsing, public API exports, and config loading.
@@ -195,10 +198,10 @@ so a failure points at the affected mode instead of a horizontal output layer.
   parameters.
 - `cli.spec.ts`: build override parsing and guardrails shared by `build`,
   `build-js`, `build-css`, and `dev`.
-- `publish/`: publish/owner CLI flag parsing, target selection, dry-run/version
-  planning, and runner phase ordering.
-- `configLoader`: config module shapes, TypeScript config loading, missing
-  config, and temporary file cleanup.
+- `publish/`: publish/owner CLI flag parsing, inspect checks, target selection,
+  dry-run/version planning, and runner phase ordering.
+- `configLoader`: config module shapes, JavaScript config loading, missing
+  config, and unsupported config file handling.
 - `cleanOutput`: `auk build` output cleanup boundaries, including default
   `dist` and custom `output`.
 - `tsdownConfig`: build option mapping, package metadata, banner, externals, and

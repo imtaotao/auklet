@@ -4,6 +4,8 @@ import {
   hasPublishedPackageVersion,
   NpmPublishAuthenticationError,
   runPnpmPublish,
+  runPnpmWhoami,
+  withPnpmTimeout,
 } from '#auklet/publish/api/pnpmApi';
 
 vi.mock('execa', () => ({
@@ -14,6 +16,7 @@ const run = vi.mocked(execa);
 
 describe('runPnpmPublish', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -59,6 +62,7 @@ describe('runPnpmPublish', () => {
 
 describe('hasPublishedPackageVersion', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -101,5 +105,65 @@ describe('hasPublishedPackageVersion', () => {
     await expect(
       hasPublishedPackageVersion(process.cwd(), '@scope/ui', '1.0.1'),
     ).resolves.toBe(false);
+  });
+});
+
+describe('withPnpmTimeout', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  test('kills the pnpm subprocess and returns a timeout result', async () => {
+    vi.useFakeTimers();
+    const kill = vi.fn();
+    const subprocess = Object.assign(new Promise(() => {}), {
+      kill,
+    }) as unknown as ReturnType<typeof execa>;
+
+    const resultPromise = withPnpmTimeout(subprocess, 50);
+    await vi.advanceTimersByTimeAsync(50);
+    const result = await resultPromise;
+
+    expect(kill).toHaveBeenCalledWith('SIGKILL', expect.any(Error));
+    expect(result).toMatchObject({
+      failed: true,
+      timedOut: true,
+      exitCode: undefined,
+      stdout: '',
+      stderr: 'pnpm command timed out after 50ms.',
+    });
+  });
+
+  test('surfaces timeout details in whoami errors', async () => {
+    vi.useFakeTimers();
+    const kill = vi.fn();
+    run.mockReturnValueOnce(
+      Object.assign(new Promise(() => {}), {
+        kill,
+      }) as unknown as never,
+    );
+
+    const whoami = runPnpmWhoami('/repo/packages/ui', {
+      packageName: '@scope/ui',
+      registry: 'https://registry.example.test',
+      timeout: 50,
+    });
+    const expectation = expect(whoami).rejects.toThrow(
+      'Reason: pnpm command timed out after 50ms.',
+    );
+
+    await vi.advanceTimersByTimeAsync(50);
+    await expectation;
+    expect(kill).toHaveBeenCalledWith('SIGKILL', expect.any(Error));
+    expect(run).toHaveBeenCalledWith(
+      'pnpm',
+      ['whoami', '--registry', 'https://registry.example.test'],
+      expect.objectContaining({
+        cwd: '/repo/packages/ui',
+        reject: false,
+        timeout: undefined,
+      }),
+    );
   });
 });

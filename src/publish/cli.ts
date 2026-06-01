@@ -3,7 +3,7 @@ import { isArray } from 'aidly';
 import { OwnerRunner } from '#auklet/publish/ownerRunner';
 import { PublishRunner } from '#auklet/publish/publishRunner';
 import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
-import type { OwnerOptions } from '#auklet/publish/types';
+import type { OwnerOptions, PublishOptions } from '#auklet/publish/types';
 
 const publishFlags = new Set([
   '_',
@@ -19,6 +19,34 @@ const publishFlags = new Set([
 const ownerFlags = new Set(['_', 'filter', 'package', 'otp']);
 
 export async function runPublishCli(args: Array<string>) {
+  await ensurePnpm();
+
+  await new PublishRunner(resolvePublishCliOptions(args)).run();
+}
+
+export function resolvePublishCliOptions(
+  args: Array<string>,
+  cwd = process.cwd(),
+) {
+  const argv = parsePublishArgs(args);
+  if (argv._.length) {
+    throw new Error(`[publish] unknown publish argument: ${argv._.join(' ')}`);
+  }
+
+  return {
+    cwd,
+    otp: stringOption(argv.otp),
+    filters: toArray(argv.filter),
+    version: stringOption(argv.version),
+    git: argv.git !== false,
+    format: argv.format !== false,
+    dryRun: argv['dry-run'] === true,
+    allowDirty: argv['allow-dirty'] === true,
+    ignoreScripts: argv['ignore-scripts'] === true,
+  } satisfies PublishOptions;
+}
+
+const parsePublishArgs = (args: Array<string>) => {
   const cliArgs = stripLeadingArgsSeparator(args);
   validateNoPrefixedFlags(cliArgs, new Set(['--no-format', '--no-git']));
   const argv = minimist(cliArgs, {
@@ -30,32 +58,18 @@ export async function runPublishCli(args: Array<string>) {
     },
   });
   validateFlags(argv, publishFlags);
-  if (argv._.length) {
-    throw new Error(`[publish] unknown publish argument: ${argv._.join(' ')}`);
-  }
-
-  await ensurePnpm();
-
-  await new PublishRunner({
-    cwd: process.cwd(),
-    otp: stringOption(argv.otp),
-    filters: toArray(argv.filter),
-    version: stringOption(argv.version),
-    git: argv.git !== false,
-    format: argv.format !== false,
-    dryRun: argv['dry-run'] === true,
-    allowDirty: argv['allow-dirty'] === true,
-    ignoreScripts: argv['ignore-scripts'] === true,
-  }).run();
-}
+  return argv;
+};
 
 export async function runOwnerCli(args: Array<string>) {
   const cliArgs = stripLeadingArgsSeparator(args);
   validateNoPrefixedFlags(cliArgs, new Set());
+
   const argv = minimist(cliArgs, {
     string: ['filter', 'package', 'otp'],
   });
   validateFlags(argv, ownerFlags);
+
   const [subcommand, ...users] = argv._;
   if (subcommand !== 'add') {
     throw new Error(

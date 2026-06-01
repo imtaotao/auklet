@@ -74,6 +74,8 @@ The package exposes both `auk` and `auklet`.
 | `auk build-css`         | Generate CSS output only.                                             |
 | `auk build-css --watch` | Watch source/config/style files and rebuild CSS.                      |
 | `auk publish`           | Run the pnpm-based publish workflow.                                  |
+| `auk inspect publish`   | Check publish readiness without changing files or registry state.     |
+| `auk inspect pack`      | Check package entry/export files before publishing.                   |
 | `auk owner add <user>`  | Add npm owners through pnpm.                                          |
 
 Build and dev commands can override package config for one run:
@@ -128,6 +130,8 @@ auk publish --version patch --dry-run
 auk publish --no-format
 auk publish --no-git
 auk publish --otp 123456
+auk inspect publish --filter @scope/ui --version patch
+auk inspect pack --filter @scope/ui
 auk owner add alice
 auk owner add alice --filter @scope/ui --otp 123456
 ```
@@ -157,6 +161,16 @@ package directory. Package-local `.npmrc` files and
 `--otp` is forwarded to `pnpm publish` for npm accounts or organizations that
 require publish 2FA, and to `pnpm owner add` for owner management 2FA. In CI,
 prefer an npm automation token.
+
+`auk inspect publish` accepts the same publish selection and version flags as
+`auk publish`. It resolves the publish plan, checks package entry/export files,
+then checks registry authentication and whether target versions already exist.
+It does not write versions, run hooks, build, commit, tag, or publish packages.
+Local package file failures or registry issues exit with code 1.
+
+`auk inspect pack` accepts `--filter` for workspace package selection. It checks
+whether `package.json` entry fields, `exports`, `bin`, `types`, CSS entry fields,
+and declared `files` paths point to existing package files.
 
 ## Configuration
 

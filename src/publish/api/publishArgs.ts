@@ -10,7 +10,7 @@ export function createPublishArgs(
   if (options.ignoreScripts) args.push('--ignore-scripts');
   if (shouldAddPublicAccess(target)) args.push('--access', 'public');
 
-  const tag = getPublishTag(options.version);
+  const tag = resolvePublishTag(options.version);
   if (tag) args.push('--tag', tag);
   return args;
 }
@@ -23,7 +23,7 @@ const shouldAddPublicAccess = (target: PublishTarget) => {
   );
 };
 
-const getPublishTag = (versionSpec: string | undefined) => {
+export function resolvePublishTag(versionSpec?: string) {
   if (versionSpec === 'alpha' || versionSpec === 'beta') return versionSpec;
   return null;
-};
+}

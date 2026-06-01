@@ -58,6 +58,24 @@ Tests:
 - `src/__tests__/publish/pnpmApi.spec.ts` for pnpm process behavior.
 - Add a preview-style test only when terminal output needs manual visual review.
 
+## Change Inspect Behavior
+
+Check:
+
+- `src/cli/inspect.ts` for inspect subcommand routing.
+- `src/publish/inspect.ts` for publish readiness orchestration.
+- `src/publish/inspectPack.ts` for local package file checks.
+- `src/publish/inspectRegistry.ts` for registry auth and version checks.
+- README CLI docs and `docs/publish.md` when user-visible behavior changes.
+
+Tests:
+
+- Package file checks belong in `src/__tests__/publish/inspectPack.spec.ts`.
+- Registry readiness checks belong in
+  `src/__tests__/publish/inspectRegistry.spec.ts`.
+- Inspect publish orchestration belongs in
+  `src/__tests__/publish/inspect.spec.ts`.
+
 ## Add Or Change Config Fields
 
 Check:

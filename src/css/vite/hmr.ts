@@ -18,6 +18,8 @@ import { createScopedAukletLogger } from '#auklet/logger';
 // 3. @tailwindcss/vite 会在相关 CSS 变化时主动发 full-reload。package CSS 已由
 //   这个插件接管 HMR 时，需要在一个很短的窗口内吞掉这次 reload。
 
+type VirtualIdsByDependency = Map<string, Set<string>>;
+
 const FULL_RELOAD_SUPPRESS_MS = 100;
 const DUPLICATE_UPDATE_IGNORE_MS = 500;
 const logger = createScopedAukletLogger('css:vite');
@@ -77,8 +79,6 @@ const getDependencyVirtualModules = (
     return module ? [module] : [];
   });
 };
-
-type VirtualIdsByDependency = Map<string, Set<string>>;
 
 export class AukletStyleHmr {
   private readonly lastUpdateTimes = new Map<string, number>();

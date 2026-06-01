@@ -111,6 +111,7 @@ src/cli/
 ├── build.ts              # build/build-js command orchestration
 ├── buildCss.ts           # build-css command orchestration and watch lifecycle
 ├── dev.ts                # dev command process orchestration
+├── inspect.ts            # inspect subcommand dispatch
 ├── publish.ts            # publish and owner command orchestration
 └── buildArgs.ts          # auklet build override parsing and validation
 ```
@@ -161,6 +162,7 @@ flowchart TD
   Command --> BuildStyle["auk build-css"]
   Command --> Dev["auk dev"]
   Command --> Publish["auk publish / auk owner"]
+  Command --> Inspect["auk inspect"]
   Command --> Version["auk version / --version"]
 
   Build --> LoadBuildConfig["loadAukletConfig"]
@@ -173,6 +175,7 @@ flowchart TD
   Dev --> JsWatch["tsdown --watch"]
   Dev --> StyleWatch["ModuleStyleWatcher"]
   Publish --> PublishRunner["src/publish/* runners"]
+  Inspect --> InspectRunner["src/publish/inspect* checks"]
 ```
 
 ## Examples

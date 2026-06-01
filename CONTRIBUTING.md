@@ -88,6 +88,9 @@ than repeating them in this entry document.
 - Non-exported local helpers may use arrow functions.
 - Functions usually do not need explicit return type annotations; use
   `satisfies` on returned values when the return structure needs constraints.
+- Prefer aidly type guards such as `isString`, `isArray`, `isPlainObject`, and
+  `isBoolean` when they cover the check. Only write local type checks for cases
+  aidly does not provide.
 - Use posix `/` semantics for output and test assertions. Absolute file-system
   paths should only appear in internal resolution steps.
 - Do not spread CSS-specific naming into generic modules that may support other

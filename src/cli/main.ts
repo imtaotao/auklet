@@ -7,6 +7,7 @@ import { runDev } from '#auklet/cli/dev';
 import { runBuildCss } from '#auklet/cli/buildCss';
 import { runBuild, runBuildJs } from '#auklet/cli/build';
 import { runOwner, runPublish } from '#auklet/cli/publish';
+import { runInspect } from '#auklet/cli/inspect';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -75,6 +76,11 @@ async function runCli(argv: Array<string>) {
     .command('owner [...args]', 'Manage npm package owners with pnpm')
     .allowUnknownOptions()
     .action(() => runCliCommand(runOwner, getCommandArgs(argv, 'owner')));
+
+  cli
+    .command('inspect [...args]', 'Inspect auklet plans without side effects')
+    .allowUnknownOptions()
+    .action(() => runCliCommand(runInspect, getCommandArgs(argv, 'inspect')));
 
   cli
     .command('version', 'Print auklet version')
