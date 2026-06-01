@@ -76,6 +76,7 @@ The package exposes both `auk` and `auklet`.
 | `auk publish`           | Run the pnpm-based publish workflow.                                  |
 | `auk inspect publish`   | Check publish readiness without changing files or registry state.     |
 | `auk inspect pack`      | Check package entry/export files before publishing.                   |
+| `auk inspect css`       | Explain CSS output entry, theme, and module plans.                    |
 | `auk owner add <user>`  | Add npm owners through pnpm.                                          |
 
 Build and dev commands can override package config for one run:
@@ -130,8 +131,9 @@ auk publish --version patch --dry-run
 auk publish --no-format
 auk publish --no-git
 auk publish --otp 123456
-auk inspect publish --filter @scope/ui --version patch
+auk inspect publish --version patch
 auk inspect pack --filter @scope/ui
+auk inspect css --modules
 auk owner add alice
 auk owner add alice --filter @scope/ui --otp 123456
 ```
@@ -171,6 +173,13 @@ Local package file failures or registry issues exit with code 1.
 `auk inspect pack` accepts `--filter` for workspace package selection. It checks
 whether `package.json` entry fields, `exports`, `bin`, `types`, CSS entry fields,
 and declared `files` paths point to existing package files.
+
+`auk inspect css` accepts the same build override flags as `auk build`. It
+prints the normalized CSS plan, including output entries, theme files, and
+module entries. When run from a pnpm workspace root, it inspects workspace child
+packages instead of the root package. It does not write CSS output, but
+dependency CSS files must already exist when the plan relies on external package
+style entries or component auto imports.
 
 ## Configuration
 

@@ -26,6 +26,7 @@ Keep `css` only where the API or artifact is explicitly CSS-oriented:
 src/css/
 ├── config.ts                     # Default CSS output structure config
 ├── constants.ts                  # CSS/source file matching constants
+├── inspect.ts                    # Read-only CSS plan inspection
 └── core/
     ├── stylePackageContext.ts        # Collects style build context for one package
     ├── styleProcessor.ts             # Reads, merges, and expands style content
@@ -50,6 +51,12 @@ Key modules:
   inside the current package source tree.
 - `style/entries.ts`: environment-neutral style graph entry semantics consumed
   by production writers and Vite/dev renderers.
+- `inspect.ts`: builds the read-only `auk inspect css` model from the same
+  package context and entry planner used by production CSS output. When invoked
+  from a pnpm workspace root, it inspects workspace child packages and filters
+  out the root package. It does not build CSS, so dependency package CSS outputs
+  must already exist for external style entries and component auto imports to be
+  represented accurately.
 
 ## Production Modules
 
@@ -117,6 +124,9 @@ The supported input surface is intentionally narrow:
 - Current package theme entries come from `styles.themes`.
 - External package style entries, theme entries, and component auto-import rules
   come from `styles.dependencies`.
+- `auk inspect css` is read-only. It can explain the current package plan before
+  building that package, but dependency packages should be built first when their
+  CSS outputs are part of the plan.
 - Module auto imports are inferred from `.tsx` imports and named re-exports.
   `.ts`, `.d.ts`, and `export * from` are outside the inference model.
 - Same-package source specifiers may resolve through relative paths,

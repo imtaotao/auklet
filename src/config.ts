@@ -27,15 +27,6 @@ export const aukletDefaultOptions = {
   Pick<AukletConfig, 'source' | 'output' | 'modules' | 'build' | 'styles'>
 >;
 
-export const aukletDefaultStyleDependencyConfig: StyleDependencyGroup = {
-  entry: '/style.css',
-  components: ['/pages/**.css', '/components/**.css'],
-  themes: {
-    dark: '/themes/dark.css',
-    light: '/themes/light.css',
-  },
-};
-
 const normalizeStyleDependency = (dependency: StyleDependencyGroup) => ({
   entry: dependency.entry,
   themes: dependency.themes,
