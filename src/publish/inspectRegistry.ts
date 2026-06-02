@@ -4,7 +4,7 @@ import {
   hasPublishedPackageVersion,
   runPnpmWhoami,
 } from '#auklet/publish/api/pnpmApi';
-import type { PublishPlan } from '#auklet/publish/types';
+import type { PublishOptions, PublishPlan } from '#auklet/publish/types';
 
 const registryCheckTimeout = 5_000;
 const registryCheckRetryTimes = 2;
@@ -34,6 +34,7 @@ export type PublishRegistryCheckInfo = Pick<
 >;
 
 export type InspectPublishRegistryOptions = {
+  token?: PublishOptions['token'];
   onCheck?: (info: PublishRegistryCheckInfo) => void;
   onRetry?: (info: PublishRegistryRetryInfo) => void;
 };
@@ -100,6 +101,7 @@ const checkAuth = async (
         runPnpmWhoami(packageRoot, {
           packageName,
           registry,
+          token: options.token,
           timeout: registryCheckTimeout,
         }),
       {
@@ -135,6 +137,7 @@ const checkVersion = async (
       () =>
         hasPublishedPackageVersion(packageRoot, packageName, version, {
           registry,
+          token: options.token,
           timeout: registryCheckTimeout,
         }),
       {

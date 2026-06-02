@@ -20,6 +20,7 @@ import {
 } from '#auklet/publish/api/pnpmApi';
 import { formatPublishOutputs } from '#auklet/publish/runner/publishOutputFormatter';
 import { PublishRunner } from '#auklet/publish/publishRunner';
+import { createVirtualProject } from '#auklet/__tests__/fixtures/virtualProject';
 
 const readPackage = vi.mocked(readPackageJson);
 const writePackage = vi.mocked(writePackageJson);
@@ -318,6 +319,53 @@ describe('PublishRunner', () => {
     ).rejects.toThrow('not authenticated');
 
     expect(writePackage).not.toHaveBeenCalled();
+    expect(runPnpmPublish).not.toHaveBeenCalled();
+  });
+
+  test('does not write versions when token lacks matching npmrc auth config', async () => {
+    const project = createVirtualProject();
+    project.writeFile(
+      '.npmrc',
+      '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n',
+    );
+    resolvePlan.mockResolvedValueOnce({
+      root: project.root,
+      version: '1.0.1',
+      dryRun: false,
+      config: {},
+      workspaceMode: 'single',
+      targets: [
+        createTarget(
+          '@scope/ui',
+          {
+            publishConfig: {
+              registry: 'https://registry.example.test/',
+            },
+          },
+          project.root,
+        ),
+      ],
+    });
+
+    try {
+      await expect(
+        new PublishRunner({
+          cwd: project.root,
+          filters: [],
+          version: 'patch',
+          dryRun: false,
+          format: true,
+          token: 'npm_secret',
+          ignoreScripts: false,
+          allowDirty: false,
+        }).run(),
+      ).rejects.toThrow('preflight failed for @scope/ui');
+    } finally {
+      project.cleanup();
+    }
+
+    expect(writePackage).not.toHaveBeenCalled();
+    expect(whoami).not.toHaveBeenCalled();
     expect(runPnpmPublish).not.toHaveBeenCalled();
   });
 
@@ -724,8 +772,9 @@ const getHookStatuses = () => {
 const createTarget = (
   packageName: string,
   packageJson: Record<string, unknown> = {},
+  packageRoot = process.cwd(),
 ) => ({
-  packageRoot: process.cwd(),
+  packageRoot,
   packageName,
   version: '1.0.0',
   publishVersion: '1.0.1',

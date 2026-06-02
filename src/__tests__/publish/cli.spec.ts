@@ -70,6 +70,16 @@ describe('runPublishCli', () => {
     );
   });
 
+  test('passes npm token as a publish option', async () => {
+    await runPublishCli(['--token', 'npm_secret']);
+
+    expect(createPublishRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: 'npm_secret',
+      }),
+    );
+  });
+
   test('rejects unknown --no-prefixed flags', async () => {
     await expect(runPublishCli(['--no-build'])).rejects.toThrow(
       'unknown option: --no-build',

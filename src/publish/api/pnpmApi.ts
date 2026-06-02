@@ -107,10 +107,15 @@ export async function runPnpmBuild(packageRoot: string) {
   }
 }
 
-export async function runPnpmPublish(packageRoot: string, args: Array<string>) {
+export async function runPnpmPublish(
+  packageRoot: string,
+  args: Array<string>,
+  options: { token?: string } = {},
+) {
   const isDryRun = args.includes('--dry-run');
   const result = await runPnpm(['publish', ...args], {
     cwd: packageRoot,
+    env: createPnpmAuthEnv(options.token),
     stdio: isDryRun ? 'pipe' : 'inherit',
   });
   if (isDryRun) writeProcessOutput(result);
@@ -124,13 +129,19 @@ export async function runPnpmPublish(packageRoot: string, args: Array<string>) {
 
 export async function runPnpmWhoami(
   packageRoot: string,
-  options: { packageName?: string; registry?: string; timeout?: number } = {},
+  options: {
+    packageName?: string;
+    registry?: string;
+    timeout?: number;
+    token?: string;
+  } = {},
 ) {
   const args = ['whoami'];
   if (options.registry) args.push('--registry', options.registry);
 
   const result = await runPnpm(args, {
     cwd: packageRoot,
+    env: createPnpmAuthEnv(options.token),
     timeout: options.timeout,
   });
   if (hasFailedPnpmResult(result)) {
@@ -151,13 +162,14 @@ export async function hasPublishedPackageVersion(
   packageRoot: string,
   packageName: string,
   version: string,
-  options: { registry?: string; timeout?: number } = {},
+  options: { registry?: string; timeout?: number; token?: string } = {},
 ) {
   const args = ['view', `${packageName}@${version}`, 'version'];
   if (options.registry) args.push('--registry', options.registry);
 
   const result = await runPnpm(args, {
     cwd: packageRoot,
+    env: createPnpmAuthEnv(options.token),
     timeout: options.timeout,
   });
   if (!hasFailedPnpmResult(result)) {
@@ -188,6 +200,14 @@ export async function runPnpmOwnerAdd(
       `[publish] pnpm owner add failed for ${user} -> ${packageName}.`,
     );
   }
+}
+
+export function createPnpmAuthEnv(token?: string) {
+  if (!token) return undefined;
+  return {
+    NODE_AUTH_TOKEN: token,
+    NPM_TOKEN: token,
+  };
 }
 
 const isWorkspacePackage = (value: unknown): value is WorkspacePackage => {

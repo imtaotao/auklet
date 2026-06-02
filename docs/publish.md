@@ -36,6 +36,7 @@ Keep these flags out of auklet config:
 - `--version`
 - `--dry-run`
 - `--otp`
+- `--token`
 - `--no-format`
 - `--no-git`
 - `--ignore-scripts`
@@ -71,6 +72,7 @@ ensure pnpm
 resolve publish plan
 validate build scripts
 initial git clean check unless `--dry-run` or `--allow-dirty`
+verify npmrc auth config when `--token` is provided
 verify npm authentication for each target with `pnpm whoami` unless `--dry-run`
 verify target versions do not already exist unless `--dry-run`
 log dry-run version plan when needed
@@ -95,6 +97,17 @@ publish.
 Real publish uses `stdio: inherit` for `pnpm publish` so npm browser
 authentication and ENTER prompts stay attached to the user's terminal. Dry-run
 publish uses piped output so auklet can inspect npm authentication errors.
+
+`--token` sets `NODE_AUTH_TOKEN` and `NPM_TOKEN` for publish subprocesses. It
+does not write npm config and is never forwarded as a pnpm command argument. If
+`--token` is used, auklet requires an npmrc file between the target package and
+publish root with `_authToken` configured. When a target package declares
+`package.json#publishConfig.registry`, the npmrc auth token key must match that
+registry, for example:
+
+```ini
+//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+```
 
 ## Version And Git Rules
 
@@ -153,7 +166,9 @@ Use this section when a publish run stops after side effects have started.
   later packages should not start until the current `pnpm publish` exits.
 - If publish 2FA is enabled and an OTP is available, retry the original command
   with `--otp <code>`.
-- CI should use an npm automation token instead of interactive 2FA.
+- CI should use an npm automation token instead of interactive 2FA. Pass it
+  through `NODE_AUTH_TOKEN`, `NPM_TOKEN`, or `auk publish --token <token>`, and
+  keep the matching `_authToken` entry in npmrc.
 
 ### Version Files Written But Publish Failed
 

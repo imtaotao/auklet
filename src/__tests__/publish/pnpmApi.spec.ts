@@ -58,6 +58,29 @@ describe('runPnpmPublish', () => {
       }),
     );
   });
+
+  test('passes npm token through the child process environment', async () => {
+    run.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    } as never);
+
+    await runPnpmPublish(process.cwd(), ['--no-git-checks'], {
+      token: 'npm_secret',
+    });
+
+    expect(run).toHaveBeenCalledWith(
+      'pnpm',
+      ['publish', '--no-git-checks'],
+      expect.objectContaining({
+        env: {
+          NODE_AUTH_TOKEN: 'npm_secret',
+          NPM_TOKEN: 'npm_secret',
+        },
+      }),
+    );
+  });
 });
 
 describe('hasPublishedPackageVersion', () => {
@@ -105,6 +128,35 @@ describe('hasPublishedPackageVersion', () => {
     await expect(
       hasPublishedPackageVersion(process.cwd(), '@scope/ui', '1.0.1'),
     ).resolves.toBe(false);
+  });
+
+  test('passes npm token to version existence checks', async () => {
+    run.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: '1.0.1',
+      stderr: '',
+    } as never);
+
+    await hasPublishedPackageVersion(
+      '/repo/packages/ui',
+      '@scope/ui',
+      '1.0.1',
+      {
+        token: 'npm_secret',
+      },
+    );
+
+    expect(run).toHaveBeenCalledWith(
+      'pnpm',
+      ['view', '@scope/ui@1.0.1', 'version'],
+      expect.objectContaining({
+        cwd: '/repo/packages/ui',
+        env: {
+          NODE_AUTH_TOKEN: 'npm_secret',
+          NPM_TOKEN: 'npm_secret',
+        },
+      }),
+    );
   });
 });
 
@@ -163,6 +215,31 @@ describe('withPnpmTimeout', () => {
         cwd: '/repo/packages/ui',
         reject: false,
         timeout: undefined,
+      }),
+    );
+  });
+
+  test('passes npm token to whoami checks', async () => {
+    run.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: 'publisher',
+      stderr: '',
+    } as never);
+
+    await runPnpmWhoami('/repo/packages/ui', {
+      packageName: '@scope/ui',
+      token: 'npm_secret',
+    });
+
+    expect(run).toHaveBeenCalledWith(
+      'pnpm',
+      ['whoami'],
+      expect.objectContaining({
+        cwd: '/repo/packages/ui',
+        env: {
+          NODE_AUTH_TOKEN: 'npm_secret',
+          NPM_TOKEN: 'npm_secret',
+        },
       }),
     );
   });

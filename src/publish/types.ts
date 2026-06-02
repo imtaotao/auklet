@@ -55,6 +55,7 @@ export type PublishOptions = {
   filters: Array<string>;
   git?: boolean;
   otp?: string;
+  token?: string;
   version?: string;
 };
 

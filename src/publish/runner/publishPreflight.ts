@@ -4,6 +4,11 @@ import {
   NpmPackageVersionExistsError,
   runPnpmWhoami,
 } from '#auklet/publish/api/pnpmApi';
+import {
+  findNpmrcFiles,
+  findNpmrcWithAuthToken,
+  toNpmrcRegistryKey,
+} from '#auklet/publish/api/npmrc';
 import { getPublishRegistry } from '#auklet/publish/api/registry';
 import { logAuthenticationError } from '#auklet/publish/runner/packagePublisher';
 import { PublishTargetError } from '#auklet/publish/runner/publishTargetError';
@@ -27,9 +32,31 @@ export class PublishPreflight {
   }
 
   async verifyBeforeBuild(plan: PublishPlan) {
+    this.verifyTokenConfig(plan);
     if (plan.dryRun) return;
     await this.verifyAuthentication(plan);
     await this.verifyPackageVersions(plan);
+  }
+
+  private verifyTokenConfig(plan: PublishPlan) {
+    if (!this.options.token) return;
+
+    for (const target of plan.targets) {
+      const registry = getPublishRegistry(target.packageJson.publishConfig);
+      const npmrc = findNpmrcWithAuthToken(
+        target.packageRoot,
+        plan.root,
+        registry,
+      );
+      if (npmrc) continue;
+
+      throw new PublishTargetError(
+        target,
+        'preflight',
+        new Error(createMissingNpmrcAuthMessage(target, plan.root, registry)),
+        [],
+      );
+    }
   }
 
   private async verifyAuthentication(plan: PublishPlan) {
@@ -42,6 +69,7 @@ export class PublishPreflight {
       await runPnpmWhoami(target.packageRoot, {
         packageName: target.packageName,
         registry,
+        token: this.options.token,
       });
       checked.add(key);
     }
@@ -70,7 +98,7 @@ export class PublishPreflight {
         target.packageRoot,
         target.packageName,
         target.publishVersion,
-        { registry },
+        { registry, token: this.options.token },
       );
       if (!exists) continue;
 
@@ -99,4 +127,29 @@ export class PublishPreflight {
       this.logger.error('registry: ', this.logger.url(registry));
     }
   }
+}
+
+function createMissingNpmrcAuthMessage(
+  target: PublishTarget,
+  root: string,
+  registry?: string,
+) {
+  const npmrcFiles = findNpmrcFiles(target.packageRoot, root);
+  const authTarget = registry
+    ? `${toNpmrcRegistryKey(registry)}:_authToken`
+    : '_authToken';
+  const registryHint = registry
+    ? `[publish] ${target.packageName} uses publishConfig.registry: ${registry}.\n`
+    : '';
+  const location = npmrcFiles.length
+    ? 'found npmrc files, but none declares'
+    : 'could not find an npmrc file declaring';
+
+  return (
+    `[publish] --token requires npmrc auth config for ${target.packageName}.\n` +
+    registryHint +
+    `[publish] ${location} ${authTarget}.\n` +
+    '[publish] Add an npmrc entry such as:\n' +
+    `  ${authTarget}=\${NODE_AUTH_TOKEN}`
+  );
 }

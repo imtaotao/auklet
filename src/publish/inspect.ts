@@ -71,6 +71,7 @@ export async function runInspectPublishCli(args: Array<string>) {
   const spinner = logger.spinner('Checking publish registry');
   spinner.start();
   const registryChecks = await inspectPublishRegistry(plan, {
+    token: options.token,
     onCheck: (info) => {
       spinner.text([
         'Checking registry ',

@@ -92,6 +92,42 @@ describe('runInspectPublishCli', () => {
 
     expect(inspectRegistry).toHaveBeenCalledTimes(1);
   });
+
+  test('passes npm token to registry checks', async () => {
+    project.writeFile('dist/index.js', 'export {};\n');
+    resolvePlan.mockResolvedValue(
+      createPlan({
+        packageRoot: project.root,
+        packageJson: {
+          name: '@scope/ui',
+          version: '1.0.0',
+          exports: {
+            '.': './dist/index.js',
+          },
+        },
+      }),
+    );
+    inspectRegistry.mockResolvedValue([
+      {
+        packageName: '@scope/ui',
+        registry: 'default',
+        auth: 'success',
+        version: 'success',
+        reason: null,
+      },
+    ]);
+
+    await expect(
+      runInspectPublishCli(['--dry-run', '--token', 'npm_secret']),
+    ).resolves.toBe(0);
+
+    expect(inspectRegistry).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        token: 'npm_secret',
+      }),
+    );
+  });
 });
 
 const createPlan = (options: {

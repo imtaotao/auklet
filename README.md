@@ -131,6 +131,7 @@ auk publish --version patch --dry-run
 auk publish --no-format
 auk publish --no-git
 auk publish --otp 123456
+auk publish --token npm_xxx
 auk inspect publish --version patch
 auk inspect pack --filter @scope/ui
 auk inspect css --modules
@@ -161,8 +162,16 @@ Before writing versions, auklet checks npm authentication from each target
 package directory. Package-local `.npmrc` files and
 `package.json#publishConfig.registry` are respected.
 `--otp` is forwarded to `pnpm publish` for npm accounts or organizations that
-require publish 2FA, and to `pnpm owner add` for owner management 2FA. In CI,
-prefer an npm automation token.
+require publish 2FA, and to `pnpm owner add` for owner management 2FA.
+`--token` sets `NODE_AUTH_TOKEN` and `NPM_TOKEN` for publish subprocesses. The
+token still needs npmrc auth config, for example:
+
+```ini
+//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+When a package uses `package.json#publishConfig.registry`, the npmrc token entry
+must target that registry. In CI, prefer an npm automation token over `--otp`.
 
 `auk inspect publish` accepts the same publish selection and version flags as
 `auk publish`. It resolves the publish plan, checks package entry/export files,

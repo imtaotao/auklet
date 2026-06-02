@@ -13,6 +13,7 @@ const publishFlags = new Set([
   'format',
   'git',
   'otp',
+  'token',
   'ignore-scripts',
   'allow-dirty',
 ]);
@@ -43,6 +44,7 @@ export function resolvePublishCliOptions(
     dryRun: argv['dry-run'] === true,
     allowDirty: argv['allow-dirty'] === true,
     ignoreScripts: argv['ignore-scripts'] === true,
+    token: stringOption(argv.token),
   } satisfies PublishOptions;
 }
 
@@ -50,7 +52,7 @@ const parsePublishArgs = (args: Array<string>) => {
   const cliArgs = stripLeadingArgsSeparator(args);
   validateNoPrefixedFlags(cliArgs, new Set(['--no-format', '--no-git']));
   const argv = minimist(cliArgs, {
-    string: ['filter', 'version', 'otp'],
+    string: ['filter', 'version', 'otp', 'token'],
     boolean: ['dry-run', 'format', 'git', 'ignore-scripts', 'allow-dirty'],
     default: {
       git: true,

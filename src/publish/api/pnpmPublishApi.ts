@@ -4,9 +4,11 @@ import type { PublishOptions, PublishTarget } from '#auklet/publish/types';
 
 export class PnpmPublishApi {
   async publish(target: PublishTarget, options: PublishOptions) {
-    await runPnpmPublish(
-      target.packageRoot,
-      createPublishArgs(target, options),
-    );
+    const args = createPublishArgs(target, options);
+    if (options.token) {
+      await runPnpmPublish(target.packageRoot, args, { token: options.token });
+      return;
+    }
+    await runPnpmPublish(target.packageRoot, args);
   }
 }
