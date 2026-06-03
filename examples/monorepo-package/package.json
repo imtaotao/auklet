@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --stream --filter './packages/*' build",
-    "publish:dry-run": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/* --dry-run",
-    "publish:local": "NPM_CONFIG_CACHE=.publish-cache auk publish --filter @demo/* --version patch --allow-dirty"
+    "build": "auk build --workspace",
+    "publish:dry-run": "cross-env NPM_CONFIG_CACHE=.publish-cache auk publish --workspace --dry-run",
+    "publish:local": "cross-env NPM_CONFIG_CACHE=.publish-cache auk publish --workspace --version patch --allow-dirty"
   },
   "auklet": {
     "publish": {
@@ -15,6 +15,7 @@
     }
   },
   "devDependencies": {
-    "auklet": "link:../.."
+    "auklet": "link:../..",
+    "cross-env": "catalog:"
   }
 }

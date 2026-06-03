@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { readPnpmWorkspacePackages } from '#auklet/publish/api/pnpmApi';
 import { AukletEnvContext } from '#auklet/env';
@@ -104,6 +107,35 @@ describe('resolvePublishPlan', () => {
     );
   });
 
+  test('requires a workspace root for filtered publish', async () => {
+    const singleProjectRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'auklet-publish-single-'),
+    );
+    fs.writeFileSync(
+      path.join(singleProjectRoot, 'package.json'),
+      JSON.stringify(
+        {
+          name: '@scope/ui',
+          version: '1.0.0',
+        },
+        null,
+        2,
+      ),
+    );
+
+    try {
+      await expect(
+        resolveTestPublishPlan({
+          cwd: singleProjectRoot,
+          filters: ['*'],
+          dryRun: false,
+        }),
+      ).rejects.toThrow('--filter requires a pnpm workspace root');
+    } finally {
+      fs.rmSync(singleProjectRoot, { recursive: true, force: true });
+    }
+  });
+
   test('allows --version to normalize old monorepo package versions', async () => {
     writeWorkspacePackage('ui', '0.9.0');
     readWorkspacePackages.mockResolvedValue([
@@ -180,6 +212,43 @@ describe('resolvePublishPlan', () => {
       }),
     ).resolves.toMatchObject({
       targets: [
+        {
+          packageName: '@scope/ui',
+        },
+      ],
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('matches all workspace packages with wildcard filters', async () => {
+    writeWorkspacePackage('theme', '1.0.0');
+    writeWorkspacePackage('ui', '1.0.0', {
+      dependencies: {
+        '@scope/theme': 'workspace:*',
+      },
+    });
+    readWorkspacePackages.mockResolvedValue([
+      workspacePackage('@scope/root', project.root, '1.0.0', true),
+      workspacePackage('@scope/ui', project.resolve('packages/ui'), '1.0.0'),
+      workspacePackage(
+        '@scope/theme',
+        project.resolve('packages/theme'),
+        '1.0.0',
+      ),
+    ]);
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(
+      resolveTestPublishPlan({
+        cwd: project.root,
+        filters: ['*'],
+        dryRun: false,
+      }),
+    ).resolves.toMatchObject({
+      targets: [
+        {
+          packageName: '@scope/theme',
+        },
         {
           packageName: '@scope/ui',
         },

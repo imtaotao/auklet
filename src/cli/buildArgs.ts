@@ -142,6 +142,42 @@ export function createBuildEnv(config: AukletConfig) {
   };
 }
 
+export function resolveBuildFilterArgs(
+  args: Array<string>,
+  envContext = new AukletEnvContext(process.cwd()),
+) {
+  const remainingArgs: Array<string> = [];
+  const filters: Array<string> = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+    const [name, inlineValue] = arg.split('=', 2);
+
+    if (name === '--workspace') {
+      if (inlineValue !== undefined) {
+        throw new Error('--workspace does not accept a value.');
+      }
+      filters.push('*');
+      continue;
+    }
+
+    if (name === '--filter') {
+      filters.push(
+        getResolvedFlagValue(args, index, inlineValue, name, envContext),
+      );
+      if (inlineValue === undefined) index += 1;
+      continue;
+    }
+
+    remainingArgs.push(arg);
+  }
+
+  return {
+    args: remainingArgs,
+    filters: [...new Set(filters)],
+  };
+}
+
 const getFlagValue = (
   args: Array<string>,
   index: number,

@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "auk build",
-    "publish:dry-run": "NPM_CONFIG_CACHE=.publish-cache auk publish --dry-run",
-    "publish:local": "NPM_CONFIG_CACHE=.publish-cache auk publish --version patch --allow-dirty"
+    "publish:dry-run": "cross-env NPM_CONFIG_CACHE=.publish-cache auk publish --dry-run",
+    "publish:local": "cross-env NPM_CONFIG_CACHE=.publish-cache auk publish --version patch --allow-dirty"
   },
   "auklet": {
     "publish": {
@@ -19,13 +19,14 @@
   "publishConfig": {
     "registry": "http://127.0.0.1:4873"
   },
-  "devDependencies": {
-    "auklet": "link:../.."
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "devDependencies": {
+    "auklet": "link:../..",
+    "cross-env": "catalog:"
   }
 }

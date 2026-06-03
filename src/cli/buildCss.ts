@@ -13,8 +13,10 @@ export async function resolveBuildCssConfig(
   options: {
     aukletConfig?: AukletConfig;
     envContext?: AukletEnvContext;
+    packageRoot?: string;
   } = {},
 ) {
+  const packageRoot = options.packageRoot ?? process.cwd();
   const buildArgs = resolveBuildCliArgs(args, options.envContext);
   const shouldWatch =
     buildArgs.args.includes('--watch') || buildArgs.args.includes('-w');
@@ -22,7 +24,7 @@ export async function resolveBuildCssConfig(
   const aukletConfig =
     options.aukletConfig ??
     mergeAukletConfigOverrides(
-      await loadAukletConfig(process.cwd(), {
+      await loadAukletConfig(packageRoot, {
         cacheBust: shouldWatch,
       }),
       buildArgs.config,
@@ -30,15 +32,24 @@ export async function resolveBuildCssConfig(
 
   return {
     aukletConfig,
+    packageRoot,
     shouldWatch,
   };
 }
 
-export async function startBuildCssWatch(aukletConfig: AukletConfig) {
+export async function startBuildCssWatch(
+  aukletConfig: AukletConfig,
+  options: {
+    packageRoot?: string;
+  } = {},
+) {
   const logger = createAukletLogger();
   return logger.group('Build CSS', async () => {
     const css = logger.child('css');
-    const watcher = new ModuleStyleWatcher({ aukletConfig });
+    const watcher = new ModuleStyleWatcher({
+      ...(options.packageRoot ? { packageRoot: options.packageRoot } : {}),
+      aukletConfig,
+    });
     await watcher.watch();
     css.success('watch mode ready');
     return watcher;
@@ -49,18 +60,22 @@ export async function runBuildCss(
   args: Array<string>,
   options: {
     aukletConfig?: AukletConfig;
+    envContext?: AukletEnvContext;
+    packageRoot?: string;
   } = {},
 ) {
-  const envContext = new AukletEnvContext(process.cwd());
+  const packageRoot = options.packageRoot ?? process.cwd();
+  const envContext = options.envContext ?? new AukletEnvContext(packageRoot);
   return envContext.run(async () => {
     const logger = createAukletLogger();
     const { aukletConfig, shouldWatch } = await resolveBuildCssConfig(args, {
       ...options,
       envContext,
+      packageRoot,
     });
 
     if (shouldWatch) {
-      const watcher = await startBuildCssWatch(aukletConfig);
+      const watcher = await startBuildCssWatch(aukletConfig, { packageRoot });
       const close = () => {
         watcher
           .close()
@@ -73,7 +88,7 @@ export async function runBuildCss(
       return 0;
     }
 
-    const builder = new ModuleStyleBuilder({ aukletConfig });
+    const builder = new ModuleStyleBuilder({ packageRoot, aukletConfig });
     await logger.group('Build CSS', async () => {
       const timer = logger.timer();
       const result = await builder.build();

@@ -12,6 +12,7 @@ catalog:
   aidly: 1.37.0
   briefing: 0.0.5
   chokidar: 5.0.0
+  cross-env: 10.1.0
   conditional-export: 1.1.0
   execa: 9.6.1
   husky: 9.1.7

@@ -74,6 +74,14 @@ describe('runPublishCli', () => {
     });
   });
 
+  test('passes --workspace as a publish wildcard filter alias', async () => {
+    await runPublishCli(['--workspace']);
+
+    expectPublishRunnerOptions({
+      filters: ['*'],
+    });
+  });
+
   test('resolves env values for publish boolean flags after loading .env', async () => {
     const project = createVirtualProject();
     project.writeFile('.env', 'AUKLET_DRY_RUN=true\n');

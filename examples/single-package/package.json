@@ -5,8 +5,8 @@
   "scripts": {
     "build": "auk build",
     "dev": "vite --host 127.0.0.1",
-    "publish:dry-run": "NPM_CONFIG_CACHE=.publish-cache auk publish --dry-run",
-    "publish:local": "NPM_CONFIG_CACHE=.publish-cache auk publish --version patch --allow-dirty"
+    "publish:dry-run": "cross-env NPM_CONFIG_CACHE=.publish-cache auk publish --dry-run",
+    "publish:local": "cross-env NPM_CONFIG_CACHE=.publish-cache auk publish --version patch --allow-dirty"
   },
   "auklet": {
     "publish": {
@@ -20,10 +20,6 @@
   "publishConfig": {
     "registry": "http://127.0.0.1:4873"
   },
-  "devDependencies": {
-    "auklet": "link:../..",
-    "vite": "catalog:"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -31,5 +27,10 @@
     },
     "./style.css": "./dist/index.css",
     "./components/*.css": "./dist/es/components/*/style/index.css"
+  },
+  "devDependencies": {
+    "auklet": "link:../..",
+    "vite": "catalog:",
+    "cross-env": "catalog:"
   }
 }

@@ -111,6 +111,7 @@ src/cli/
 ├── main.ts               # Command registration and top-level error boundary
 ├── build.ts              # build/build-js command orchestration
 ├── buildCss.ts           # build-css command orchestration and watch lifecycle
+├── buildWorkspace.ts     # filtered workspace build/dev target selection
 ├── dev.ts                # dev command process orchestration
 ├── inspect.ts            # inspect subcommand dispatch
 ├── publish.ts            # publish and owner command orchestration

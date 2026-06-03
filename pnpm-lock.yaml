@@ -36,6 +36,9 @@ catalogs:
     conditional-export:
       specifier: 1.1.0
       version: 1.1.0
+    cross-env:
+      specifier: 10.1.0
+      version: 10.1.0
     execa:
       specifier: 9.6.1
       version: 9.6.1
@@ -162,6 +165,9 @@ importers:
       auklet:
         specifier: link:../..
         version: link:../..
+      cross-env:
+        specifier: 'catalog:'
+        version: 10.1.0
 
   examples/monorepo-lib/packages/math:
     dependencies:
@@ -184,6 +190,9 @@ importers:
       auklet:
         specifier: link:../..
         version: link:../..
+      cross-env:
+        specifier: 'catalog:'
+        version: 10.1.0
 
   examples/monorepo-package/packages/dashboard:
     dependencies:
@@ -226,12 +235,18 @@ importers:
       auklet:
         specifier: link:../..
         version: link:../..
+      cross-env:
+        specifier: 'catalog:'
+        version: 10.1.0
 
   examples/single-package:
     devDependencies:
       auklet:
         specifier: link:../..
         version: link:../..
+      cross-env:
+        specifier: 'catalog:'
+        version: 10.1.0
       vite:
         specifier: 'catalog:'
         version: 8.0.14(@types/node@22.17.0)(esbuild@0.28.0)(tsx@4.22.3)(yaml@2.9.0)
@@ -297,6 +312,9 @@ packages:
 
   '@emnapi/wasi-threads@1.2.1':
     resolution: {integrity: sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w==}
+
+  '@epic-web/invariant@1.0.0':
+    resolution: {integrity: sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==}
 
   '@esbuild/aix-ppc64@0.28.0':
     resolution: {integrity: sha512-lhRUCeuOyJQURhTxl4WkpFTjIsbDayJHih5kZC1giwE+MhIzAb7mEsQMqMf18rHLsrb5qI1tafG20mLxEWcWlA==}
@@ -1162,6 +1180,11 @@ packages:
   cors@2.8.6:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
+
+  cross-env@10.1.0:
+    resolution: {integrity: sha512-GsYosgnACZTADcmEyJctkJIoqAhHjttw7RsFrVoJNXbsWWqaq6Ym+7kZjq6mS45O0jij6vtiReppKQEtqWy6Dw==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -2826,6 +2849,8 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@epic-web/invariant@1.0.0': {}
+
   '@esbuild/aix-ppc64@0.28.0':
     optional: true
 
@@ -3634,6 +3659,11 @@ snapshots:
     dependencies:
       object-assign: 4.1.1
       vary: 1.1.2
+
+  cross-env@10.1.0:
+    dependencies:
+      '@epic-web/invariant': 1.0.0
+      cross-spawn: 7.0.6
 
   cross-spawn@7.0.6:
     dependencies:

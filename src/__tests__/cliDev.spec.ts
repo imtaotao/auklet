@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => {
     output: 'dist',
     source: 'src',
   });
+  const resolveWorkspaceBuildTargets = vi.fn();
 
   return {
     createCssWatcher,
@@ -34,6 +35,7 @@ const mocks = vi.hoisted(() => {
     execa,
     jsKill,
     loadAukletConfig,
+    resolveWorkspaceBuildTargets,
   };
 });
 
@@ -47,6 +49,14 @@ vi.mock('#auklet/configLoader', () => ({
 
 vi.mock('#auklet/css/watch/watcher', () => ({
   ModuleStyleWatcher: mocks.createCssWatcher,
+}));
+
+vi.mock('#auklet/cli/buildWorkspace', () => ({
+  getWorkspacePackageScript: (
+    packageJson: { scripts?: Record<string, string> },
+    name: string,
+  ) => packageJson.scripts?.[name] ?? null,
+  resolveWorkspaceBuildTargets: mocks.resolveWorkspaceBuildTargets,
 }));
 
 vi.mock('#auklet/logger', () => ({
@@ -70,6 +80,7 @@ describe('runDev', () => {
     mocks.execa.mockClear();
     mocks.jsKill.mockClear();
     mocks.loadAukletConfig.mockClear();
+    mocks.resolveWorkspaceBuildTargets.mockClear();
   });
 
   test('passes build overrides to JavaScript watch env and CSS watcher config', async () => {
@@ -92,6 +103,7 @@ describe('runDev', () => {
         output: 'dist',
         source: 'source',
       },
+      packageRoot: process.cwd(),
     });
   });
 
@@ -126,5 +138,192 @@ describe('runDev', () => {
     expect(mocks.cssWatch).toHaveBeenCalledTimes(1);
     expect(mocks.jsKill).toHaveBeenCalledWith('SIGTERM');
     expect(mocks.cssClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('starts workspace dev watchers for filtered packages', async () => {
+    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+      {
+        packageName: '@scope/theme',
+        packageRoot: '/repo/packages/theme',
+        packageJson: {
+          scripts: {
+            build: 'auk build-css',
+          },
+        },
+      },
+      {
+        packageName: '@scope/ui',
+        packageRoot: '/repo/packages/ui',
+        packageJson: {},
+      },
+    ]);
+
+    await runDev(['--filter', '*', '--source', 'source']);
+
+    expect(mocks.resolveWorkspaceBuildTargets).toHaveBeenCalledWith(
+      process.cwd(),
+      ['*'],
+      expect.anything(),
+    );
+    expect(mocks.execa).toHaveBeenCalledTimes(1);
+    expect(mocks.execa).toHaveBeenCalledWith(
+      process.execPath,
+      expect.arrayContaining(['--watch']),
+      expect.objectContaining({
+        cwd: '/repo/packages/ui',
+      }),
+    );
+    expect(mocks.cssWatcherContexts).toEqual([
+      {
+        aukletConfig: {
+          modules: false,
+          output: 'dist',
+          source: 'source',
+        },
+        packageRoot: '/repo/packages/theme',
+      },
+      {
+        aukletConfig: {
+          modules: false,
+          output: 'dist',
+          source: 'source',
+        },
+        packageRoot: '/repo/packages/ui',
+      },
+    ]);
+    expect(mocks.cssClose).toHaveBeenCalledTimes(2);
+  });
+
+  test('uses package dev scripts for workspace dev targets', async () => {
+    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+      {
+        packageName: '@scope/app',
+        packageRoot: '/repo/packages/app',
+        packageJson: {
+          scripts: {
+            dev: 'vite',
+          },
+        },
+      },
+    ]);
+
+    await runDev(['--workspace', '--host', '127.0.0.1']);
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      'pnpm',
+      ['run', 'dev', '--', '--host', '127.0.0.1'],
+      expect.objectContaining({
+        cwd: '/repo/packages/app',
+        env: {
+          AUKLET_WORKSPACE_DEV: '1',
+        },
+      }),
+    );
+    expect(mocks.createCssWatcher).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'auklet build-css',
+    'NODE_ENV=development auk build-css',
+    'cross-env NODE_ENV=development auk build-css --watch',
+  ])(
+    'detects CSS-only workspace dev target from build script: %s',
+    async (buildScript) => {
+      mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+        {
+          packageName: '@scope/theme',
+          packageRoot: '/repo/packages/theme',
+          packageJson: {
+            scripts: {
+              build: buildScript,
+            },
+          },
+        },
+        {
+          packageName: '@scope/app',
+          packageRoot: '/repo/packages/app',
+          packageJson: {
+            scripts: {
+              dev: 'vite',
+            },
+          },
+        },
+      ]);
+
+      await runDev(['--workspace']);
+
+      expect(mocks.execa).toHaveBeenCalledTimes(1);
+      expect(mocks.execa).toHaveBeenCalledWith(
+        'pnpm',
+        ['run', 'dev'],
+        expect.objectContaining({
+          cwd: '/repo/packages/app',
+        }),
+      );
+      expect(mocks.cssWatcherContexts).toEqual([
+        {
+          aukletConfig: {
+            modules: false,
+            output: 'dist',
+            source: 'src',
+          },
+          packageRoot: '/repo/packages/theme',
+        },
+      ]);
+    },
+  );
+
+  test('does not treat build-css-prefixed commands as CSS-only workspace dev targets', async () => {
+    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+      {
+        packageName: '@scope/theme',
+        packageRoot: '/repo/packages/theme',
+        packageJson: {
+          scripts: {
+            build: 'auk build-css-extra',
+          },
+        },
+      },
+    ]);
+
+    await runDev(['--workspace']);
+
+    expect(mocks.execa).toHaveBeenCalledWith(
+      process.execPath,
+      expect.arrayContaining(['--watch']),
+      expect.objectContaining({
+        cwd: '/repo/packages/theme',
+      }),
+    );
+    expect(mocks.cssWatcherContexts).toEqual([
+      {
+        aukletConfig: {
+          modules: false,
+          output: 'dist',
+          source: 'src',
+        },
+        packageRoot: '/repo/packages/theme',
+      },
+    ]);
+  });
+
+  test('rejects recursive workspace dev', async () => {
+    const originalValue = process.env.AUKLET_WORKSPACE_DEV;
+    process.env.AUKLET_WORKSPACE_DEV = '1';
+
+    try {
+      await expect(runDev(['--workspace'])).rejects.toThrow(
+        'recursive workspace dev detected',
+      );
+    } finally {
+      if (originalValue === undefined) {
+        delete process.env.AUKLET_WORKSPACE_DEV;
+      } else {
+        process.env.AUKLET_WORKSPACE_DEV = originalValue;
+      }
+    }
+
+    expect(mocks.resolveWorkspaceBuildTargets).not.toHaveBeenCalled();
+    expect(mocks.execa).not.toHaveBeenCalled();
   });
 });

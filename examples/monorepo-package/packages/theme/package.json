@@ -11,9 +11,6 @@
   "publishConfig": {
     "registry": "http://127.0.0.1:4873"
   },
-  "devDependencies": {
-    "auklet": "link:../../../.."
-  },
   "exports": {
     "./style.css": "./dist/index.css",
     "./themes/*.css": {
@@ -21,5 +18,8 @@
       "require": "./dist/lib/themes/*.css",
       "default": "./dist/es/themes/*.css"
     }
+  },
+  "devDependencies": {
+    "auklet": "link:../../../.."
   }
 }

@@ -14,13 +14,13 @@
   "publishConfig": {
     "registry": "http://127.0.0.1:4873"
   },
-  "devDependencies": {
-    "auklet": "link:../../../.."
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "devDependencies": {
+    "auklet": "link:../../../.."
   }
 }

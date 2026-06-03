@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { resolveBuildCliArgs } from '#auklet/cli/buildArgs';
+import {
+  resolveBuildCliArgs,
+  resolveBuildFilterArgs,
+} from '#auklet/cli/buildArgs';
 
 describe('resolveBuildCliArgs', () => {
   test('extracts auklet config overrides and keeps non-auklet args', () => {
@@ -189,5 +192,36 @@ describe('resolveBuildCliArgs', () => {
       args: ['--config', 'tsdown.config.ts'],
       config: {},
     });
+  });
+});
+
+describe('resolveBuildFilterArgs', () => {
+  test('extracts workspace filters and keeps build args', () => {
+    expect(
+      resolveBuildFilterArgs([
+        '--workspace',
+        '--filter',
+        '*',
+        '--filter=@scope/ui',
+        '--source',
+        'source',
+        '--minify',
+      ]),
+    ).toEqual({
+      args: ['--source', 'source', '--minify'],
+      filters: ['*', '@scope/ui'],
+    });
+  });
+
+  test('reports missing filter values', () => {
+    expect(() => resolveBuildFilterArgs(['--filter'])).toThrow(
+      '--filter requires a value.',
+    );
+  });
+
+  test('rejects workspace values', () => {
+    expect(() => resolveBuildFilterArgs(['--workspace=true'])).toThrow(
+      '--workspace does not accept a value.',
+    );
   });
 });

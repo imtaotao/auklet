@@ -33,6 +33,7 @@ Publish operation flags are CLI-only. The boundary is defined in
 Keep these flags out of auklet config:
 
 - `--filter`
+- `--workspace`
 - `--version`
 - `--dry-run`
 - `--otp`
@@ -238,6 +239,11 @@ Use this section when a publish run stops after side effects have started.
 - With `--filter`: require a pnpm workspace root, select matching workspace
   packages, skip private packages, and publish selected packages in workspace
   dependency order.
+- `--filter '*'` selects every non-private workspace package.
+- `--workspace` is an alias for `--filter '*'`.
+- Publish filters are package-name filters, not pnpm's full filter syntax.
+  Supported forms are `*`, exact package names, and scoped package globs such as
+  `@scope/*`.
 - Owner commands use the same target selection rules: without `--filter` or
   `--package`, `auk owner add <user...>` targets the current package. `--otp`
   is passed to `pnpm owner add` when provided.

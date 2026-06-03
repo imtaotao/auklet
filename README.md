@@ -87,6 +87,10 @@ auk build --build.formats esm,cjs
 auk build --build.target es2022
 auk build --build.platform node
 auk build --build.tsconfig tsconfig.build.json
+auk build --filter '*'
+auk build --workspace
+auk dev --filter '@scope/*'
+auk publish --workspace
 ```
 
 Supported build override flags:
@@ -142,17 +146,39 @@ auk owner add alice --filter @scope/ui --otp 123456
 Target selection:
 
 ```text
+auk build / auk dev
+├─ --filter <pattern>      build or watch matching package names
+│  └─ --filter '*'         target all non-private workspace packages
+├─ --workspace             alias for --filter '*'
+└─ no --filter             build or watch the current package
+
 auk publish
-├─ --filter <pattern>      publish matching workspace packages
+├─ --filter <pattern>      publish matching package names
+│  └─ --filter '*'         publish all non-private workspace packages
+├─ --workspace             alias for --filter '*'
 └─ no --filter             publish the current package
    └─ private monorepo root -> fail; use --filter
 
 auk owner add <user...>
 ├─ --filter <pattern>      add owners to matching workspace packages
+│  └─ --filter '*'         add owners to all non-private workspace packages
 ├─ --package <name>        add owners to explicit npm packages
 └─ no selector             add owners to the current package
    └─ private package -> fail
 ```
+
+`--filter` is a package-name filter, not pnpm's full filter syntax. Supported
+patterns are `*`, exact package names, and scoped package globs such as
+`@scope/*`.
+
+Workspace `auk build --filter ...` runs each selected package's own `build`
+script in dependency order. This lets CSS-only packages keep using
+`auk build-css` while normal packages use `auk build`.
+
+Workspace `auk dev --filter ...` uses a package `dev` script when one exists.
+Packages without a `dev` script use auklet's JS+CSS watch, except CSS-only
+packages whose `build` script starts with `auk build-css`; those only start CSS
+watch.
 
 `--no-format` disables auklet's publish output formatter for that run. It is not
 configured in `package.json`.

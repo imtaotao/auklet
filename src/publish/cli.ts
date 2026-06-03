@@ -17,6 +17,7 @@ import type { OwnerOptions, PublishOptions } from '#auklet/publish/types';
 const publishFlags = new Set([
   '_',
   'filter',
+  'workspace',
   'version',
   'dry-run',
   'format',
@@ -56,7 +57,7 @@ export function resolvePublishCliOptions(
   return {
     cwd,
     otp: stringOption(argv.otp, '--otp', envContext),
-    filters: toArray(argv.filter, '--filter', envContext),
+    filters: resolvePublishFilters(argv, envContext),
     version: stringOption(argv.version, '--version', envContext),
     git: booleanOption(argv.git, '--git', envContext, true),
     format: booleanOption(argv.format, '--format', envContext, true),
@@ -86,9 +87,21 @@ const parsePublishArgs = (args: Array<string>) => {
       'ignore-scripts',
       'allow-dirty',
     ],
+    boolean: ['workspace'],
   });
   validateFlags(argv, publishFlags);
   return argv;
+};
+
+const resolvePublishFilters = (
+  argv: Record<string, unknown>,
+  envContext: AukletEnvContext,
+) => {
+  const filters = toArray(argv.filter, '--filter', envContext);
+  if (booleanOption(argv.workspace, '--workspace', envContext)) {
+    filters.push('*');
+  }
+  return [...new Set(filters)];
 };
 
 export async function runOwnerCli(args: Array<string>) {

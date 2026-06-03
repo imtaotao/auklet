@@ -4,6 +4,10 @@ import { findWorkspaceRoot } from '#auklet/workspace/root';
 import { createPublishRootEnv } from '#auklet/publish/publishEnv';
 import { createAukletLogger, type AukletLogger } from '#auklet/logger';
 import {
+  isExactlyMatchedByWorkspaceFilter,
+  matchesWorkspacePackageFilter,
+} from '#auklet/workspace/packageFilters';
+import {
   getPublishConfig,
   readPackageJson,
   requirePackageName,
@@ -132,7 +136,7 @@ const resolveMonorepoPublishPlan = async (
   const targets = selectedPackages
     .filter((item) => {
       if (!item.private) return true;
-      if (isExactlyMatchedByFilter(item.name, options.filters)) {
+      if (isExactlyMatchedByWorkspaceFilter(item.name, options.filters)) {
         logger.warnOnce(
           'package ',
           logger.package(item.name),
@@ -205,7 +209,7 @@ const filterWorkspacePackages = (
   filters: Array<string>,
 ) => {
   const matched = packages.filter((item) =>
-    filters.some((filter) => matchesFilter(item.name, filter)),
+    filters.some((filter) => matchesWorkspacePackageFilter(item.name, filter)),
   );
   if (!matched.length) {
     throw new Error(
@@ -213,21 +217,6 @@ const filterWorkspacePackages = (
     );
   }
   return matched;
-};
-
-const matchesFilter = (packageName: string, filter: string) => {
-  if (filter.endsWith('/*')) {
-    const scope = filter.slice(0, -2);
-    return packageName.startsWith(`${scope}/`);
-  }
-  return packageName === filter;
-};
-
-const isExactlyMatchedByFilter = (
-  packageName: string,
-  filters: Array<string>,
-) => {
-  return filters.some((filter) => filter === packageName);
 };
 
 const createPublishTarget = (options: {
