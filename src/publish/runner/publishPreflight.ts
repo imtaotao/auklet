@@ -8,6 +8,7 @@ import {
   findNpmrcFiles,
   findNpmrcWithAuthToken,
   toNpmrcRegistryKey,
+  validateNpmrcAuthEnv,
 } from '#auklet/publish/api/npmrc';
 import { getPublishRegistry } from '#auklet/publish/api/registry';
 import { logAuthenticationError } from '#auklet/publish/runner/packagePublisher';
@@ -32,10 +33,19 @@ export class PublishPreflight {
   }
 
   async verifyBeforeBuild(plan: PublishPlan) {
+    this.verifyNpmrcAuthEnv(plan);
     this.verifyTokenConfig(plan);
     if (plan.dryRun) return;
     await this.verifyAuthentication(plan);
     await this.verifyPackageVersions(plan);
+  }
+
+  private verifyNpmrcAuthEnv(plan: PublishPlan) {
+    for (const target of plan.targets) {
+      validateNpmrcAuthEnv(target.packageRoot, plan.root, {
+        token: this.options.token,
+      });
+    }
   }
 
   private verifyTokenConfig(plan: PublishPlan) {

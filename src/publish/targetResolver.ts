@@ -24,7 +24,7 @@ import {
 
 type ResolvePublishTargetsOptions = Pick<
   PublishOptions,
-  'cwd' | 'filters' | 'version' | 'dryRun'
+  'cwd' | 'filters' | 'version' | 'dryRun' | 'token'
 >;
 
 type ResolveOwnerTargetsOptions = Pick<
@@ -112,7 +112,9 @@ const resolveMonorepoPublishPlan = async (
   const root = requireWorkspaceRoot(options.cwd);
   const rootPackageJson = readPackageJson(root);
   const rootVersion = requirePackageVersion(root, rootPackageJson);
-  const workspacePackages = await readPnpmWorkspacePackages(root);
+  const workspacePackages = await readPnpmWorkspacePackages(root, {
+    token: options.token,
+  });
   const selectedPackages = filterWorkspacePackages(
     workspacePackages,
     options.filters,

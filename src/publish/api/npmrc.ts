@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+export type NpmrcAuthEnvOptions = {
+  token?: string;
+};
+
 export function findNpmrcWithAuthToken(
   packageRoot: string,
   root: string,
@@ -27,6 +31,26 @@ export function findNpmrcFiles(packageRoot: string, root: string) {
     current = parent;
   }
   return files;
+}
+
+export function validateNpmrcAuthEnv(
+  packageRoot: string,
+  root: string,
+  options: NpmrcAuthEnvOptions = {},
+) {
+  const env = createAvailableAuthEnv(options);
+  for (const file of findNpmrcFiles(packageRoot, root)) {
+    const missing = findMissingNpmrcEnvVars(fs.readFileSync(file, 'utf8'), env);
+    if (!missing.length) continue;
+
+    const variable = missing[0];
+    throw new Error(
+      `[publish] npmrc auth environment is missing: ${variable}\n` +
+        `[publish] file: ${file}\n` +
+        `[publish] Set ${variable} before retrying, or use --token with an npmrc entry such as:\n` +
+        '  //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}',
+    );
+  }
 }
 
 export function hasAuthToken(content: string, registry?: string) {
@@ -57,4 +81,36 @@ const parseRegistryUrl = (registry: string) => {
       cause: error,
     });
   }
+};
+
+const findMissingNpmrcEnvVars = (
+  content: string,
+  env: Record<string, string | undefined>,
+) => {
+  return getNpmrcAuthLines(content)
+    .flatMap((line) => [...line.matchAll(/\$\{([^}]+)\}/g)])
+    .map((match) => match[1])
+    .filter((name) => name && !env[name]);
+};
+
+const getNpmrcAuthLines = (content: string) => {
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line &&
+        !line.startsWith('#') &&
+        !line.startsWith(';') &&
+        line.includes('_authToken'),
+    );
+};
+
+const createAvailableAuthEnv = (options: NpmrcAuthEnvOptions) => {
+  if (!options.token) return process.env;
+  return {
+    ...process.env,
+    NODE_AUTH_TOKEN: options.token,
+    NPM_TOKEN: options.token,
+  };
 };

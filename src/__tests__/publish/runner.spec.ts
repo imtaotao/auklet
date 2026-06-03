@@ -369,6 +369,45 @@ describe('PublishRunner', () => {
     expect(runPnpmPublish).not.toHaveBeenCalled();
   });
 
+  test('does not call pnpm when target npmrc auth environment is missing', async () => {
+    const project = createVirtualProject();
+    const packageRoot = project.resolve('packages/ui');
+    project.writeFile(
+      'packages/ui/.npmrc',
+      '//registry.npmjs.org/:_authToken=${AUKLET_MISSING_TOKEN}\n',
+    );
+    resolvePlan.mockResolvedValueOnce({
+      root: project.root,
+      version: '1.0.1',
+      dryRun: false,
+      config: {},
+      workspaceMode: 'monorepo',
+      targets: [createTarget('@scope/ui', {}, packageRoot)],
+    });
+
+    try {
+      await expect(
+        new PublishRunner({
+          cwd: project.root,
+          filters: ['@scope/*'],
+          version: 'patch',
+          dryRun: false,
+          format: true,
+          ignoreScripts: false,
+          allowDirty: false,
+        }).run(),
+      ).rejects.toThrow(
+        'npmrc auth environment is missing: AUKLET_MISSING_TOKEN',
+      );
+    } finally {
+      project.cleanup();
+    }
+
+    expect(writePackage).not.toHaveBeenCalled();
+    expect(whoami).not.toHaveBeenCalled();
+    expect(runPnpmPublish).not.toHaveBeenCalled();
+  });
+
   test('does not write versions when target publish version already exists', async () => {
     const writeError = vi
       .spyOn(console, 'error')

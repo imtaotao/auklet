@@ -61,8 +61,10 @@ export async function withPnpmTimeout(
   return result;
 }
 
-export async function ensurePnpm() {
-  const result = await runPnpm(['--version']);
+export async function ensurePnpm(options: { token?: string } = {}) {
+  const result = await runPnpm(['--version'], {
+    env: createPnpmAuthEnv(options.token),
+  });
   const stdout = String(result.stdout ?? '');
   if (hasFailedPnpmResult(result) || !stdout) {
     throw new Error(
@@ -84,9 +86,16 @@ export async function ensurePnpm() {
   return version;
 }
 
-export async function readPnpmWorkspacePackages(root: string) {
+export async function readPnpmWorkspacePackages(
+  root: string,
+  options: { token?: string } = {},
+) {
   try {
-    return (await readPnpmWorkspacePackageInfo(root)).map((item) => {
+    return (
+      await readPnpmWorkspacePackageInfo(root, {
+        env: createPnpmAuthEnv(options.token),
+      })
+    ).map((item) => {
       if (!isWorkspacePackage(item)) throwInvalidWorkspacePackages();
       return item;
     });
@@ -97,9 +106,13 @@ export async function readPnpmWorkspacePackages(root: string) {
   }
 }
 
-export async function runPnpmBuild(packageRoot: string) {
+export async function runPnpmBuild(
+  packageRoot: string,
+  options: { token?: string } = {},
+) {
   const result = await runPnpm(['run', 'build'], {
     cwd: packageRoot,
+    env: createPnpmAuthEnv(options.token),
     stdio: 'inherit',
   });
   if (hasFailedPnpmResult(result)) {

@@ -3,6 +3,7 @@ import {
   findNpmrcWithAuthToken,
   hasAuthToken,
   toNpmrcRegistryKey,
+  validateNpmrcAuthEnv,
 } from '#auklet/publish/api/npmrc';
 import {
   createVirtualProject,
@@ -62,5 +63,33 @@ describe('npmrc auth config', () => {
     expect(() => toNpmrcRegistryKey('not a registry')).toThrow(
       '[publish] invalid publishConfig.registry: not a registry',
     );
+  });
+
+  test('reports missing npmrc auth environment before pnpm reads npmrc', () => {
+    const currentProject = createVirtualProject();
+    project = currentProject;
+    currentProject.writeFile(
+      '.npmrc',
+      '//registry.npmjs.org/:_authToken=${AUKLET_MISSING_TOKEN}\n',
+    );
+
+    expect(() =>
+      validateNpmrcAuthEnv(currentProject.root, currentProject.root),
+    ).toThrow('npmrc auth environment is missing: AUKLET_MISSING_TOKEN');
+  });
+
+  test('allows --token to satisfy NODE_AUTH_TOKEN npmrc references', () => {
+    const currentProject = createVirtualProject();
+    project = currentProject;
+    currentProject.writeFile(
+      '.npmrc',
+      '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n',
+    );
+
+    expect(() =>
+      validateNpmrcAuthEnv(currentProject.root, currentProject.root, {
+        token: 'npm_secret',
+      }),
+    ).not.toThrow();
   });
 });

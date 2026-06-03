@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { execa } from 'execa';
 import {
+  ensurePnpm,
   hasPublishedPackageVersion,
   NpmPublishAuthenticationError,
+  runPnpmBuild,
   runPnpmPublish,
   runPnpmWhoami,
   withPnpmTimeout,
@@ -13,6 +15,33 @@ vi.mock('execa', () => ({
 }));
 
 const run = vi.mocked(execa);
+
+describe('ensurePnpm', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('passes npm token to pnpm version checks', async () => {
+    run.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: '10.0.0',
+      stderr: '',
+    } as never);
+
+    await ensurePnpm({ token: 'npm_secret' });
+
+    expect(run).toHaveBeenCalledWith(
+      'pnpm',
+      ['--version'],
+      expect.objectContaining({
+        env: {
+          NODE_AUTH_TOKEN: 'npm_secret',
+          NPM_TOKEN: 'npm_secret',
+        },
+      }),
+    );
+  });
+});
 
 describe('runPnpmPublish', () => {
   afterEach(() => {
@@ -74,6 +103,34 @@ describe('runPnpmPublish', () => {
       'pnpm',
       ['publish', '--no-git-checks'],
       expect.objectContaining({
+        env: {
+          NODE_AUTH_TOKEN: 'npm_secret',
+          NPM_TOKEN: 'npm_secret',
+        },
+      }),
+    );
+  });
+});
+
+describe('runPnpmBuild', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('passes npm token to package build subprocesses', async () => {
+    run.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    } as never);
+
+    await runPnpmBuild('/repo/packages/ui', { token: 'npm_secret' });
+
+    expect(run).toHaveBeenCalledWith(
+      'pnpm',
+      ['run', 'build'],
+      expect.objectContaining({
+        cwd: '/repo/packages/ui',
         env: {
           NODE_AUTH_TOKEN: 'npm_secret',
           NPM_TOKEN: 'npm_secret',

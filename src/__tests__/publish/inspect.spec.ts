@@ -121,6 +121,7 @@ describe('runInspectPublishCli', () => {
       runInspectPublishCli(['--dry-run', '--token', 'npm_secret']),
     ).resolves.toBe(0);
 
+    expect(ensurePnpmExists).toHaveBeenCalledWith({ token: 'npm_secret' });
     expect(inspectRegistry).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({

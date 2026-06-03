@@ -4,7 +4,9 @@ import { createAukletLogger } from '#auklet/logger';
 import { resolvePublishTag } from '#auklet/publish/api/publishArgs';
 import { getPublishRegistry } from '#auklet/publish/api/registry';
 import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
+import { validateNpmrcAuthEnv } from '#auklet/publish/api/npmrc';
 import { resolvePublishCliOptions } from '#auklet/publish/cli';
+import { findWorkspaceRoot } from '#auklet/workspace/root';
 import {
   inspectPublishRegistry,
   type PublishRegistryCheck,
@@ -54,9 +56,16 @@ type PublishInspectModel = {
 };
 
 export async function runInspectPublishCli(args: Array<string>) {
-  await ensurePnpm();
-
   const options = resolvePublishCliOptions(args);
+  validateNpmrcAuthEnv(
+    options.cwd,
+    findWorkspaceRoot(options.cwd) ?? options.cwd,
+    {
+      token: options.token,
+    },
+  );
+  await ensurePnpm({ token: options.token });
+
   const logger = createAukletLogger({ scope: 'inspect' });
   const plan = await resolvePublishPlan(options, logger);
   const packageFileChecks = inspectPackageFiles(plan.targets);

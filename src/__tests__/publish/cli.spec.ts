@@ -3,6 +3,7 @@ import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
 import { runOwnerCli, runPublishCli } from '#auklet/publish/cli';
 import { OwnerRunner } from '#auklet/publish/ownerRunner';
 import { PublishRunner } from '#auklet/publish/publishRunner';
+import { createVirtualProject } from '#auklet/__tests__/fixtures/virtualProject';
 
 vi.mock('#auklet/publish/api/pnpmApi', () => ({
   ensurePnpm: vi.fn(),
@@ -73,6 +74,7 @@ describe('runPublishCli', () => {
   test('passes npm token as a publish option', async () => {
     await runPublishCli(['--token', 'npm_secret']);
 
+    expect(ensurePnpmExists).toHaveBeenCalledWith({ token: 'npm_secret' });
     expect(createPublishRunner).toHaveBeenCalledWith(
       expect.objectContaining({
         token: 'npm_secret',
@@ -84,6 +86,27 @@ describe('runPublishCli', () => {
     await expect(runPublishCli(['--no-build'])).rejects.toThrow(
       'unknown option: --no-build',
     );
+  });
+
+  test('reports missing npmrc auth environment before checking pnpm', async () => {
+    const project = createVirtualProject();
+    project.writeFile(
+      '.npmrc',
+      '//registry.npmjs.org/:_authToken=${AUKLET_MISSING_TOKEN}\n',
+    );
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(project.root);
+
+    try {
+      await expect(runPublishCli([])).rejects.toThrow(
+        'npmrc auth environment is missing: AUKLET_MISSING_TOKEN',
+      );
+    } finally {
+      cwd.mockRestore();
+      project.cleanup();
+    }
+
+    expect(ensurePnpmExists).not.toHaveBeenCalled();
+    expect(createPublishRunner).not.toHaveBeenCalled();
   });
 });
 
