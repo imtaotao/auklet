@@ -4,16 +4,15 @@ import { findWorkspaceRoot } from '#auklet/workspace/root';
 import { createPublishRootEnv } from '#auklet/publish/publishEnv';
 import { createAukletLogger, type AukletLogger } from '#auklet/logger';
 import {
-  isExactlyMatchedByWorkspaceFilter,
-  matchesWorkspacePackageFilter,
-} from '#auklet/workspace/packageFilters';
+  resolveWorkspacePackageInfos,
+  resolveWorkspaceTargets,
+} from '#auklet/workspace/targets';
 import {
   getPublishConfig,
   readPackageJson,
   requirePackageName,
   requirePackageVersion,
 } from '#auklet/publish/api/packageJsonApi';
-import { readPnpmWorkspacePackages } from '#auklet/publish/api/pnpmApi';
 import type {
   OwnerOptions,
   PackageJson,
@@ -21,7 +20,6 @@ import type {
   PublishPlan,
   PublishRuntime,
   PublishTarget,
-  WorkspacePackage,
 } from '#auklet/publish/types';
 import {
   resolvePublishVersion,
@@ -60,15 +58,19 @@ export async function resolveOwnerPackageNames(
 
   if (options.filters.length) {
     const root = requireWorkspaceRoot(options.cwd);
-    const packages = await readPnpmWorkspacePackages(root);
-    return filterWorkspacePackages(packages, options.filters)
-      .filter((item) => !item.private)
-      .map((item) => item.name);
+    const packages = await resolveWorkspacePackageInfos(root, options.filters, {
+      scope: 'publish',
+      readErrorMessage: publishWorkspaceReadErrorMessage,
+    });
+    return packages.filter((item) => !item.private).map((item) => item.name);
   }
 
-  if (options.packages.length) return [...new Set(options.packages)];
+  if (options.packages.length) {
+    return [...new Set(options.packages)];
+  }
 
   const packageJson = readPackageJson(options.cwd);
+
   if (packageJson.private) {
     throw new Error('[publish] current package is private.');
   }
@@ -126,34 +128,32 @@ const resolveMonorepoPublishPlan = async (
     },
     runtime,
   );
-  const workspacePackages = await readPnpmWorkspacePackages(root, {
+  const targets = await resolveWorkspaceTargets({
     env,
-  });
-  const selectedPackages = filterWorkspacePackages(
-    workspacePackages,
-    options.filters,
-  );
-  const targets = selectedPackages
-    .filter((item) => {
-      if (!item.private) return true;
-      if (isExactlyMatchedByWorkspaceFilter(item.name, options.filters)) {
+    cwd: root,
+    scope: 'publish',
+    readErrorMessage: publishWorkspaceReadErrorMessage,
+    readPackageJson,
+    filters: options.filters,
+    getDependencies: getWorkspaceDependencies,
+    emptyTargetMessage: '[publish] no publishable package found.',
+    createTarget: (item, packageJson) =>
+      createPublishTarget({
+        packageRoot: item.path,
+        packageJson,
+        publishVersion: '',
+        workspaceMode: 'monorepo',
+      }),
+    onPrivatePackage: (item, context) => {
+      if (context.exact) {
         logger.warnOnce(
           'package ',
           logger.package(item.name),
           ' is private, skipping.',
         );
       }
-      return false;
-    })
-    .map((item) => {
-      const packageJson = readPackageJson(item.path);
-      return createPublishTarget({
-        packageRoot: item.path,
-        packageJson,
-        publishVersion: '',
-        workspaceMode: 'monorepo',
-      });
-    });
+    },
+  });
   const versionBase = getMonorepoVersionBase(rootVersion, targets);
   const publishVersion = await resolvePublishVersion(
     versionBase,
@@ -175,7 +175,7 @@ const resolveMonorepoPublishPlan = async (
     root,
     version: publishVersion,
     dryRun: options.dryRun,
-    targets: sortTargetsByWorkspaceDependencies(publishTargets),
+    targets: publishTargets,
     config: getPublishConfig(rootPackageJson),
     workspaceMode: 'monorepo',
   };
@@ -202,21 +202,6 @@ const requireWorkspaceRoot = (cwd: string) => {
     throw new Error('[publish] --filter requires a pnpm workspace root.');
   }
   return root;
-};
-
-const filterWorkspacePackages = (
-  packages: Array<WorkspacePackage>,
-  filters: Array<string>,
-) => {
-  const matched = packages.filter((item) =>
-    filters.some((filter) => matchesWorkspacePackageFilter(item.name, filter)),
-  );
-  if (!matched.length) {
-    throw new Error(
-      `[publish] no workspace package matched filter: ${filters.join(', ')}`,
-    );
-  }
-  return matched;
 };
 
 const createPublishTarget = (options: {
@@ -252,43 +237,10 @@ const validatePublishTargets = (targets: Array<PublishTarget>) => {
   }
 };
 
-const sortTargetsByWorkspaceDependencies = (targets: Array<PublishTarget>) => {
-  const targetNames = new Set(targets.map((target) => target.packageName));
-  const visited = new Set<string>();
-  const visiting = new Set<string>();
-  const sorted: Array<PublishTarget> = [];
-  const targetMap = new Map(
-    targets.map((target) => [target.packageName, target]),
-  );
-
-  const visit = (target: PublishTarget) => {
-    if (visited.has(target.packageName)) return;
-    if (visiting.has(target.packageName)) {
-      throw new Error(
-        `[publish] circular workspace dependency detected at ${target.packageName}.`,
-      );
-    }
-    visiting.add(target.packageName);
-    for (const dependency of getWorkspaceDependencies(target.packageJson)) {
-      if (!targetNames.has(dependency)) continue;
-      const dependencyTarget = targetMap.get(dependency);
-      if (dependencyTarget) visit(dependencyTarget);
-    }
-    visiting.delete(target.packageName);
-    visited.add(target.packageName);
-    sorted.push(target);
-  };
-
-  for (const target of targets) {
-    visit(target);
-  }
-  return sorted;
-};
-
-const getWorkspaceDependencies = (packageJson: PackageJson) => {
+const getWorkspaceDependencies = (target: PublishTarget) => {
   return Object.entries({
-    ...packageJson.dependencies,
-    ...packageJson.optionalDependencies,
+    ...target.packageJson.dependencies,
+    ...target.packageJson.optionalDependencies,
   })
     .filter(([, version]) => version === 'workspace:*')
     .map(([packageName]) => packageName);
@@ -318,3 +270,6 @@ const workspaceDependencyGroups = [
   'optionalDependencies',
   'peerDependencies',
 ] as const;
+
+const publishWorkspaceReadErrorMessage =
+  '[publish] failed to read pnpm workspace packages.';

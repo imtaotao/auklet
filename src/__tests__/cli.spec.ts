@@ -1,13 +1,20 @@
 import { describe, expect, test } from 'vitest';
-import {
-  resolveBuildCliArgs,
-  resolveBuildFilterArgs,
-} from '#auklet/cli/buildArgs';
+import { AukletEnvContext } from '#auklet/env';
+import { parseBuildOverrideArgs } from '#auklet/cli/parse/build';
+import { parseWorkspaceSelectionArgs } from '#auklet/cli/parse/workspace';
 
-describe('resolveBuildCliArgs', () => {
+const parseBuildOverrides = (args: Array<string>) => {
+  return parseBuildOverrideArgs(args, new AukletEnvContext(process.cwd()));
+};
+
+const parseWorkspaceSelection = (args: Array<string>) => {
+  return parseWorkspaceSelectionArgs(args, new AukletEnvContext(process.cwd()));
+};
+
+describe('parseBuildOverrideArgs', () => {
   test('extracts auklet config overrides and keeps non-auklet args', () => {
     expect(
-      resolveBuildCliArgs([
+      parseBuildOverrides([
         '--source',
         'source',
         '--output=build',
@@ -38,7 +45,7 @@ describe('resolveBuildCliArgs', () => {
   });
 
   test('supports disabling module output from cli args', () => {
-    expect(resolveBuildCliArgs(['--no-modules'])).toEqual({
+    expect(parseBuildOverrides(['--no-modules'])).toEqual({
       args: [],
       config: {
         modules: false,
@@ -55,7 +62,7 @@ describe('resolveBuildCliArgs', () => {
       process.env.AUKLET_TEST_OUTPUT = 'build';
 
       expect(
-        resolveBuildCliArgs([
+        parseBuildOverrides([
           '--source=env:AUKLET_TEST_SOURCE',
           '--output',
           'env:AUKLET_TEST_OUTPUT',
@@ -88,7 +95,7 @@ describe('resolveBuildCliArgs', () => {
       process.env.AUKLET_TEST_MODULES = 'false';
 
       expect(
-        resolveBuildCliArgs(['--modules=env:AUKLET_TEST_MODULES']),
+        parseBuildOverrides(['--modules=env:AUKLET_TEST_MODULES']),
       ).toEqual({
         args: [],
         config: {
@@ -111,7 +118,7 @@ describe('resolveBuildCliArgs', () => {
       process.env.AUKLET_TEST_MODULES = 'maybe';
 
       expect(() =>
-        resolveBuildCliArgs(['--modules=env:AUKLET_TEST_MODULES']),
+        parseBuildOverrides(['--modules=env:AUKLET_TEST_MODULES']),
       ).toThrow('--modules requires a boolean value.');
     } finally {
       if (originalModules === undefined) {
@@ -129,7 +136,7 @@ describe('resolveBuildCliArgs', () => {
       process.env.AUKLET_TEST_FORMATS = 'esm,cjs';
 
       expect(
-        resolveBuildCliArgs(['--build.formats=env:AUKLET_TEST_FORMATS']),
+        parseBuildOverrides(['--build.formats=env:AUKLET_TEST_FORMATS']),
       ).toEqual({
         args: [],
         config: {
@@ -149,19 +156,25 @@ describe('resolveBuildCliArgs', () => {
 
   test('reports missing env values for config overrides', () => {
     expect(() =>
-      resolveBuildCliArgs(['--source=env:AUKLET_TEST_MISSING_SOURCE']),
+      parseBuildOverrides(['--source=env:AUKLET_TEST_MISSING_SOURCE']),
     ).toThrow('--source environment is missing: AUKLET_TEST_MISSING_SOURCE');
   });
 
   test('rejects unknown build formats', () => {
-    expect(() => resolveBuildCliArgs(['--build.formats', 'umd'])).toThrow(
+    expect(() => parseBuildOverrides(['--build.formats', 'umd'])).toThrow(
       'Unknown build format: umd',
+    );
+  });
+
+  test('rejects empty build formats', () => {
+    expect(() => parseBuildOverrides(['--build.formats='])).toThrow(
+      '--build.formats requires at least one format.',
     );
   });
 
   test('rejects auklet config overrides with custom tsdown config', () => {
     expect(() =>
-      resolveBuildCliArgs([
+      parseBuildOverrides([
         '--source',
         'source',
         '--config',
@@ -171,7 +184,7 @@ describe('resolveBuildCliArgs', () => {
       'Auklet build config flags cannot be used with tsdown --config, -c, or --no-config.',
     );
     expect(() =>
-      resolveBuildCliArgs([
+      parseBuildOverrides([
         '--build.target',
         'es2022',
         '-c',
@@ -181,46 +194,101 @@ describe('resolveBuildCliArgs', () => {
       'Auklet build config flags cannot be used with tsdown --config, -c, or --no-config.',
     );
     expect(() =>
-      resolveBuildCliArgs(['--output', 'build', '--no-config']),
+      parseBuildOverrides(['--output', 'build', '--no-config']),
     ).toThrow(
       'Auklet build config flags cannot be used with tsdown --config, -c, or --no-config.',
     );
   });
 
   test('allows custom tsdown config without auklet config overrides', () => {
-    expect(resolveBuildCliArgs(['--config', 'tsdown.config.ts'])).toEqual({
+    expect(parseBuildOverrides(['--config', 'tsdown.config.ts'])).toEqual({
       args: ['--config', 'tsdown.config.ts'],
       config: {},
     });
   });
 });
 
-describe('resolveBuildFilterArgs', () => {
+describe('parseWorkspaceSelectionArgs', () => {
   test('extracts workspace filters and keeps build args', () => {
     expect(
-      resolveBuildFilterArgs([
+      parseWorkspaceSelection([
         '--workspace',
         '--filter',
         '*',
         '--filter=@scope/ui',
+        '--deps',
         '--source',
         'source',
         '--minify',
       ]),
     ).toEqual({
-      args: ['--source', 'source', '--minify'],
-      filters: ['*', '@scope/ui'],
+      remainingArgs: ['--source', 'source', '--minify'],
+      workspace: {
+        filters: ['*', '@scope/ui'],
+        includeDependencies: true,
+        includePrivate: false,
+      },
     });
   });
 
+  test('resolves explicit deps boolean values', () => {
+    expect(
+      parseWorkspaceSelection(['--filter', '@scope/ui', '--deps=false']),
+    ).toEqual({
+      remainingArgs: [],
+      workspace: {
+        filters: ['@scope/ui'],
+        includeDependencies: false,
+        includePrivate: false,
+      },
+    });
+  });
+
+  test('resolves env values for workspace selector options', () => {
+    const originalDeps = process.env.AUKLET_TEST_DEPS;
+    const originalPrivate = process.env.AUKLET_TEST_PRIVATE;
+
+    try {
+      process.env.AUKLET_TEST_DEPS = 'true';
+      process.env.AUKLET_TEST_PRIVATE = 'true';
+
+      expect(
+        parseWorkspaceSelection([
+          '--filter',
+          '@scope/ui',
+          '--deps=env:AUKLET_TEST_DEPS',
+          '--private=env:AUKLET_TEST_PRIVATE',
+        ]),
+      ).toEqual({
+        remainingArgs: [],
+        workspace: {
+          filters: ['@scope/ui'],
+          includeDependencies: true,
+          includePrivate: true,
+        },
+      });
+    } finally {
+      if (originalDeps === undefined) {
+        delete process.env.AUKLET_TEST_DEPS;
+      } else {
+        process.env.AUKLET_TEST_DEPS = originalDeps;
+      }
+      if (originalPrivate === undefined) {
+        delete process.env.AUKLET_TEST_PRIVATE;
+      } else {
+        process.env.AUKLET_TEST_PRIVATE = originalPrivate;
+      }
+    }
+  });
+
   test('reports missing filter values', () => {
-    expect(() => resolveBuildFilterArgs(['--filter'])).toThrow(
+    expect(() => parseWorkspaceSelection(['--filter'])).toThrow(
       '--filter requires a value.',
     );
   });
 
   test('rejects workspace values', () => {
-    expect(() => resolveBuildFilterArgs(['--workspace=true'])).toThrow(
+    expect(() => parseWorkspaceSelection(['--workspace=true'])).toThrow(
       '--workspace does not accept a value.',
     );
   });

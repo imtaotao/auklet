@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
-import { createDeferredCliValue } from '#auklet/cli/values';
+import { createDeferredCliValue } from '#auklet/cli/parse/values';
 import { AukletEnvContext } from '#auklet/env';
 import { createPublishTargetEnv } from '#auklet/publish/publishEnv';
 import {

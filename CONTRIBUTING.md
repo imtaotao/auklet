@@ -63,7 +63,7 @@ Notes:
 
 - Config field changes: check `types.ts`, `config.ts`, `README.md`, fixtures,
   and examples.
-- Build CLI override changes: check `src/cli/buildArgs.ts`,
+- Build CLI override changes: check `src/cli/parse/build.ts`,
   `src/build/cliOverrides.ts`, README CLI docs, and unit tests.
 - CSS behavior changes: check `docs/css.md`, `docs/invariants.md`, and
   `docs/maintenance.md`.
@@ -75,7 +75,8 @@ Notes:
   semantics, publish flow, config fields, workspace discovery, or public API.
 - New CLI behavior: check `bin/entry.mjs`, `src/cli/*`, README CLI docs, and
   necessary unit tests.
-- New public API: check `src/index.ts` and README Programmatic API docs.
+- New public API: check `src/index.ts`, README usage notes, and
+  `docs/architecture.md`.
 
 ## Test Rules
 

@@ -1,25 +1,22 @@
 import { createAukletLogger } from '#auklet/logger';
 import { loadAukletConfig } from '#auklet/configLoader';
-import { resolveBuildCliArgs } from '#auklet/cli/buildArgs';
-import { AukletEnvContext } from '#auklet/env';
 import { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import { mergeAukletConfigOverrides } from '#auklet/build/cliOverrides';
 import { logModuleStyleBuildResult } from '#auklet/css/production/buildReporter';
+import type { BuildCssCommandOptions } from '#auklet/cli/parse/build';
 import type { AukletConfig } from '#auklet/types';
 
 export async function resolveBuildCssConfig(
-  args: Array<string>,
   options: {
     aukletConfig?: AukletConfig;
-    envContext?: AukletEnvContext;
+    configOverrides?: AukletConfig;
     packageRoot?: string;
+    watch?: boolean;
   } = {},
 ) {
   const packageRoot = options.packageRoot ?? process.cwd();
-  const buildArgs = resolveBuildCliArgs(args, options.envContext);
-  const shouldWatch =
-    buildArgs.args.includes('--watch') || buildArgs.args.includes('-w');
+  const shouldWatch = options.watch === true;
 
   const aukletConfig =
     options.aukletConfig ??
@@ -27,7 +24,7 @@ export async function resolveBuildCssConfig(
       await loadAukletConfig(packageRoot, {
         cacheBust: shouldWatch,
       }),
-      buildArgs.config,
+      options.configOverrides ?? {},
     );
 
   return {
@@ -57,21 +54,18 @@ export async function startBuildCssWatch(
 }
 
 export async function runBuildCss(
-  args: Array<string>,
-  options: {
+  options: BuildCssCommandOptions & {
     aukletConfig?: AukletConfig;
-    envContext?: AukletEnvContext;
-    packageRoot?: string;
-  } = {},
+  },
 ) {
-  const packageRoot = options.packageRoot ?? process.cwd();
-  const envContext = options.envContext ?? new AukletEnvContext(packageRoot);
-  return envContext.run(async () => {
+  return options.envContext.run(async () => {
+    const packageRoot = options.cwd;
     const logger = createAukletLogger();
-    const { aukletConfig, shouldWatch } = await resolveBuildCssConfig(args, {
-      ...options,
-      envContext,
+    const { aukletConfig, shouldWatch } = await resolveBuildCssConfig({
+      aukletConfig: options.aukletConfig,
+      configOverrides: options.overrides,
       packageRoot,
+      watch: options.watch,
     });
 
     if (shouldWatch) {

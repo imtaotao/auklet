@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { readPnpmWorkspacePackages } from '#auklet/publish/api/pnpmApi';
 import { AukletEnvContext } from '#auklet/env';
+import { readPnpmWorkspacePackageInfo } from '#auklet/workspace/packages';
 import {
   resolveOwnerPackageNames,
   resolvePublishPlan,
@@ -13,11 +13,11 @@ import {
   type VirtualProject,
 } from '../fixtures/virtualProject';
 
-vi.mock('#auklet/publish/api/pnpmApi', () => ({
-  readPnpmWorkspacePackages: vi.fn(),
+vi.mock('#auklet/workspace/packages', () => ({
+  readPnpmWorkspacePackageInfo: vi.fn(),
 }));
 
-const readWorkspacePackages = vi.mocked(readPnpmWorkspacePackages);
+const readWorkspacePackages = vi.mocked(readPnpmWorkspacePackageInfo);
 
 const stripAnsi = (value: string) => {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
@@ -134,6 +134,24 @@ describe('resolvePublishPlan', () => {
     } finally {
       fs.rmSync(singleProjectRoot, { recursive: true, force: true });
     }
+  });
+
+  test('wraps workspace read errors with publish context', async () => {
+    const workspaceError = new Error(
+      '[workspace] failed to read workspace packages.',
+    );
+    readWorkspacePackages.mockRejectedValue(workspaceError);
+
+    await expect(
+      resolveTestPublishPlan({
+        cwd: project.root,
+        filters: ['*'],
+        dryRun: false,
+      }),
+    ).rejects.toMatchObject({
+      message: '[publish] failed to read pnpm workspace packages.',
+      cause: workspaceError,
+    });
   });
 
   test('allows --version to normalize old monorepo package versions', async () => {

@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "auk build-css"
+    "build": "auk build-css",
+    "dev": "auk build-css --watch"
   },
   "files": [
     "dist"

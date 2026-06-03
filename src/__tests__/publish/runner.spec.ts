@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { Logger } from 'briefing';
-import { createDeferredCliValue } from '#auklet/cli/values';
+import { createDeferredCliValue } from '#auklet/cli/parse/values';
 import { AukletEnvContext } from '#auklet/env';
 import { resolvePublishPlan } from '#auklet/publish/targetResolver';
 import {

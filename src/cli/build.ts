@@ -3,88 +3,93 @@ import { cleanAukletOutputByConfig } from '#auklet/build/cleanOutput';
 import { mergeAukletConfigOverrides } from '#auklet/build/cliOverrides';
 import { runTsdown } from '#auklet/build/runTsdown';
 import { loadAukletConfig } from '#auklet/configLoader';
-import {
-  createBuildEnv,
-  resolveBuildCliArgs,
-  resolveBuildFilterArgs,
-} from '#auklet/cli/buildArgs';
+import { createBuildEnv } from '#auklet/cli/parse/build';
 import { runBuildCss } from '#auklet/cli/buildCss';
-import { AukletEnvContext } from '#auklet/env';
 import { createAukletLogger } from '#auklet/logger';
-import { resolveWorkspaceBuildTargets } from '#auklet/cli/buildWorkspace';
-import type { AukletConfig } from '#auklet/types';
+import {
+  getWorkspacePackageScript,
+  resolveWorkspaceBuildTargets,
+} from '#auklet/cli/buildWorkspace';
+import type {
+  BuildCommandOptions,
+  BuildJsCommandOptions,
+} from '#auklet/cli/parse/build';
+import type { AukletEnvContext } from '#auklet/env';
 
 const workspaceBuildEnv = 'AUKLET_WORKSPACE_BUILD';
 
-export async function runBuildJs(
-  args: Array<string>,
-  options: {
-    config?: AukletConfig;
-    cwd?: string;
-    envContext?: AukletEnvContext;
-  } = {},
-) {
-  const cwd = options.cwd ?? process.cwd();
-  const envContext = options.envContext ?? new AukletEnvContext(cwd);
-  return envContext.run(async () => {
-    const buildArgs = resolveBuildCliArgs(args, envContext);
-    const config = mergeAukletConfigOverrides(
-      options.config ?? {},
-      buildArgs.config,
-    );
+export async function runBuildJs(options: BuildJsCommandOptions) {
+  return options.envContext.run(async () => {
     const logger = createAukletLogger();
     return logger.group('Build JavaScript', async () => {
-      return runTsdown(buildArgs.args, {
-        cwd,
+      return runTsdown(options.passthroughArgs, {
+        cwd: options.cwd,
         env: {
-          ...envContext.values,
-          ...createBuildEnv(config),
+          ...options.envContext.values,
+          ...createBuildEnv(options.overrides),
         },
       });
     });
   });
 }
 
-export async function runBuild(args: Array<string>) {
-  const cwd = process.cwd();
-  const envContext = new AukletEnvContext(cwd);
-  return envContext.run(async () => {
-    const workspaceArgs = resolveBuildFilterArgs(args, envContext);
-    if (workspaceArgs.filters.length) {
+export async function runBuild(options: BuildCommandOptions) {
+  return options.envContext.run(async () => {
+    if (options.workspace.filters.length) {
       if (process.env[workspaceBuildEnv]) {
         throw new Error(
           '[build] recursive workspace build detected. Do not run `auk build --workspace` from a workspace package build script.',
         );
       }
-      return runWorkspaceBuild(workspaceArgs.args, workspaceArgs.filters, {
-        cwd,
-        envContext,
+      return runWorkspaceBuild(options.workspaceScriptArgs, {
+        cwd: options.cwd,
+        envContext: options.envContext,
+        filters: options.workspace.filters,
+        includeDependencies: options.workspace.includeDependencies,
+        includePrivate: options.workspace.includePrivate,
       });
     }
+    if (options.workspace.includeDependencies) {
+      throw new Error('[build] --deps requires --filter or --workspace.');
+    }
 
-    return runPackageBuild(args, {
-      cwd,
-      envContext,
+    return runPackageBuild({
+      cwd: options.cwd,
+      envContext: options.envContext,
+      overrides: options.overrides,
+      passthroughArgs: options.passthroughArgs,
     });
   });
 }
 
 const runWorkspaceBuild = async (
   args: Array<string>,
-  filters: Array<string>,
   options: {
     cwd: string;
     envContext: AukletEnvContext;
+    filters: Array<string>;
+    includeDependencies: boolean;
+    includePrivate: boolean;
   },
 ) => {
   const targets = await resolveWorkspaceBuildTargets(
     options.cwd,
-    filters,
+    options.filters,
     options.envContext,
+    {
+      includeDependencies: options.includeDependencies,
+      includePrivate: options.includePrivate,
+    },
   );
   const logger = createAukletLogger();
 
   for (const target of targets) {
+    if (!getWorkspacePackageScript(target.packageJson, 'build')) {
+      throw new Error(
+        `[build] package ${target.packageName} has no build script.`,
+      );
+    }
+
     const targetEnvContext = options.envContext.createPackageContext(
       target.packageRoot,
     );
@@ -113,31 +118,27 @@ const createWorkspaceBuildArgs = (args: Array<string>) => {
   return args.length ? ['run', 'build', '--', ...args] : ['run', 'build'];
 };
 
-const runPackageBuild = async (
-  args: Array<string>,
-  options: {
-    cwd: string;
-    envContext: AukletEnvContext;
-  },
-) => {
-  const buildArgs = resolveBuildCliArgs(args, options.envContext);
+const runPackageBuild = async (options: BuildJsCommandOptions) => {
   const aukletConfig = mergeAukletConfigOverrides(
     await loadAukletConfig(options.cwd),
-    buildArgs.config,
+    options.overrides,
   );
   cleanAukletOutputByConfig(options.cwd, aukletConfig);
 
-  const jsExitCode = await runBuildJs(buildArgs.args, {
+  const jsExitCode = await runBuildJs({
     cwd: options.cwd,
-    config: buildArgs.config,
     envContext: options.envContext,
+    overrides: options.overrides,
+    passthroughArgs: options.passthroughArgs,
   });
   if (jsExitCode) return jsExitCode;
 
   createAukletLogger().newline();
-  return runBuildCss([], {
-    aukletConfig,
-    packageRoot: options.cwd,
+  return runBuildCss({
+    cwd: options.cwd,
     envContext: options.envContext,
+    overrides: {},
+    watch: false,
+    aukletConfig,
   });
 };

@@ -1,5 +1,5 @@
 import type { AukletEnvContext } from '#auklet/env';
-import type { DeferredCliValue } from '#auklet/cli/values';
+import type { DeferredCliValue } from '#auklet/cli/parse/values';
 
 export type PackageJson = {
   name?: string;
@@ -40,13 +40,6 @@ export type PublishTarget = {
   kind: 'package' | 'lib';
   workspaceMode: 'single' | 'monorepo';
   packageJson: PackageJson;
-};
-
-export type WorkspacePackage = {
-  name: string;
-  path: string;
-  version: string;
-  private?: boolean;
 };
 
 export type PublishOptions = {

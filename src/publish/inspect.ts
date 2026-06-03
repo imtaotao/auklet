@@ -6,7 +6,7 @@ import { findWorkspaceRoot } from '#auklet/workspace/root';
 import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
 import { getPublishRegistry } from '#auklet/publish/api/registry';
 import { resolvePublishTag } from '#auklet/publish/api/publishArgs';
-import { resolvePublishCliOptions } from '#auklet/publish/cli';
+import { parsePublishCommand } from '#auklet/cli/parse/publish';
 import { validateNpmrcAuthEnv } from '#auklet/publish/api/npmrc';
 import { createPublishRootEnv } from '#auklet/publish/publishEnv';
 import {
@@ -64,7 +64,7 @@ export async function runInspectPublishCli(args: Array<string>) {
   const envContext = new AukletEnvContext(cwd, root);
 
   return envContext.run(async () => {
-    const options = resolvePublishCliOptions(args, cwd, envContext);
+    const options = parsePublishCommand(args, { cwd, envContext });
     return runInspectPublish(options, root, { envContext });
   });
 }

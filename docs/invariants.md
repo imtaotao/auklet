@@ -33,8 +33,8 @@ the same change and make the reason explicit.
 - Command-specific orchestration belongs in dedicated `src/cli/*` runners.
 - Domain logic belongs in its domain package, such as `src/publish/*` or
   `src/css/*`, not in CLI glue.
-- CLI values that support `env:NAME` should resolve through `src/cli/values.ts`
-  and `AukletEnvContext`, not ad hoc per-flag logic.
+- CLI values that support `env:NAME` should resolve through
+  `src/cli/parse/values.ts` and `AukletEnvContext`, not ad hoc per-flag logic.
 - Target-scoped CLI values must stay deferred until the target package context
   is known.
 
@@ -69,11 +69,14 @@ the same change and make the reason explicit.
 ## Workspace Discovery Boundary
 
 - Shared workspace discovery belongs in `src/workspace/*`.
-- CSS and publish modules should reuse shared workspace readers instead of
-  parsing pnpm workspace data independently.
+- Build, dev, CSS, and publish modules should reuse shared workspace readers or
+  target resolvers instead of parsing pnpm workspace data independently.
 - Missing workspace files, invalid workspace data, and workspace command
   failures are distinct states and should not be collapsed silently.
 - Monorepo package sources should filter the workspace root package.
+- Build/dev workspace commands exclude the workspace root package. They skip
+  private workspace packages by default and include them only with `--private`.
+- Publish and owner workspace selection skip private packages.
 
 ## Publish Workflow Boundary
 

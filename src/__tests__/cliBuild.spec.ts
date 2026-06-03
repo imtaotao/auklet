@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { aukletCliConfigOverridesEnv } from '#auklet/build/cliOverrides';
+import { AukletEnvContext } from '#auklet/env';
+import { parseBuildCommand } from '#auklet/cli/parse/build';
 
 const mocks = vi.hoisted(() => {
   const cleanAukletOutputByConfig = vi.fn();
@@ -51,6 +53,10 @@ vi.mock('#auklet/cli/buildCss', () => ({
 }));
 
 vi.mock('#auklet/cli/buildWorkspace', () => ({
+  getWorkspacePackageScript: (
+    packageJson: { scripts?: Record<string, string> },
+    name: string,
+  ) => packageJson.scripts?.[name] ?? null,
   resolveWorkspaceBuildTargets: mocks.resolveWorkspaceBuildTargets,
 }));
 
@@ -64,6 +70,13 @@ vi.mock('#auklet/logger', () => ({
 
 import { runBuild } from '#auklet/cli/build';
 
+const parseTestBuildCommand = (args: Array<string>) => {
+  return parseBuildCommand(args, {
+    cwd: process.cwd(),
+    envContext: new AukletEnvContext(process.cwd()),
+  });
+};
+
 describe('runBuild', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -71,14 +84,16 @@ describe('runBuild', () => {
 
   test('uses the same CLI override config for JavaScript and CSS builds', async () => {
     await expect(
-      runBuild([
-        '--source',
-        'source',
-        '--modules',
-        '--build.target',
-        'es2022',
-        '--minify',
-      ]),
+      runBuild(
+        parseTestBuildCommand([
+          '--source',
+          'source',
+          '--modules',
+          '--build.target',
+          'es2022',
+          '--minify',
+        ]),
+      ),
     ).resolves.toBe(0);
 
     expect(mocks.cleanAukletOutputByConfig).toHaveBeenCalledWith(
@@ -104,7 +119,11 @@ describe('runBuild', () => {
         }),
       },
     });
-    expect(mocks.runBuildCss).toHaveBeenCalledWith([], {
+    expect(mocks.runBuildCss).toHaveBeenCalledWith({
+      cwd: process.cwd(),
+      envContext: expect.anything(),
+      overrides: {},
+      watch: false,
       aukletConfig: {
         output: 'lib',
         source: 'source',
@@ -113,8 +132,6 @@ describe('runBuild', () => {
           target: 'es2022',
         },
       },
-      envContext: expect.anything(),
-      packageRoot: process.cwd(),
     });
   });
 
@@ -123,23 +140,43 @@ describe('runBuild', () => {
       {
         packageName: '@scope/theme',
         packageRoot: '/repo/packages/theme',
-        packageJson: {},
+        packageJson: {
+          scripts: {
+            build: 'auk build-css',
+          },
+        },
       },
       {
         packageName: '@scope/ui',
         packageRoot: '/repo/packages/ui',
-        packageJson: {},
+        packageJson: {
+          scripts: {
+            build: 'auk build',
+          },
+        },
       },
     ]);
 
     await expect(
-      runBuild(['--filter', '*', '--source', 'source']),
+      runBuild(
+        parseTestBuildCommand([
+          '--filter',
+          '*',
+          '--private',
+          '--source',
+          'source',
+        ]),
+      ),
     ).resolves.toBe(0);
 
     expect(mocks.resolveWorkspaceBuildTargets).toHaveBeenCalledWith(
       process.cwd(),
       ['*'],
       expect.anything(),
+      {
+        includeDependencies: false,
+        includePrivate: true,
+      },
     );
     expect(mocks.execa).toHaveBeenNthCalledWith(
       1,
@@ -171,14 +208,83 @@ describe('runBuild', () => {
     expect(mocks.runBuildCss).not.toHaveBeenCalled();
   });
 
+  test('uses deps as workspace target selector option', async () => {
+    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+      {
+        packageName: '@scope/ui',
+        packageRoot: '/repo/packages/ui',
+        packageJson: {
+          scripts: {
+            build: 'auk build',
+          },
+        },
+      },
+    ]);
+
+    await expect(
+      runBuild(
+        parseTestBuildCommand([
+          '--filter',
+          '@scope/ui',
+          '--deps',
+          '--source',
+          'source',
+        ]),
+      ),
+    ).resolves.toBe(0);
+
+    expect(mocks.resolveWorkspaceBuildTargets).toHaveBeenCalledWith(
+      process.cwd(),
+      ['@scope/ui'],
+      expect.anything(),
+      {
+        includeDependencies: true,
+        includePrivate: false,
+      },
+    );
+    expect(mocks.execa).toHaveBeenCalledWith(
+      'pnpm',
+      ['run', 'build', '--', '--source', 'source'],
+      expect.objectContaining({
+        cwd: '/repo/packages/ui',
+      }),
+    );
+  });
+
+  test('rejects deps without workspace selectors', async () => {
+    await expect(runBuild(parseTestBuildCommand(['--deps']))).rejects.toThrow(
+      '--deps requires --filter or --workspace',
+    );
+    expect(mocks.resolveWorkspaceBuildTargets).not.toHaveBeenCalled();
+    expect(mocks.runTsdown).not.toHaveBeenCalled();
+  });
+
+  test('rejects workspace build targets without build scripts', async () => {
+    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+      {
+        packageName: '@scope/theme',
+        packageRoot: '/repo/packages/theme',
+        packageJson: {},
+      },
+    ]);
+
+    await expect(
+      runBuild(parseTestBuildCommand(['--workspace'])),
+    ).rejects.toThrow('[build] package @scope/theme has no build script.');
+
+    expect(mocks.execa).not.toHaveBeenCalled();
+    expect(mocks.runTsdown).not.toHaveBeenCalled();
+    expect(mocks.runBuildCss).not.toHaveBeenCalled();
+  });
+
   test('rejects recursive workspace builds', async () => {
     const originalValue = process.env.AUKLET_WORKSPACE_BUILD;
     process.env.AUKLET_WORKSPACE_BUILD = '1';
 
     try {
-      await expect(runBuild(['--workspace'])).rejects.toThrow(
-        'recursive workspace build detected',
-      );
+      await expect(
+        runBuild(parseTestBuildCommand(['--workspace'])),
+      ).rejects.toThrow('recursive workspace build detected');
     } finally {
       if (originalValue === undefined) {
         delete process.env.AUKLET_WORKSPACE_BUILD;

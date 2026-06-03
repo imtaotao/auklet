@@ -3,7 +3,7 @@ import {
   hasPublishedPackageVersion,
   runPnpmWhoami,
 } from '#auklet/publish/api/pnpmApi';
-import { createDeferredCliValue } from '#auklet/cli/values';
+import { createDeferredCliValue } from '#auklet/cli/parse/values';
 import { AukletEnvContext } from '#auklet/env';
 import { inspectPublishRegistry } from '#auklet/publish/inspectRegistry';
 import type { PublishPlan, PublishTarget } from '#auklet/publish/types';

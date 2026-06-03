@@ -1,8 +1,5 @@
-import { isPlainObject, isString } from 'aidly';
 import { execa, type Options } from 'execa';
 import semver from 'semver';
-import type { WorkspacePackage } from '#auklet/publish/types';
-import { readPnpmWorkspacePackageInfo } from '#auklet/workspace/packages';
 
 const supportedPnpmRange = '>=10.0.0';
 type PnpmResult = Awaited<ReturnType<typeof execa>>;
@@ -86,26 +83,6 @@ export async function ensurePnpm(
   }
 
   return version;
-}
-
-export async function readPnpmWorkspacePackages(
-  root: string,
-  options: { env?: Record<string, string | undefined> } = {},
-) {
-  try {
-    return (
-      await readPnpmWorkspacePackageInfo(root, {
-        env: options.env,
-      })
-    ).map((item) => {
-      if (!isWorkspacePackage(item)) throwInvalidWorkspacePackages();
-      return item;
-    });
-  } catch (error) {
-    throw new Error('[publish] failed to read pnpm workspace packages.', {
-      cause: error,
-    });
-  }
 }
 
 export async function runPnpmBuild(
@@ -221,21 +198,6 @@ export async function runPnpmOwnerAdd(
   }
 }
 
-const isWorkspacePackage = (value: unknown): value is WorkspacePackage => {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  return (
-    isString(value.name) &&
-    value.name.length > 0 &&
-    isString(value.path) &&
-    value.path.length > 0 &&
-    isString(value.version) &&
-    value.version.length > 0 &&
-    (value.private === undefined || typeof value.private === 'boolean')
-  );
-};
-
 const hasFailedPnpmResult = (result: {
   failed?: boolean;
   exitCode?: unknown;
@@ -253,13 +215,6 @@ const getPnpmFailureReason = (result: {
   const stdout = String(result.stdout ?? '').trim();
   return stdout || null;
 };
-
-function throwInvalidWorkspacePackages(): never {
-  throw new Error(
-    '[publish] failed to read pnpm workspace packages.\n' +
-      '[publish] Expected `pnpm list -r --depth -1 --json` to return package objects with name/path/version.',
-  );
-}
 
 export function hasNpmAuthChallenge(result: {
   stdout?: unknown;

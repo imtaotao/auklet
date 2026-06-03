@@ -3,13 +3,39 @@ import {
   aukletCliConfigOverridesEnv,
   encodeAukletCliConfigOverrides,
 } from '#auklet/build/cliOverrides';
-import { resolveCliBoolean, resolveCliValue } from '#auklet/cli/values';
-import { AukletEnvContext } from '#auklet/env';
+import { resolveCliBoolean, resolveCliValue } from '#auklet/cli/parse/values';
+import { readFlagValue, readOptionalFlagValue } from '#auklet/cli/parse/core';
+import { parseWorkspaceSelectionArgs } from '#auklet/cli/parse/workspace';
+import type { AukletEnvContext } from '#auklet/env';
 import type {
   AukletConfig,
   PackageBuildFormat,
   PackageBuildPlatform,
 } from '#auklet/types';
+import type { WorkspaceSelection } from '#auklet/cli/parse/workspace';
+
+export type BuildCommandOptions = {
+  cwd: string;
+  envContext: AukletEnvContext;
+  workspace: WorkspaceSelection;
+  overrides: AukletConfig;
+  passthroughArgs: Array<string>;
+  workspaceScriptArgs: Array<string>;
+};
+
+export type BuildJsCommandOptions = {
+  cwd: string;
+  envContext: AukletEnvContext;
+  overrides: AukletConfig;
+  passthroughArgs: Array<string>;
+};
+
+export type BuildCssCommandOptions = {
+  cwd: string;
+  envContext: AukletEnvContext;
+  overrides: AukletConfig;
+  watch: boolean;
+};
 
 const buildFormats = new Set(['cjs', 'esm', 'iife']);
 const buildPlatforms = new Set(['node', 'neutral', 'browser']);
@@ -18,9 +44,73 @@ const hasAukletConfig = (config: AukletConfig) => {
   return Object.keys(config).length > 0;
 };
 
-export function resolveBuildCliArgs(
+export function parseBuildCommand(
   args: Array<string>,
-  envContext = new AukletEnvContext(process.cwd()),
+  options: {
+    cwd: string;
+    envContext: AukletEnvContext;
+  },
+) {
+  const workspaceArgs = parseWorkspaceSelectionArgs(args, options.envContext);
+  const buildArgs = parseBuildOverrideArgs(
+    workspaceArgs.remainingArgs,
+    options.envContext,
+  );
+
+  return {
+    cwd: options.cwd,
+    envContext: options.envContext,
+    workspace: workspaceArgs.workspace,
+    overrides: buildArgs.config,
+    passthroughArgs: buildArgs.args,
+    workspaceScriptArgs: workspaceArgs.remainingArgs,
+  } satisfies BuildCommandOptions;
+}
+
+export function parseBuildJsCommand(
+  args: Array<string>,
+  options: {
+    cwd: string;
+    envContext: AukletEnvContext;
+  },
+) {
+  const buildArgs = parseBuildOverrideArgs(args, options.envContext);
+  return {
+    cwd: options.cwd,
+    envContext: options.envContext,
+    overrides: buildArgs.config,
+    passthroughArgs: buildArgs.args,
+  } satisfies BuildJsCommandOptions;
+}
+
+export function parseBuildCssCommand(
+  args: Array<string>,
+  options: {
+    cwd: string;
+    envContext: AukletEnvContext;
+  },
+) {
+  const buildArgs = parseBuildOverrideArgs(args, options.envContext);
+  const remainingArgs = buildArgs.args.filter(
+    (arg) => arg !== '--watch' && arg !== '-w',
+  );
+  if (remainingArgs.length) {
+    throw new Error(
+      `[build-css] unknown build-css argument: ${remainingArgs[0]}`,
+    );
+  }
+
+  return {
+    cwd: options.cwd,
+    envContext: options.envContext,
+    overrides: buildArgs.config,
+    watch: buildArgs.args.includes('--watch') || buildArgs.args.includes('-w'),
+  } satisfies BuildCssCommandOptions;
+}
+
+export function parseBuildOverrideArgs(
+  args: Array<string>,
+  envContext: AukletEnvContext,
 ) {
   const remainingArgs: Array<string> = [];
   const config: AukletConfig = {};
@@ -54,7 +144,7 @@ export function resolveBuildCliArgs(
     }
 
     if (name === '--modules') {
-      const value = getOptionalFlagValue(args, index, inlineValue);
+      const value = readOptionalFlagValue(args, index, inlineValue);
       config.modules =
         value === undefined
           ? true
@@ -72,7 +162,12 @@ export function resolveBuildCliArgs(
       config.build = {
         ...config.build,
         formats: parseBuildFormats(
-          getResolvedFlagValue(args, index, inlineValue, name, envContext),
+          inlineValue === undefined
+            ? getResolvedFlagValue(args, index, inlineValue, name, envContext)
+            : (resolveCliValue(inlineValue, {
+                label: name,
+                context: envContext,
+              }) ?? inlineValue),
         ),
       };
       if (inlineValue === undefined) index += 1;
@@ -142,67 +237,6 @@ export function createBuildEnv(config: AukletConfig) {
   };
 }
 
-export function resolveBuildFilterArgs(
-  args: Array<string>,
-  envContext = new AukletEnvContext(process.cwd()),
-) {
-  const remainingArgs: Array<string> = [];
-  const filters: Array<string> = [];
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]!;
-    const [name, inlineValue] = arg.split('=', 2);
-
-    if (name === '--workspace') {
-      if (inlineValue !== undefined) {
-        throw new Error('--workspace does not accept a value.');
-      }
-      filters.push('*');
-      continue;
-    }
-
-    if (name === '--filter') {
-      filters.push(
-        getResolvedFlagValue(args, index, inlineValue, name, envContext),
-      );
-      if (inlineValue === undefined) index += 1;
-      continue;
-    }
-
-    remainingArgs.push(arg);
-  }
-
-  return {
-    args: remainingArgs,
-    filters: [...new Set(filters)],
-  };
-}
-
-const getFlagValue = (
-  args: Array<string>,
-  index: number,
-  inlineValue: string | undefined,
-  flag: string,
-) => {
-  const value = inlineValue ?? args[index + 1];
-  if (!value || value.startsWith('--')) {
-    throw new Error(`${flag} requires a value.`);
-  }
-  return value;
-};
-
-const getOptionalFlagValue = (
-  args: Array<string>,
-  index: number,
-  inlineValue: string | undefined,
-) => {
-  if (inlineValue !== undefined) return inlineValue;
-
-  const value = args[index + 1];
-  if (!value || value.startsWith('--')) return undefined;
-  return value;
-};
-
 const getResolvedFlagValue = (
   args: Array<string>,
   index: number,
@@ -210,7 +244,7 @@ const getResolvedFlagValue = (
   flag: string,
   envContext: AukletEnvContext,
 ) => {
-  return resolveCliValue(getFlagValue(args, index, inlineValue, flag), {
+  return resolveCliValue(readFlagValue(args, index, inlineValue, flag), {
     label: flag,
     context: envContext,
   })!;
@@ -219,7 +253,7 @@ const getResolvedFlagValue = (
 const parseBuildFormats = (value: string) => {
   const formats = value
     .split(',')
-    .map((format) => format.trim())
+    .map((item) => item.trim())
     .filter(Boolean);
 
   if (!formats.length) {

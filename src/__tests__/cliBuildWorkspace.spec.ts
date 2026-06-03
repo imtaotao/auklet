@@ -35,8 +35,11 @@ describe('resolveWorkspaceBuildTargets', () => {
     vi.clearAllMocks();
   });
 
-  test('matches all non-private workspace packages and sorts dependencies first', async () => {
+  test('matches public workspace packages, skips private packages and the root package, and sorts dependencies first', async () => {
     writeWorkspacePackage('theme');
+    writeWorkspacePackage('internal', {
+      private: true,
+    });
     writeWorkspacePackage('ui', {
       dependencies: {
         '@scope/theme': 'workspace:^',
@@ -46,6 +49,11 @@ describe('resolveWorkspaceBuildTargets', () => {
       workspacePackage('@scope/root', project.root, true),
       workspacePackage('@scope/ui', project.resolve('packages/ui')),
       workspacePackage('@scope/theme', project.resolve('packages/theme')),
+      workspacePackage(
+        '@scope/internal',
+        project.resolve('packages/internal'),
+        true,
+      ),
     ]);
 
     await expect(
@@ -53,6 +61,72 @@ describe('resolveWorkspaceBuildTargets', () => {
         project.root,
         ['*'],
         new AukletEnvContext(project.root),
+      ),
+    ).resolves.toMatchObject([
+      {
+        packageName: '@scope/theme',
+      },
+      {
+        packageName: '@scope/ui',
+      },
+    ]);
+  });
+
+  test('includes workspace dependencies for filtered packages when requested', async () => {
+    writeWorkspacePackage('theme');
+    writeWorkspacePackage('ui', {
+      dependencies: {
+        '@scope/theme': 'workspace:^',
+      },
+    });
+    readWorkspacePackages.mockResolvedValue([
+      workspacePackage('@scope/ui', project.resolve('packages/ui')),
+      workspacePackage('@scope/theme', project.resolve('packages/theme')),
+    ]);
+
+    await expect(
+      resolveWorkspaceBuildTargets(
+        project.root,
+        ['@scope/ui'],
+        new AukletEnvContext(project.root),
+        {
+          includeDependencies: true,
+        },
+      ),
+    ).resolves.toMatchObject([
+      {
+        packageName: '@scope/theme',
+      },
+      {
+        packageName: '@scope/ui',
+      },
+    ]);
+  });
+
+  test('includes private workspace packages when requested', async () => {
+    writeWorkspacePackage('theme', {
+      private: true,
+    });
+    writeWorkspacePackage('ui', {
+      dependencies: {
+        '@scope/theme': 'workspace:^',
+      },
+    });
+    readWorkspacePackages.mockResolvedValue([
+      workspacePackage('@scope/root', project.root, true),
+      workspacePackage('@scope/ui', project.resolve('packages/ui')),
+      workspacePackage('@scope/theme', project.resolve('packages/theme'), true),
+    ]);
+
+    await expect(
+      resolveWorkspaceBuildTargets(
+        project.root,
+        ['@scope/ui'],
+        new AukletEnvContext(project.root),
+        {
+          includeDependencies: true,
+          includePrivate: true,
+        },
       ),
     ).resolves.toMatchObject([
       {

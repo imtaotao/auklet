@@ -9,19 +9,15 @@ export async function runInspect(args: Array<string>) {
   if (command === 'css') {
     return runInspectCssCli(restArgs);
   }
-
   if (command === 'publish') {
     return runInspectPublishCli(restArgs);
   }
-
   if (command === 'pack') {
     return runInspectPackCli(restArgs);
   }
-
   if (command) {
     throw new Error(`[inspect] unknown inspect command: ${command}`);
   }
-
   throw new Error(
     '[inspect] expected inspect command: auk inspect publish, auk inspect pack, or auk inspect css',
   );

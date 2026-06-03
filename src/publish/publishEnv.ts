@@ -1,5 +1,5 @@
 import type { AukletEnvContext } from '#auklet/env';
-import type { DeferredCliValue } from '#auklet/cli/values';
+import type { DeferredCliValue } from '#auklet/cli/parse/values';
 import type {
   PublishOptions,
   PublishRuntime,

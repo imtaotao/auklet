@@ -7,7 +7,7 @@ orchestration in `src/publish/` rather than in `bin/entry.mjs`.
 
 ```text
 src/publish/
-├── cli.ts                 # publish/owner subcommand flags and validation
+├── cli.ts                 # publish/owner CLI glue, env, and pnpm setup
 ├── inspect.ts             # inspect publish orchestration
 ├── inspectPack.ts         # package entry/export/file checks
 ├── inspectRegistry.ts     # registry auth and version checks for inspect
@@ -18,9 +18,9 @@ src/publish/
 └── runner/                # build, format, preflight, git, version, publish stages
 ```
 
-`src/cli/publish.ts` is only top-level CLI glue. `src/publish/cli.ts` owns
-publish/owner subcommand argument parsing, pnpm setup, and handing typed options
-to the runners.
+Publish and owner argument parsing lives in `src/cli/parse/publish.ts` and
+`src/cli/parse/owner.ts`. `src/publish/cli.ts` owns pnpm setup, npmrc auth
+checks, and handing typed options to the runners.
 
 `PublishRunner` owns the state machine. Other publish modules should keep a
 single responsibility and avoid deciding cross-stage order.

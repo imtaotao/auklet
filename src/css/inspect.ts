@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { isPlainObject, isString } from 'aidly';
 import { normalizeAukletConfig } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
-import { resolveBuildCliArgs } from '#auklet/cli/buildArgs';
+import { parseBuildOverrideArgs } from '#auklet/cli/parse/build';
+import { AukletEnvContext } from '#auklet/env';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { mergeAukletConfigOverrides } from '#auklet/build/cliOverrides';
 import {
@@ -65,14 +66,17 @@ export async function runInspectCssCli(args: Array<string>) {
 }
 
 export async function resolveInspectCssOptions(args: Array<string>) {
-  const buildArgs = resolveBuildCliArgs(args.filter((arg) => arg !== '--'));
+  const cwd = process.cwd();
+  const buildArgs = parseBuildOverrideArgs(
+    args.filter((arg) => arg !== '--'),
+    new AukletEnvContext(cwd),
+  );
   if (buildArgs.args.length) {
     throw new Error(
       `[inspect] unknown inspect css argument: ${buildArgs.args[0]}`,
     );
   }
 
-  const cwd = process.cwd();
   const workspaceRoot = findWorkspaceRoot(cwd);
   const packageRoots =
     workspaceRoot === cwd

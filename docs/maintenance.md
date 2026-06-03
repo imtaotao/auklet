@@ -9,12 +9,15 @@ Check:
 
 - `docs/invariants.md` for CLI, config, and publish flag boundaries.
 - `src/cli/main.ts` for command registration when adding a new command.
-- `src/cli/values.ts` when the flag supports `env:NAME` or deferred
+- `src/cli/parse/values.ts` when the flag supports `env:NAME` or deferred
   target-scoped resolution.
-- `src/cli/buildArgs.ts` for build override flags.
-- `src/publish/cli.ts` for publish/owner flags.
+- `src/cli/parse/workspace.ts` for `--filter`, `--workspace`, `--deps`, and
+  `--private`.
+- `src/cli/parse/build.ts` for build override flags.
+- `src/cli/parse/publish.ts` and `src/cli/parse/owner.ts` for publish/owner
+  flags.
 - `src/publish/types.ts` or build option types when the flag reaches runners.
-- README CLI examples and option tables.
+- README command and option tables.
 - `docs/architecture.md` for build/CLI architecture changes.
 - `docs/publish.md` for publish flags.
 
@@ -31,9 +34,11 @@ Check:
 - `docs/invariants.md` for environment priority and deferred value rules.
 - `src/env.ts` for `.env` file loading, process env priority, and run-time env
   injection.
-- `src/cli/values.ts` for string, boolean, and deferred CLI value handling.
-- `src/cli/buildArgs.ts` when build overrides should support `env:NAME`.
-- `src/publish/cli.ts` and `src/publish/publishEnv.ts` when publish or owner
+- `src/cli/parse/values.ts` for string, boolean, and deferred CLI value
+  handling.
+- `src/cli/parse/build.ts` when build overrides should support `env:NAME`.
+- `src/cli/parse/publish.ts`, `src/cli/parse/owner.ts`, and
+  `src/publish/publishEnv.ts` when publish or owner
   values should resolve from environment files.
 - README and `docs/publish.md` when user-visible env behavior changes.
 
@@ -108,7 +113,8 @@ Check:
 - `src/types.ts` public and normalized config types.
 - `src/config.ts` defaults and normalization.
 - `src/configLoader.ts` only when config file loading behavior changes.
-- README configuration reference.
+- README configuration example and focused docs when the field needs more
+  explanation.
 - Examples if the field changes common usage.
 
 Tests:
@@ -141,5 +147,6 @@ Check:
 
 - `docs/invariants.md` for public API invariants.
 - `src/index.ts` exports.
-- README Programmatic API docs.
+- `docs/architecture.md` when the public API boundary or exported concepts
+  change.
 - `src/__tests__/index.spec.ts`.

@@ -66,11 +66,13 @@ where config modules are and how the build flow uses them.
 ```text
 src/workspace/
 ├── packages.ts           # Reads and validates pnpm workspace package info
-└── root.ts               # Finds pnpm workspace roots
+├── root.ts               # Finds pnpm workspace roots
+└── targets.ts            # Shared filtered target selection and dependency sorting
 ```
 
 Workspace discovery invariants live in `docs/invariants.md`. This module is
-shared by CSS dev package sources and publish target resolution.
+shared by CSS dev package sources, workspace build/dev target resolution, and
+publish target resolution.
 
 ## JavaScript Build Modules
 
@@ -95,14 +97,20 @@ tsdown. `cleanOutput` only serves `auk build`; it removes the current package's
 configured `output` directory. `tsdownConfig` maps auklet `build` options to
 tsdown config.
 
-Build CLI overrides are parsed in `src/cli/buildArgs.ts`. Top-level flags such
-as `--source`, `--output`, `--modules`, and namespaced flags such as
+Build CLI overrides are parsed in `src/cli/parse/build.ts`. Top-level flags
+such as `--source`, `--output`, `--modules`, and namespaced flags such as
 `--build.formats`, `--build.target`, `--build.platform`, and
 `--build.tsconfig` override auklet config files for the current command. The JS
 build path passes those overrides to the tsdown child process through
 `AUKLET_CONFIG_OVERRIDES`, which is read by the built-in auklet tsdown config.
 Do not combine these flags with tsdown `--config`, `-c`, or `--no-config`; a
 custom tsdown config owns its own config loading behavior.
+
+Workspace selectors for build/dev are parsed in `src/cli/parse/workspace.ts`.
+`--filter` and `--workspace` select packages by package name, `--deps` includes
+workspace dependencies, and `--private` opts into private workspace packages.
+Without `--private`, build/dev workspace commands skip private packages and
+always exclude the workspace root package.
 
 ## CLI Modules
 
@@ -114,19 +122,25 @@ src/cli/
 ├── buildWorkspace.ts     # filtered workspace build/dev target selection
 ├── dev.ts                # dev command process orchestration
 ├── inspect.ts            # inspect subcommand dispatch
-├── publish.ts            # publish and owner command orchestration
-├── buildArgs.ts          # auklet build override parsing and validation
-└── values.ts             # CLI value resolution and deferred target-scoped values
+└── parse/                # command argv parsing and CLI value resolution
+    ├── core.ts           # Shared parser helpers
+    ├── values.ts         # env-backed and deferred CLI values
+    ├── workspace.ts      # --filter / --workspace / --deps / --private
+    ├── build.ts          # build and build-js command options
+    ├── dev.ts            # dev command options
+    ├── publish.ts        # publish command options
+    └── owner.ts          # owner command options
 ```
 
 `bin/entry.mjs` should stay a bootstrap file that imports the built public API.
 `src/cli/main.ts` owns command registration, while command-specific business
-logic should live in the dedicated runner files above. `src/cli/publish.ts` is
-only top-level CLI glue; publish argument parsing lives in `src/publish/cli.ts`.
-Environment loading is owned by `src/env.ts`. String and boolean CLI values that
-support `env:NAME` should resolve through `src/cli/values.ts`; target-scoped
-values such as publish tokens should use deferred CLI values and resolve against
-the target package's `AukletEnvContext`.
+logic should live in the dedicated runner files above. Publish and owner CLI
+glue lives in `src/publish/cli.ts`, while argument parsing lives in
+`src/cli/parse/publish.ts` and `src/cli/parse/owner.ts`. Environment loading is
+owned by `src/env.ts`. String and boolean CLI values that support `env:NAME`
+should resolve through `src/cli/parse/values.ts`; target-scoped values such as
+publish tokens should use deferred CLI values and resolve against the target
+package's `AukletEnvContext`.
 
 ## Build Flow
 
@@ -172,15 +186,19 @@ flowchart TD
   Command --> Inspect["auk inspect"]
   Command --> Version["auk version / --version"]
 
-  Build --> LoadBuildConfig["loadAukletConfig"]
+  Build --> BuildMode{"workspace selector?"}
+  BuildMode -->|yes| BuildScripts["pnpm run build in target packages"]
+  BuildMode -->|no| LoadBuildConfig["loadAukletConfig"]
   LoadBuildConfig --> CleanOutput["remove configured output dir"]
   CleanOutput --> BuildJs
   BuildJs --> RunTsdown["runTsdown"]
   RunTsdown --> Tsdown["tsdown"]
-  Build --> BuildStyle
+  BuildMode -->|no| BuildStyle
   BuildStyle --> StyleBuilder["ModuleStyleBuilder"]
-  Dev --> JsWatch["tsdown --watch"]
-  Dev --> StyleWatch["ModuleStyleWatcher"]
+  Dev --> DevMode{"workspace selector?"}
+  DevMode -->|no| JsWatch["tsdown --watch"]
+  DevMode -->|no| StyleWatch["ModuleStyleWatcher"]
+  DevMode -->|yes| DevScripts["pnpm run dev in target packages"]
   Publish --> PublishRunner["src/publish/* runners"]
   Inspect --> InspectRunner["src/publish/inspect* checks"]
 ```

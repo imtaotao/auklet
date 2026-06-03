@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "auk build --workspace",
+    "dev": "auk dev --workspace",
     "publish:dry-run": "cross-env NPM_CONFIG_CACHE=.publish-cache auk publish --workspace --dry-run",
     "publish:local": "cross-env NPM_CONFIG_CACHE=.publish-cache auk publish --workspace --version patch --allow-dirty"
   },

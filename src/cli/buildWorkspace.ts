@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPlainObject, isString } from 'aidly';
-import { readPnpmWorkspacePackageInfo } from '#auklet/workspace/packages';
-import { findWorkspaceRoot } from '#auklet/workspace/root';
-import { matchesWorkspacePackageFilter } from '#auklet/workspace/packageFilters';
+import {
+  getWorkspaceDependencyNames,
+  resolveWorkspaceTargets,
+} from '#auklet/workspace/targets';
 import type { AukletEnvContext } from '#auklet/env';
 
 type WorkspaceBuildPackageJson = {
@@ -25,41 +26,28 @@ export async function resolveWorkspaceBuildTargets(
   cwd: string,
   filters: Array<string>,
   envContext: AukletEnvContext,
+  options: {
+    includePrivate?: boolean;
+    includeDependencies?: boolean;
+  } = {},
 ) {
-  const root = findWorkspaceRoot(cwd);
-  if (!root) {
-    throw new Error('[build] --filter requires a pnpm workspace root.');
-  }
-
-  const workspacePackages = await readPnpmWorkspacePackageInfo(root, {
+  return resolveWorkspaceTargets({
+    cwd,
+    filters,
     env: envContext.normalizedValues,
+    scope: 'build',
+    emptyTargetMessage: '[build] no buildable workspace package found.',
+    excludeRoot: true,
+    includePrivate: options.includePrivate,
+    readPackageJson: readBuildPackageJson,
+    createTarget: (item, packageJson) => ({
+      packageRoot: item.path,
+      packageName: item.name,
+      packageJson,
+    }),
+    getDependencies: getBuildWorkspaceDependencies,
+    includeDependencies: options.includeDependencies,
   });
-  const matchedPackages = workspacePackages.filter((item) =>
-    filters.some((filter) => matchesWorkspacePackageFilter(item.name, filter)),
-  );
-
-  if (!matchedPackages.length) {
-    throw new Error(
-      `[build] no workspace package matched filter: ${filters.join(', ')}`,
-    );
-  }
-
-  const targets = matchedPackages
-    .filter((item) => !item.private)
-    .map((item) => {
-      const packageJson = readBuildPackageJson(item.path);
-      return {
-        packageRoot: item.path,
-        packageName: item.name,
-        packageJson,
-      };
-    });
-
-  if (!targets.length) {
-    throw new Error('[build] no buildable workspace package found.');
-  }
-
-  return sortWorkspaceBuildTargets(targets);
 }
 
 const readBuildPackageJson = (packageRoot: string) => {
@@ -74,53 +62,11 @@ const readBuildPackageJson = (packageRoot: string) => {
   return packageJson;
 };
 
-const sortWorkspaceBuildTargets = (targets: Array<WorkspaceBuildTarget>) => {
-  const targetNames = new Set(targets.map((target) => target.packageName));
-  const targetMap = new Map(
-    targets.map((target) => [target.packageName, target]),
-  );
-  const sorted: Array<WorkspaceBuildTarget> = [];
-  const visited = new Set<string>();
-  const visiting = new Set<string>();
-
-  const visit = (target: WorkspaceBuildTarget) => {
-    if (visited.has(target.packageName)) return;
-    if (visiting.has(target.packageName)) {
-      throw new Error(
-        `[build] circular workspace dependency detected at ${target.packageName}.`,
-      );
-    }
-
-    visiting.add(target.packageName);
-    for (const dependency of getBuildWorkspaceDependencies(
-      target.packageJson,
-    )) {
-      if (!targetNames.has(dependency)) continue;
-      const dependencyTarget = targetMap.get(dependency);
-      if (dependencyTarget) visit(dependencyTarget);
-    }
-    visiting.delete(target.packageName);
-    visited.add(target.packageName);
-    sorted.push(target);
-  };
-
-  for (const target of targets) {
-    visit(target);
-  }
-  return sorted;
-};
-
-const getBuildWorkspaceDependencies = (
-  packageJson: WorkspaceBuildPackageJson,
-) => {
+const getBuildWorkspaceDependencies = (target: WorkspaceBuildTarget) => {
   return [
-    ...getDependencyNames(packageJson.dependencies),
-    ...getDependencyNames(packageJson.optionalDependencies),
+    ...getWorkspaceDependencyNames(target.packageJson.dependencies),
+    ...getWorkspaceDependencyNames(target.packageJson.optionalDependencies),
   ];
-};
-
-const getDependencyNames = (value: unknown) => {
-  return isPlainObject(value) ? Object.keys(value) : [];
 };
 
 export function getWorkspacePackageScript(
