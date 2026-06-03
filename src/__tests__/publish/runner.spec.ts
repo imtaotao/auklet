@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { Logger } from 'briefing';
+import { createDeferredCliValue } from '#auklet/cli/values';
+import { AukletEnvContext } from '#auklet/env';
 import { resolvePublishPlan } from '#auklet/publish/targetResolver';
 import {
   readPackageJson,
@@ -20,6 +22,7 @@ import {
 } from '#auklet/publish/api/pnpmApi';
 import { formatPublishOutputs } from '#auklet/publish/runner/publishOutputFormatter';
 import { PublishRunner } from '#auklet/publish/publishRunner';
+import type { PublishOptions } from '#auklet/publish/types';
 import { createVirtualProject } from '#auklet/__tests__/fixtures/virtualProject';
 
 const readPackage = vi.mocked(readPackageJson);
@@ -46,6 +49,12 @@ const getConsoleMessages = (
   return spies.flatMap((spy) =>
     spy.mock.calls.map(([message]) => stripAnsi(String(message))),
   );
+};
+
+const createRunner = (options: PublishOptions) => {
+  return new PublishRunner(options, {
+    envContext: new AukletEnvContext(options.cwd),
+  });
 };
 
 vi.mock('#auklet/publish/targetResolver', () => ({
@@ -125,7 +134,7 @@ describe('PublishRunner', () => {
   test('skips git checks, commit checks, and tags with --allow-dirty', async () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       dryRun: false,
@@ -149,7 +158,7 @@ describe('PublishRunner', () => {
   test('writes versions but skips git operations with --allow-dirty', async () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       version: 'patch',
@@ -175,7 +184,7 @@ describe('PublishRunner', () => {
   test('keeps git clean check but skips release commit and tag with --no-git', async () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       version: 'patch',
@@ -203,7 +212,7 @@ describe('PublishRunner', () => {
     });
 
     await expect(
-      new PublishRunner({
+      createRunner({
         cwd: process.cwd(),
         filters: [],
         version: 'patch',
@@ -218,7 +227,7 @@ describe('PublishRunner', () => {
   });
 
   test('runs publish hooks with explicit build and publish status names', async () => {
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       dryRun: false,
@@ -245,7 +254,7 @@ describe('PublishRunner', () => {
       order.push('write');
     });
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       version: 'patch',
@@ -286,7 +295,7 @@ describe('PublishRunner', () => {
       order.push('write');
     });
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       version: 'patch',
@@ -307,7 +316,7 @@ describe('PublishRunner', () => {
     whoami.mockRejectedValueOnce(new Error('not authenticated'));
 
     await expect(
-      new PublishRunner({
+      createRunner({
         cwd: process.cwd(),
         filters: [],
         version: 'patch',
@@ -349,13 +358,13 @@ describe('PublishRunner', () => {
 
     try {
       await expect(
-        new PublishRunner({
+        createRunner({
           cwd: project.root,
           filters: [],
           version: 'patch',
           dryRun: false,
           format: true,
-          token: 'npm_secret',
+          token: createDeferredCliValue('npm_secret', { label: '--token' }),
           ignoreScripts: false,
           allowDirty: false,
         }).run(),
@@ -387,7 +396,7 @@ describe('PublishRunner', () => {
 
     try {
       await expect(
-        new PublishRunner({
+        createRunner({
           cwd: project.root,
           filters: ['@scope/*'],
           version: 'patch',
@@ -416,7 +425,7 @@ describe('PublishRunner', () => {
     hasPublishedVersion.mockResolvedValueOnce(true);
 
     await expect(
-      new PublishRunner({
+      createRunner({
         cwd: process.cwd(),
         filters: [],
         version: 'patch',
@@ -464,7 +473,7 @@ describe('PublishRunner', () => {
     );
 
     await expect(
-      new PublishRunner({
+      createRunner({
         cwd: process.cwd(),
         filters: [],
         dryRun: false,
@@ -497,7 +506,7 @@ describe('PublishRunner', () => {
       order.push('tag');
     });
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       version: 'patch',
@@ -515,7 +524,7 @@ describe('PublishRunner', () => {
     const writeRows = vi.spyOn(Logger.prototype, 'rows');
     const writeTasks = vi.spyOn(Logger.prototype, 'tasks');
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       dryRun: false,
@@ -580,7 +589,7 @@ describe('PublishRunner', () => {
       .mockRejectedValueOnce(error);
 
     await expect(
-      new PublishRunner({
+      createRunner({
         cwd: process.cwd(),
         filters: ['@scope/*'],
         version: 'patch',
@@ -688,7 +697,7 @@ describe('PublishRunner', () => {
       .mockRejectedValueOnce(new Error('registry failed'));
 
     await expect(
-      new PublishRunner({
+      createRunner({
         cwd: process.cwd(),
         filters: ['@scope/*'],
         version: 'patch',
@@ -713,7 +722,7 @@ describe('PublishRunner', () => {
       targets: [createTarget('@scope/ui')],
     });
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       dryRun: true,
@@ -770,7 +779,7 @@ describe('PublishRunner', () => {
       targets: [createTarget('@scope/ui')],
     });
 
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       version: 'patch',
@@ -791,7 +800,7 @@ describe('PublishRunner', () => {
   });
 
   test('passes the cli format switch to publish output formatting', async () => {
-    await new PublishRunner({
+    await createRunner({
       cwd: process.cwd(),
       filters: [],
       dryRun: false,

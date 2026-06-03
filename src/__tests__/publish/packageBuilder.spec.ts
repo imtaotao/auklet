@@ -4,6 +4,7 @@ import {
   runPackageBuilds,
   validateBuildScript,
 } from '#auklet/publish/runner/packageBuilder';
+import { AukletEnvContext } from '#auklet/env';
 import type { PublishTarget } from '#auklet/publish/types';
 
 vi.mock('#auklet/publish/api/pnpmApi', () => ({
@@ -38,6 +39,10 @@ describe('publish package builder', () => {
     await runPackageBuilds(
       [createTarget('@scope/theme'), createTarget('@scope/ui')],
       logger as never,
+      {},
+      {
+        envContext: new AukletEnvContext('/repo', '/repo'),
+      },
     );
 
     expect(buildPackage).toHaveBeenNthCalledWith(1, '/repo/theme');

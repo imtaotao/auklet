@@ -78,7 +78,7 @@ describe('npmrc auth config', () => {
     ).toThrow('npmrc auth environment is missing: AUKLET_MISSING_TOKEN');
   });
 
-  test('allows --token to satisfy NODE_AUTH_TOKEN npmrc references', () => {
+  test('allows resolved token env to satisfy NODE_AUTH_TOKEN npmrc references', () => {
     const currentProject = createVirtualProject();
     project = currentProject;
     currentProject.writeFile(
@@ -88,8 +88,38 @@ describe('npmrc auth config', () => {
 
     expect(() =>
       validateNpmrcAuthEnv(currentProject.root, currentProject.root, {
-        token: 'npm_secret',
+        env: {
+          NODE_AUTH_TOKEN: 'npm_secret',
+        },
       }),
     ).not.toThrow();
+  });
+
+  test('lets explicit env override existing process env during npmrc validation', () => {
+    const currentProject = createVirtualProject();
+    project = currentProject;
+    const originalToken = process.env.NODE_AUTH_TOKEN;
+    currentProject.writeFile(
+      '.npmrc',
+      '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n',
+    );
+
+    try {
+      process.env.NODE_AUTH_TOKEN = '';
+
+      expect(() =>
+        validateNpmrcAuthEnv(currentProject.root, currentProject.root, {
+          env: {
+            NODE_AUTH_TOKEN: 'npm_secret',
+          },
+        }),
+      ).not.toThrow();
+    } finally {
+      if (originalToken === undefined) {
+        delete process.env.NODE_AUTH_TOKEN;
+      } else {
+        process.env.NODE_AUTH_TOKEN = originalToken;
+      }
+    }
   });
 });

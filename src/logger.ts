@@ -17,7 +17,3 @@ export function createAukletLogger(options: CreateAukletLoggerOptions = {}) {
     sink: options.sink,
   });
 }
-
-export function createScopedAukletLogger(scope: string) {
-  return createAukletLogger({ scope });
-}

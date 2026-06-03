@@ -61,9 +61,11 @@ export async function withPnpmTimeout(
   return result;
 }
 
-export async function ensurePnpm(options: { token?: string } = {}) {
+export async function ensurePnpm(
+  options: { env?: Record<string, string | undefined> } = {},
+) {
   const result = await runPnpm(['--version'], {
-    env: createPnpmAuthEnv(options.token),
+    env: options.env,
   });
   const stdout = String(result.stdout ?? '');
   if (hasFailedPnpmResult(result) || !stdout) {
@@ -88,12 +90,12 @@ export async function ensurePnpm(options: { token?: string } = {}) {
 
 export async function readPnpmWorkspacePackages(
   root: string,
-  options: { token?: string } = {},
+  options: { env?: Record<string, string | undefined> } = {},
 ) {
   try {
     return (
       await readPnpmWorkspacePackageInfo(root, {
-        env: createPnpmAuthEnv(options.token),
+        env: options.env,
       })
     ).map((item) => {
       if (!isWorkspacePackage(item)) throwInvalidWorkspacePackages();
@@ -108,11 +110,11 @@ export async function readPnpmWorkspacePackages(
 
 export async function runPnpmBuild(
   packageRoot: string,
-  options: { token?: string } = {},
+  options: { env?: Record<string, string | undefined> } = {},
 ) {
   const result = await runPnpm(['run', 'build'], {
     cwd: packageRoot,
-    env: createPnpmAuthEnv(options.token),
+    env: options.env,
     stdio: 'inherit',
   });
   if (hasFailedPnpmResult(result)) {
@@ -123,12 +125,12 @@ export async function runPnpmBuild(
 export async function runPnpmPublish(
   packageRoot: string,
   args: Array<string>,
-  options: { token?: string } = {},
+  options: { env?: Record<string, string | undefined> } = {},
 ) {
   const isDryRun = args.includes('--dry-run');
   const result = await runPnpm(['publish', ...args], {
     cwd: packageRoot,
-    env: createPnpmAuthEnv(options.token),
+    env: options.env,
     stdio: isDryRun ? 'pipe' : 'inherit',
   });
   if (isDryRun) writeProcessOutput(result);
@@ -146,7 +148,7 @@ export async function runPnpmWhoami(
     packageName?: string;
     registry?: string;
     timeout?: number;
-    token?: string;
+    env?: Record<string, string | undefined>;
   } = {},
 ) {
   const args = ['whoami'];
@@ -154,7 +156,7 @@ export async function runPnpmWhoami(
 
   const result = await runPnpm(args, {
     cwd: packageRoot,
-    env: createPnpmAuthEnv(options.token),
+    env: options.env,
     timeout: options.timeout,
   });
   if (hasFailedPnpmResult(result)) {
@@ -175,14 +177,18 @@ export async function hasPublishedPackageVersion(
   packageRoot: string,
   packageName: string,
   version: string,
-  options: { registry?: string; timeout?: number; token?: string } = {},
+  options: {
+    registry?: string;
+    timeout?: number;
+    env?: Record<string, string | undefined>;
+  } = {},
 ) {
   const args = ['view', `${packageName}@${version}`, 'version'];
   if (options.registry) args.push('--registry', options.registry);
 
   const result = await runPnpm(args, {
     cwd: packageRoot,
-    env: createPnpmAuthEnv(options.token),
+    env: options.env,
     timeout: options.timeout,
   });
   if (!hasFailedPnpmResult(result)) {
@@ -213,14 +219,6 @@ export async function runPnpmOwnerAdd(
       `[publish] pnpm owner add failed for ${user} -> ${packageName}.`,
     );
   }
-}
-
-export function createPnpmAuthEnv(token?: string) {
-  if (!token) return undefined;
-  return {
-    NODE_AUTH_TOKEN: token,
-    NPM_TOKEN: token,
-  };
 }
 
 const isWorkspacePackage = (value: unknown): value is WorkspacePackage => {

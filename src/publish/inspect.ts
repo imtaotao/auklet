@@ -1,12 +1,14 @@
 import path from 'node:path';
 import { isString } from 'aidly';
+import { AukletEnvContext } from '#auklet/env';
 import { createAukletLogger } from '#auklet/logger';
-import { resolvePublishTag } from '#auklet/publish/api/publishArgs';
-import { getPublishRegistry } from '#auklet/publish/api/registry';
-import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
-import { validateNpmrcAuthEnv } from '#auklet/publish/api/npmrc';
-import { resolvePublishCliOptions } from '#auklet/publish/cli';
 import { findWorkspaceRoot } from '#auklet/workspace/root';
+import { ensurePnpm } from '#auklet/publish/api/pnpmApi';
+import { getPublishRegistry } from '#auklet/publish/api/registry';
+import { resolvePublishTag } from '#auklet/publish/api/publishArgs';
+import { resolvePublishCliOptions } from '#auklet/publish/cli';
+import { validateNpmrcAuthEnv } from '#auklet/publish/api/npmrc';
+import { createPublishRootEnv } from '#auklet/publish/publishEnv';
 import {
   inspectPublishRegistry,
   type PublishRegistryCheck,
@@ -22,6 +24,7 @@ import type {
   PublishOptions,
   PublishPackageConfig,
   PublishPlan,
+  PublishRuntime,
   PublishTarget,
 } from '#auklet/publish/types';
 
@@ -56,18 +59,26 @@ type PublishInspectModel = {
 };
 
 export async function runInspectPublishCli(args: Array<string>) {
-  const options = resolvePublishCliOptions(args);
-  validateNpmrcAuthEnv(
-    options.cwd,
-    findWorkspaceRoot(options.cwd) ?? options.cwd,
-    {
-      token: options.token,
-    },
-  );
-  await ensurePnpm({ token: options.token });
+  const cwd = process.cwd();
+  const root = findWorkspaceRoot(cwd) ?? cwd;
+  const envContext = new AukletEnvContext(cwd, root);
 
+  return envContext.run(async () => {
+    const options = resolvePublishCliOptions(args, cwd, envContext);
+    return runInspectPublish(options, root, { envContext });
+  });
+}
+
+async function runInspectPublish(
+  options: PublishOptions,
+  root: string,
+  runtime: PublishRuntime,
+) {
+  const { env } = createPublishRootEnv(options, runtime);
+  validateNpmrcAuthEnv(options.cwd, root, { env });
+  await ensurePnpm({ env });
   const logger = createAukletLogger({ scope: 'inspect' });
-  const plan = await resolvePublishPlan(options, logger);
+  const plan = await resolvePublishPlan(options, runtime, logger);
   const packageFileChecks = inspectPackageFiles(plan.targets);
   const packageFileCheckFailed = packageFileChecks.some(
     (check) => check.status === 'missing',
@@ -81,6 +92,7 @@ export async function runInspectPublishCli(args: Array<string>) {
   spinner.start();
   const registryChecks = await inspectPublishRegistry(plan, {
     token: options.token,
+    runtime,
     onCheck: (info) => {
       spinner.text([
         'Checking registry ',

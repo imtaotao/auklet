@@ -1,4 +1,4 @@
-import { createScopedAukletLogger } from '#auklet/logger';
+import { createAukletLogger, type AukletLogger } from '#auklet/logger';
 import { runPublishHook } from '#auklet/publish/api/publishHookApi';
 import {
   runPackageBuilds,
@@ -13,8 +13,11 @@ import { PublishPreflight } from '#auklet/publish/runner/publishPreflight';
 import { PublishTargetError } from '#auklet/publish/runner/publishTargetError';
 import { ReleaseGitController } from '#auklet/publish/runner/releaseGitController';
 import { VersionWriter } from '#auklet/publish/runner/versionWriter';
-import type { AukletLogger } from '#auklet/logger';
-import type { PublishOptions, PublishPlan } from '#auklet/publish/types';
+import type {
+  PublishOptions,
+  PublishPlan,
+  PublishRuntime,
+} from '#auklet/publish/types';
 
 export class PublishRunner {
   private readonly git: ReleaseGitController;
@@ -24,18 +27,32 @@ export class PublishRunner {
   private readonly logger: AukletLogger;
 
   private readonly options: PublishOptions;
+  private readonly runtime: PublishRuntime;
 
-  constructor(options: PublishOptions) {
+  constructor(options: PublishOptions, runtime: PublishRuntime) {
     this.options = options;
-    this.logger = createScopedAukletLogger('publish');
+    this.runtime = runtime;
+    this.logger = createAukletLogger({ scope: 'publish' });
     this.git = new ReleaseGitController(this.options, this.logger);
-    this.publisher = new PackagePublisher(this.options, this.logger);
-    this.preflight = new PublishPreflight(this.options, this.logger);
+    this.publisher = new PackagePublisher(
+      this.options,
+      this.runtime,
+      this.logger,
+    );
+    this.preflight = new PublishPreflight(
+      this.options,
+      this.runtime,
+      this.logger,
+    );
     this.versions = new VersionWriter(this.options, this.logger);
   }
 
   async run() {
-    const plan = await resolvePublishPlan(this.options, this.logger);
+    const plan = await resolvePublishPlan(
+      this.options,
+      this.runtime,
+      this.logger,
+    );
     let failureHookEnabled = false;
 
     try {
@@ -46,7 +63,12 @@ export class PublishRunner {
       await runPublishHook({ status: 'beforeBuild', plan });
       failureHookEnabled = true;
       this.versions.writeBeforeBuild(plan);
-      await runPackageBuilds(plan.targets, this.logger, this.options);
+      await runPackageBuilds(
+        plan.targets,
+        this.logger,
+        this.options,
+        this.runtime,
+      );
       await runPublishHook({ status: 'afterBuild', plan });
       await formatPublishOutputs(plan.targets, this.options.format);
       await runPublishHook({ status: 'beforePublish', plan });

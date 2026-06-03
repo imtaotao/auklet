@@ -9,6 +9,8 @@ Check:
 
 - `docs/invariants.md` for CLI, config, and publish flag boundaries.
 - `src/cli/main.ts` for command registration when adding a new command.
+- `src/cli/values.ts` when the flag supports `env:NAME` or deferred
+  target-scoped resolution.
 - `src/cli/buildArgs.ts` for build override flags.
 - `src/publish/cli.ts` for publish/owner flags.
 - `src/publish/types.ts` or build option types when the flag reaches runners.
@@ -21,6 +23,28 @@ Tests:
 - Build override parsing belongs in `src/__tests__/cli.spec.ts`.
 - Publish/owner parsing belongs in `src/__tests__/publish/cli.spec.ts`.
 - Runner behavior belongs in the corresponding runner spec.
+
+## Change Environment Loading Or CLI Value Resolution
+
+Check:
+
+- `docs/invariants.md` for environment priority and deferred value rules.
+- `src/env.ts` for `.env` file loading, process env priority, and run-time env
+  injection.
+- `src/cli/values.ts` for string, boolean, and deferred CLI value handling.
+- `src/cli/buildArgs.ts` when build overrides should support `env:NAME`.
+- `src/publish/cli.ts` and `src/publish/publishEnv.ts` when publish or owner
+  values should resolve from environment files.
+- README and `docs/publish.md` when user-visible env behavior changes.
+
+Tests:
+
+- Environment file priority belongs in `src/__tests__/env.spec.ts`.
+- Build CLI value parsing belongs in `src/__tests__/cli.spec.ts`.
+- Publish/owner env-backed parsing belongs in
+  `src/__tests__/publish/cli.spec.ts`.
+- Target-scoped publish value resolution belongs in
+  `src/__tests__/publish/token.spec.ts`.
 
 ## Change CSS Entry Order Or Semantics
 

@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { aukletConfigFiles, isAukletConfigFile } from '#auklet/config';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
+import { aukletConfigFiles, isAukletConfigFile } from '#auklet/config';
 import { normalizeFileKey, toPosixPath, toWatchPath } from '#auklet/utils';
-import { readPnpmWorkspacePackageInfoSync } from '#auklet/workspace/packages';
-import type { WorkspacePackageInfo } from '#auklet/workspace/packages';
+import {
+  readPnpmWorkspacePackageInfoSync,
+  type WorkspacePackageInfo,
+} from '#auklet/workspace/packages';
 import type {
   StylePackageInfo,
   StylePackageSource,

@@ -1,3 +1,6 @@
+import type { AukletEnvContext } from '#auklet/env';
+import type { DeferredCliValue } from '#auklet/cli/values';
+
 export type PackageJson = {
   name?: string;
   version?: string;
@@ -55,8 +58,12 @@ export type PublishOptions = {
   filters: Array<string>;
   git?: boolean;
   otp?: string;
-  token?: string;
+  token?: DeferredCliValue;
   version?: string;
+};
+
+export type PublishRuntime = {
+  envContext: AukletEnvContext;
 };
 
 export type OwnerOptions = {

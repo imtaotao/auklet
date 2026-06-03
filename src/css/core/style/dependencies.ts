@@ -21,10 +21,6 @@ export function getGlobalStyleDependencies(config: NormalizedAukletConfig) {
   return dependencies;
 }
 
-export function getExternalStyleDependencies(config: NormalizedAukletConfig) {
-  return getGlobalStyleDependencies(config);
-}
-
 export function getThemeStyleDependencies(
   config: NormalizedAukletConfig,
   themeName: string,

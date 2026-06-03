@@ -3,6 +3,8 @@ import {
   aukletCliConfigOverridesEnv,
   encodeAukletCliConfigOverrides,
 } from '#auklet/build/cliOverrides';
+import { resolveCliBoolean, resolveCliValue } from '#auklet/cli/values';
+import { AukletEnvContext } from '#auklet/env';
 import type {
   AukletConfig,
   PackageBuildFormat,
@@ -16,7 +18,10 @@ const hasAukletConfig = (config: AukletConfig) => {
   return Object.keys(config).length > 0;
 };
 
-export function resolveBuildCliArgs(args: Array<string>) {
+export function resolveBuildCliArgs(
+  args: Array<string>,
+  envContext = new AukletEnvContext(process.cwd()),
+) {
   const remainingArgs: Array<string> = [];
   const config: AukletConfig = {};
 
@@ -25,19 +30,36 @@ export function resolveBuildCliArgs(args: Array<string>) {
     const [name, inlineValue] = arg.split('=', 2);
 
     if (name === '--source') {
-      config.source = getFlagValue(args, index, inlineValue, name);
+      config.source = getResolvedFlagValue(
+        args,
+        index,
+        inlineValue,
+        name,
+        envContext,
+      );
       if (inlineValue === undefined) index += 1;
       continue;
     }
 
     if (name === '--output') {
-      config.output = getFlagValue(args, index, inlineValue, name);
+      config.output = getResolvedFlagValue(
+        args,
+        index,
+        inlineValue,
+        name,
+        envContext,
+      );
       if (inlineValue === undefined) index += 1;
       continue;
     }
 
     if (name === '--modules') {
-      config.modules = true;
+      const value = getOptionalFlagValue(args, index, inlineValue);
+      config.modules =
+        value === undefined
+          ? true
+          : resolveCliBoolean(value, { label: name, context: envContext });
+      if (inlineValue === undefined && value !== undefined) index += 1;
       continue;
     }
 
@@ -50,7 +72,7 @@ export function resolveBuildCliArgs(args: Array<string>) {
       config.build = {
         ...config.build,
         formats: parseBuildFormats(
-          getFlagValue(args, index, inlineValue, name),
+          getResolvedFlagValue(args, index, inlineValue, name, envContext),
         ),
       };
       if (inlineValue === undefined) index += 1;
@@ -60,7 +82,13 @@ export function resolveBuildCliArgs(args: Array<string>) {
     if (name === '--build.target') {
       config.build = {
         ...config.build,
-        target: getFlagValue(args, index, inlineValue, name),
+        target: getResolvedFlagValue(
+          args,
+          index,
+          inlineValue,
+          name,
+          envContext,
+        ),
       };
       if (inlineValue === undefined) index += 1;
       continue;
@@ -70,7 +98,7 @@ export function resolveBuildCliArgs(args: Array<string>) {
       config.build = {
         ...config.build,
         platform: parseBuildPlatform(
-          getFlagValue(args, index, inlineValue, name),
+          getResolvedFlagValue(args, index, inlineValue, name, envContext),
         ),
       };
       if (inlineValue === undefined) index += 1;
@@ -80,7 +108,13 @@ export function resolveBuildCliArgs(args: Array<string>) {
     if (name === '--build.tsconfig') {
       config.build = {
         ...config.build,
-        tsconfig: getFlagValue(args, index, inlineValue, name),
+        tsconfig: getResolvedFlagValue(
+          args,
+          index,
+          inlineValue,
+          name,
+          envContext,
+        ),
       };
       if (inlineValue === undefined) index += 1;
       continue;
@@ -119,6 +153,31 @@ const getFlagValue = (
     throw new Error(`${flag} requires a value.`);
   }
   return value;
+};
+
+const getOptionalFlagValue = (
+  args: Array<string>,
+  index: number,
+  inlineValue: string | undefined,
+) => {
+  if (inlineValue !== undefined) return inlineValue;
+
+  const value = args[index + 1];
+  if (!value || value.startsWith('--')) return undefined;
+  return value;
+};
+
+const getResolvedFlagValue = (
+  args: Array<string>,
+  index: number,
+  inlineValue: string | undefined,
+  flag: string,
+  envContext: AukletEnvContext,
+) => {
+  return resolveCliValue(getFlagValue(args, index, inlineValue, flag), {
+    label: flag,
+    context: envContext,
+  })!;
 };
 
 const parseBuildFormats = (value: string) => {

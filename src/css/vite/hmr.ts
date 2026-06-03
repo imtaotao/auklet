@@ -8,7 +8,7 @@ import type {
 } from 'vite';
 import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { normalizeFileKey } from '#auklet/utils';
-import { createScopedAukletLogger } from '#auklet/logger';
+import { createAukletLogger } from '#auklet/logger';
 
 // package CSS 的 HMR 不能直接走 Vite 原生 CSS 文件链路：
 // 1. 浏览器 import 的是 auklet-css:* 虚拟 CSS 模块，不是真实的
@@ -22,7 +22,7 @@ type VirtualIdsByDependency = Map<string, Set<string>>;
 
 const FULL_RELOAD_SUPPRESS_MS = 100;
 const DUPLICATE_UPDATE_IGNORE_MS = 500;
-const logger = createScopedAukletLogger('css:vite');
+const logger = createAukletLogger({ scope: 'css:vite' });
 
 const toBrowserVirtualPath = (id: string) => {
   return `/@id/${id.replace('\0', '__x00__')}`;

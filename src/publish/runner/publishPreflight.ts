@@ -1,8 +1,8 @@
 import { PnpmPublishApi } from '#auklet/publish/api/pnpmPublishApi';
 import {
+  runPnpmWhoami,
   hasPublishedPackageVersion,
   NpmPackageVersionExistsError,
-  runPnpmWhoami,
 } from '#auklet/publish/api/pnpmApi';
 import {
   findNpmrcFiles,
@@ -11,12 +11,14 @@ import {
   validateNpmrcAuthEnv,
 } from '#auklet/publish/api/npmrc';
 import { getPublishRegistry } from '#auklet/publish/api/registry';
+import { createPublishTargetEnv } from '#auklet/publish/publishEnv';
 import { logAuthenticationError } from '#auklet/publish/runner/packagePublisher';
 import { PublishTargetError } from '#auklet/publish/runner/publishTargetError';
 import type { AukletLogger } from '#auklet/logger';
 import type {
   PublishOptions,
   PublishPlan,
+  PublishRuntime,
   PublishTarget,
 } from '#auklet/publish/types';
 
@@ -25,6 +27,7 @@ export class PublishPreflight {
 
   constructor(
     private readonly options: PublishOptions,
+    private readonly runtime: PublishRuntime,
     private readonly logger: AukletLogger,
   ) {}
 
@@ -42,8 +45,13 @@ export class PublishPreflight {
 
   private verifyNpmrcAuthEnv(plan: PublishPlan) {
     for (const target of plan.targets) {
+      const { env } = createPublishTargetEnv(
+        this.options,
+        this.runtime,
+        target,
+      );
       validateNpmrcAuthEnv(target.packageRoot, plan.root, {
-        token: this.options.token,
+        env,
       });
     }
   }
@@ -79,7 +87,7 @@ export class PublishPreflight {
       await runPnpmWhoami(target.packageRoot, {
         packageName: target.packageName,
         registry,
-        token: this.options.token,
+        ...createPublishTargetEnv(this.options, this.runtime, target),
       });
       checked.add(key);
     }
@@ -93,7 +101,7 @@ export class PublishPreflight {
 
     for (const target of plan.targets) {
       try {
-        await this.pnpm.publish(target, options);
+        await this.pnpm.publish(target, options, this.runtime);
       } catch (error) {
         logAuthenticationError(this.logger, error);
         throw new PublishTargetError(target, 'preflight', error, []);
@@ -108,7 +116,10 @@ export class PublishPreflight {
         target.packageRoot,
         target.packageName,
         target.publishVersion,
-        { registry, token: this.options.token },
+        {
+          registry,
+          ...createPublishTargetEnv(this.options, this.runtime, target),
+        },
       );
       if (!exists) continue;
 
@@ -148,9 +159,11 @@ function createMissingNpmrcAuthMessage(
   const authTarget = registry
     ? `${toNpmrcRegistryKey(registry)}:_authToken`
     : '_authToken';
+
   const registryHint = registry
     ? `[publish] ${target.packageName} uses publishConfig.registry: ${registry}.\n`
     : '';
+
   const location = npmrcFiles.length
     ? 'found npmrc files, but none declares'
     : 'could not find an npmrc file declaring';

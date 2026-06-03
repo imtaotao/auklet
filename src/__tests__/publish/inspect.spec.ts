@@ -121,11 +121,61 @@ describe('runInspectPublishCli', () => {
       runInspectPublishCli(['--dry-run', '--token', 'npm_secret']),
     ).resolves.toBe(0);
 
-    expect(ensurePnpmExists).toHaveBeenCalledWith({ token: 'npm_secret' });
+    expect(ensurePnpmExists).toHaveBeenCalledWith({
+      env: {
+        NODE_AUTH_TOKEN: 'npm_secret',
+        NPM_TOKEN: 'npm_secret',
+      },
+    });
     expect(inspectRegistry).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({
-        token: 'npm_secret',
+        token: expect.objectContaining({
+          raw: 'npm_secret',
+        }),
+      }),
+    );
+  });
+
+  test('passes the root env context as runtime state', async () => {
+    project.writeFile('dist/index.js', 'export {};\n');
+    resolvePlan.mockResolvedValue(
+      createPlan({
+        packageRoot: project.root,
+        packageJson: {
+          name: '@scope/ui',
+          version: '1.0.0',
+          exports: {
+            '.': './dist/index.js',
+          },
+        },
+      }),
+    );
+    inspectRegistry.mockResolvedValue([
+      {
+        packageName: '@scope/ui',
+        registry: 'default',
+        auth: 'success',
+        version: 'success',
+        reason: null,
+      },
+    ]);
+
+    await expect(runInspectPublishCli(['--dry-run'])).resolves.toBe(0);
+
+    expect(resolvePlan).toHaveBeenCalledWith(
+      expect.not.objectContaining({ envContext: expect.any(Object) }),
+      expect.objectContaining({
+        envContext: expect.any(Object),
+      }),
+      expect.any(Object),
+    );
+    expect(inspectRegistry).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        runtime: expect.objectContaining({
+          envContext: expect.any(Object),
+        }),
       }),
     );
   });

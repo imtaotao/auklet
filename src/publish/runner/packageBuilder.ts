@@ -1,8 +1,12 @@
 import { isString } from 'aidly';
-import type { PublishTarget } from '#auklet/publish/types';
 import { runPnpmBuild } from '#auklet/publish/api/pnpmApi';
+import { createPublishTargetEnv } from '#auklet/publish/publishEnv';
 import type { AukletLogger } from '#auklet/logger';
-import type { PublishOptions } from '#auklet/publish/types';
+import type {
+  PublishTarget,
+  PublishOptions,
+  PublishRuntime,
+} from '#auklet/publish/types';
 
 export function validateBuildScript(targets: Array<PublishTarget>) {
   for (const target of targets) {
@@ -18,12 +22,14 @@ export function validateBuildScript(targets: Array<PublishTarget>) {
 export async function runPackageBuilds(
   targets: Array<PublishTarget>,
   logger: AukletLogger,
-  options: Pick<PublishOptions, 'token'> = {},
+  options: Pick<PublishOptions, 'token'>,
+  runtime: PublishRuntime,
 ) {
   for (const target of targets) {
     logger.step('build ', logger.package(target.packageName));
-    if (options.token) {
-      await runPnpmBuild(target.packageRoot, { token: options.token });
+    const { env } = createPublishTargetEnv(options, runtime, target);
+    if (env) {
+      await runPnpmBuild(target.packageRoot, { env });
       continue;
     }
     await runPnpmBuild(target.packageRoot);

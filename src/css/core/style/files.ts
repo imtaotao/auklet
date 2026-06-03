@@ -19,7 +19,3 @@ export function groupStyleFilesByDir(
 export function createStyleFileKeySet(styleFiles: Iterable<string>) {
   return new Set(Array.from(styleFiles, normalizeFileKey));
 }
-
-export function createStyleFileKey(styleFile: string) {
-  return normalizeFileKey(styleFile);
-}

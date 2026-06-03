@@ -1,16 +1,27 @@
 import { execa } from 'execa';
 import { createTsdownArgs } from '#auklet/build/runTsdown';
 import { createBuildEnv, resolveBuildCliArgs } from '#auklet/cli/buildArgs';
+import { AukletEnvContext } from '#auklet/env';
 import {
   resolveBuildCssConfig,
   startBuildCssWatch,
 } from '#auklet/cli/buildCss';
 
 export async function runDev(args: Array<string>) {
+  const envContext = new AukletEnvContext(process.cwd());
+  return envContext.run(async () => runDevWithEnv(args, envContext));
+}
+
+const runDevWithEnv = async (
+  args: Array<string>,
+  envContext: AukletEnvContext,
+) => {
   let closed = false;
   let jsProcess: ReturnType<typeof execa> | null = null;
-  const buildArgs = resolveBuildCliArgs(args);
-  const { aukletConfig } = await resolveBuildCssConfig(['--watch', ...args]);
+  const buildArgs = resolveBuildCliArgs(args, envContext);
+  const { aukletConfig } = await resolveBuildCssConfig(['--watch', ...args], {
+    envContext,
+  });
   const cssWatcher = await startBuildCssWatch(aukletConfig);
 
   const close = async () => {
@@ -32,7 +43,10 @@ export async function runDev(args: Array<string>) {
       createTsdownArgs([...buildArgs.args, '--watch']),
       {
         cwd: process.cwd(),
-        env: createBuildEnv(buildArgs.config),
+        env: {
+          ...envContext.values,
+          ...createBuildEnv(buildArgs.config),
+        },
         stdio: 'inherit',
         reject: false,
       },
@@ -45,4 +59,4 @@ export async function runDev(args: Array<string>) {
     process.off('SIGTERM', closeAndExit);
     await close();
   }
-}
+};

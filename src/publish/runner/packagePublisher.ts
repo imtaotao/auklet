@@ -5,6 +5,7 @@ import type { AukletLogger } from '#auklet/logger';
 import type {
   PublishOptions,
   PublishPlan,
+  PublishRuntime,
   PublishTarget,
 } from '#auklet/publish/types';
 
@@ -13,6 +14,7 @@ export class PackagePublisher {
 
   constructor(
     private readonly options: PublishOptions,
+    private readonly runtime: PublishRuntime,
     private readonly logger: AukletLogger,
   ) {}
 
@@ -21,7 +23,7 @@ export class PackagePublisher {
 
     for (const target of plan.targets) {
       try {
-        await this.pnpm.publish(target, this.options);
+        await this.pnpm.publish(target, this.options, this.runtime);
         publishedTargets.push(target);
       } catch (error) {
         logAuthenticationError(this.logger, error);

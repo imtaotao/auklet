@@ -3,15 +3,12 @@ import path from 'node:path';
 import { ModuleStyleImportCollector } from '#auklet/css/core/styleImports/collector';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
-import {
-  createStyleFileKey,
-  createStyleFileKeySet,
-} from '#auklet/css/core/style/files';
+import { createStyleFileKeySet } from '#auklet/css/core/style/files';
 import {
   getThemeNames,
   resolveThemeStyleFiles,
 } from '#auklet/css/core/style/dependencies';
-import { fileWalker } from '#auklet/utils';
+import { fileWalker, normalizeFileKey } from '#auklet/utils';
 import type {
   ModuleStyleBuildConfig,
   NormalizedAukletConfig,
@@ -66,6 +63,6 @@ export class StylePackageContext {
       .filter((file) =>
         this.options.config.styleExtensions.includes(path.extname(file)),
       )
-      .filter((styleFile) => !themeFileKeys.has(createStyleFileKey(styleFile)));
+      .filter((styleFile) => !themeFileKeys.has(normalizeFileKey(styleFile)));
   }
 }

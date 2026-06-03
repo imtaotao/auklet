@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isArray, isPlainObject, isString } from 'aidly';
+import { AukletEnvContext } from '#auklet/env';
 import { createAukletLogger } from '#auklet/logger';
+import { findWorkspaceRoot } from '#auklet/workspace/root';
 import { resolvePublishPlan } from '#auklet/publish/targetResolver';
 import type { PackageJson, PublishTarget } from '#auklet/publish/types';
 
@@ -16,15 +18,20 @@ export type PackFileCheck = {
 
 export async function runInspectPackCli(args: Array<string>) {
   const options = resolveInspectPackOptions(args);
+  const root = findWorkspaceRoot(options.cwd) ?? options.cwd;
+  const envContext = new AukletEnvContext(options.cwd, root);
   const logger = createAukletLogger({ scope: 'inspect' });
-  const plan = await resolvePublishPlan(
-    {
-      cwd: options.cwd,
-      filters: options.filters,
-      dryRun: true,
-      version: undefined,
-    },
-    logger,
+  const plan = await envContext.run(() =>
+    resolvePublishPlan(
+      {
+        cwd: options.cwd,
+        filters: options.filters,
+        dryRun: true,
+        version: undefined,
+      },
+      { envContext },
+      logger,
+    ),
   );
 
   const checks = inspectPackageFiles(plan.targets);

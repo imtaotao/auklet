@@ -39,6 +39,7 @@ src/
 ├── types.ts              # User config, internal config, and build context types
 ├── config.ts             # Defaults and config normalization
 ├── configLoader.ts       # Loads auklet.config.js / auklet.config.mjs
+├── env.ts                # Loads .env files and resolves env-backed CLI values
 ├── cli/                  # CLI command registration and command runners
 ├── utils.ts              # Shared path and file utilities
 ├── workspace/            # Shared pnpm workspace discovery helpers
@@ -113,13 +114,18 @@ src/cli/
 ├── dev.ts                # dev command process orchestration
 ├── inspect.ts            # inspect subcommand dispatch
 ├── publish.ts            # publish and owner command orchestration
-└── buildArgs.ts          # auklet build override parsing and validation
+├── buildArgs.ts          # auklet build override parsing and validation
+└── values.ts             # CLI value resolution and deferred target-scoped values
 ```
 
 `bin/entry.mjs` should stay a bootstrap file that imports the built public API.
 `src/cli/main.ts` owns command registration, while command-specific business
 logic should live in the dedicated runner files above. `src/cli/publish.ts` is
 only top-level CLI glue; publish argument parsing lives in `src/publish/cli.ts`.
+Environment loading is owned by `src/env.ts`. String and boolean CLI values that
+support `env:NAME` should resolve through `src/cli/values.ts`; target-scoped
+values such as publish tokens should use deferred CLI values and resolve against
+the target package's `AukletEnvContext`.
 
 ## Build Flow
 

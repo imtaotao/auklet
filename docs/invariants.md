@@ -33,6 +33,25 @@ the same change and make the reason explicit.
 - Command-specific orchestration belongs in dedicated `src/cli/*` runners.
 - Domain logic belongs in its domain package, such as `src/publish/*` or
   `src/css/*`, not in CLI glue.
+- CLI values that support `env:NAME` should resolve through `src/cli/values.ts`
+  and `AukletEnvContext`, not ad hoc per-flag logic.
+- Target-scoped CLI values must stay deferred until the target package context
+  is known.
+
+## Environment Boundary
+
+- Environment loading belongs in `src/env.ts`.
+- Auklet loads `.env` and `.env.local`; `.env.local` has higher priority than
+  `.env` at the same root.
+- Environment priority:
+  1. `process.env`
+  2. target package `.env.local`
+  3. target package `.env`
+  4. root `.env.local`
+  5. root `.env`
+- Environment files provide process environment for config, user scripts,
+  npmrc expansion, and explicit `env:NAME` CLI references. They must not imply
+  publish credentials unless a CLI option explicitly references them.
 
 ## CSS Semantics Boundary
 

@@ -2,9 +2,8 @@ import {
   readPackageJson,
   writePackageJson,
 } from '#auklet/publish/api/packageJsonApi';
-import { createAukletLogger } from '#auklet/logger';
+import { createAukletLogger, type AukletLogger } from '#auklet/logger';
 import type { PublishOptions, PublishPlan } from '#auklet/publish/types';
-import type { AukletLogger } from '#auklet/logger';
 
 export class VersionWriter {
   constructor(

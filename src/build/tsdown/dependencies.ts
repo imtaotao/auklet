@@ -1,9 +1,9 @@
 import { parseModuleId } from 'conditional-export';
-import { createScopedAukletLogger } from '#auklet/logger';
+import { createAukletLogger } from '#auklet/logger';
 import type { PackageBuildOptions } from '#auklet/types';
 import type { BuildContext, PackageJsonLike } from '#auklet/build/tsdown/types';
 
-const logger = createScopedAukletLogger('build');
+const logger = createAukletLogger({ scope: 'build' });
 
 const getExternal = (names: Array<string>) => {
   const external = new Set<string>();

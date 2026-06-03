@@ -98,12 +98,30 @@ Real publish uses `stdio: inherit` for `pnpm publish` so npm browser
 authentication and ENTER prompts stay attached to the user's terminal. Dry-run
 publish uses piped output so auklet can inspect npm authentication errors.
 
-`--token` sets `NODE_AUTH_TOKEN` and `NPM_TOKEN` for publish subprocesses. It
-does not write npm config and is never forwarded as a pnpm command argument. If
-`--token` is used, auklet requires an npmrc file between the target package and
-publish root with `_authToken` configured. When a target package declares
-`package.json#publishConfig.registry`, the npmrc auth token key must match that
-registry, for example:
+Build and publish commands load `.env` and `.env.local` files by default.
+Publish reads root env files before target package env files, and local env
+files override normal env files. Shell environment values keep the highest
+priority:
+
+1. `process.env`
+2. target package `.env.local`
+3. target package `.env`
+4. root `.env.local`
+5. root `.env`
+
+Environment files provide process environment for user scripts, npmrc
+expansion, and explicit `env:` option references. String CLI values can
+reference the loaded environment with `env:NAME`. Boolean CLI values also support explicit
+`env:NAME` values such as `--dry-run=env:AUKLET_DRY_RUN`; auklet does not infer
+publish credentials from environment files unless the user opts in.
+
+`--token <value>` sets `NODE_AUTH_TOKEN` and `NPM_TOKEN` for publish
+subprocesses. `--token env:NODE_AUTH_TOKEN` resolves the token from the loaded
+environment and keeps the token value out of the command line. The token is
+never forwarded as a pnpm command argument. If `--token` is used, auklet requires
+an npmrc file between the target package and publish root with `_authToken`
+configured. When a target package declares `package.json#publishConfig.registry`,
+the npmrc auth token key must match that registry, for example:
 
 ```ini
 //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}

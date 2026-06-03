@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export type NpmrcAuthEnvOptions = {
-  token?: string;
+  env?: Record<string, string | undefined>;
 };
 
 export function findNpmrcWithAuthToken(
@@ -107,10 +107,8 @@ const getNpmrcAuthLines = (content: string) => {
 };
 
 const createAvailableAuthEnv = (options: NpmrcAuthEnvOptions) => {
-  if (!options.token) return process.env;
   return {
     ...process.env,
-    NODE_AUTH_TOKEN: options.token,
-    NPM_TOKEN: options.token,
+    ...options.env,
   };
 };

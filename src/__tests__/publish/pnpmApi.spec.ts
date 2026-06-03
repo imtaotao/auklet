@@ -21,14 +21,19 @@ describe('ensurePnpm', () => {
     vi.restoreAllMocks();
   });
 
-  test('passes npm token to pnpm version checks', async () => {
+  test('passes env to pnpm version checks', async () => {
     run.mockResolvedValueOnce({
       exitCode: 0,
       stdout: '10.0.0',
       stderr: '',
     } as never);
 
-    await ensurePnpm({ token: 'npm_secret' });
+    await ensurePnpm({
+      env: {
+        NODE_AUTH_TOKEN: 'npm_secret',
+        NPM_TOKEN: 'npm_secret',
+      },
+    });
 
     expect(run).toHaveBeenCalledWith(
       'pnpm',
@@ -88,7 +93,7 @@ describe('runPnpmPublish', () => {
     );
   });
 
-  test('passes npm token through the child process environment', async () => {
+  test('passes env through the publish child process', async () => {
     run.mockResolvedValueOnce({
       exitCode: 0,
       stdout: '',
@@ -96,7 +101,10 @@ describe('runPnpmPublish', () => {
     } as never);
 
     await runPnpmPublish(process.cwd(), ['--no-git-checks'], {
-      token: 'npm_secret',
+      env: {
+        NODE_AUTH_TOKEN: 'npm_secret',
+        NPM_TOKEN: 'npm_secret',
+      },
     });
 
     expect(run).toHaveBeenCalledWith(
@@ -117,14 +125,19 @@ describe('runPnpmBuild', () => {
     vi.restoreAllMocks();
   });
 
-  test('passes npm token to package build subprocesses', async () => {
+  test('passes env to package build subprocesses', async () => {
     run.mockResolvedValueOnce({
       exitCode: 0,
       stdout: '',
       stderr: '',
     } as never);
 
-    await runPnpmBuild('/repo/packages/ui', { token: 'npm_secret' });
+    await runPnpmBuild('/repo/packages/ui', {
+      env: {
+        NODE_AUTH_TOKEN: 'npm_secret',
+        NPM_TOKEN: 'npm_secret',
+      },
+    });
 
     expect(run).toHaveBeenCalledWith(
       'pnpm',
@@ -187,7 +200,7 @@ describe('hasPublishedPackageVersion', () => {
     ).resolves.toBe(false);
   });
 
-  test('passes npm token to version existence checks', async () => {
+  test('passes env to version existence checks', async () => {
     run.mockResolvedValueOnce({
       exitCode: 0,
       stdout: '1.0.1',
@@ -199,7 +212,10 @@ describe('hasPublishedPackageVersion', () => {
       '@scope/ui',
       '1.0.1',
       {
-        token: 'npm_secret',
+        env: {
+          NODE_AUTH_TOKEN: 'npm_secret',
+          NPM_TOKEN: 'npm_secret',
+        },
       },
     );
 
@@ -276,7 +292,7 @@ describe('withPnpmTimeout', () => {
     );
   });
 
-  test('passes npm token to whoami checks', async () => {
+  test('passes env to whoami checks', async () => {
     run.mockResolvedValueOnce({
       exitCode: 0,
       stdout: 'publisher',
@@ -285,7 +301,10 @@ describe('withPnpmTimeout', () => {
 
     await runPnpmWhoami('/repo/packages/ui', {
       packageName: '@scope/ui',
-      token: 'npm_secret',
+      env: {
+        NODE_AUTH_TOKEN: 'npm_secret',
+        NPM_TOKEN: 'npm_secret',
+      },
     });
 
     expect(run).toHaveBeenCalledWith(

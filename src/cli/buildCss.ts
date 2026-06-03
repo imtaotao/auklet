@@ -1,6 +1,7 @@
 import { createAukletLogger } from '#auklet/logger';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { resolveBuildCliArgs } from '#auklet/cli/buildArgs';
+import { AukletEnvContext } from '#auklet/env';
 import { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
 import { mergeAukletConfigOverrides } from '#auklet/build/cliOverrides';
@@ -11,9 +12,10 @@ export async function resolveBuildCssConfig(
   args: Array<string>,
   options: {
     aukletConfig?: AukletConfig;
+    envContext?: AukletEnvContext;
   } = {},
 ) {
-  const buildArgs = resolveBuildCliArgs(args);
+  const buildArgs = resolveBuildCliArgs(args, options.envContext);
   const shouldWatch =
     buildArgs.args.includes('--watch') || buildArgs.args.includes('-w');
 
@@ -49,31 +51,34 @@ export async function runBuildCss(
     aukletConfig?: AukletConfig;
   } = {},
 ) {
-  const logger = createAukletLogger();
-  const { aukletConfig, shouldWatch } = await resolveBuildCssConfig(
-    args,
-    options,
-  );
+  const envContext = new AukletEnvContext(process.cwd());
+  return envContext.run(async () => {
+    const logger = createAukletLogger();
+    const { aukletConfig, shouldWatch } = await resolveBuildCssConfig(args, {
+      ...options,
+      envContext,
+    });
 
-  if (shouldWatch) {
-    const watcher = await startBuildCssWatch(aukletConfig);
-    const close = () => {
-      watcher
-        .close()
-        .catch(console.error)
-        .finally(() => process.exit(0));
-    };
-    process.once('SIGINT', close);
-    process.once('SIGTERM', close);
-    await new Promise(() => {});
+    if (shouldWatch) {
+      const watcher = await startBuildCssWatch(aukletConfig);
+      const close = () => {
+        watcher
+          .close()
+          .catch(console.error)
+          .finally(() => process.exit(0));
+      };
+      process.once('SIGINT', close);
+      process.once('SIGTERM', close);
+      await new Promise(() => {});
+      return 0;
+    }
+
+    const builder = new ModuleStyleBuilder({ aukletConfig });
+    await logger.group('Build CSS', async () => {
+      const timer = logger.timer();
+      const result = await builder.build();
+      logModuleStyleBuildResult(logger.child('css'), result, timer.elapsed());
+    });
     return 0;
-  }
-
-  const builder = new ModuleStyleBuilder({ aukletConfig });
-  await logger.group('Build CSS', async () => {
-    const timer = logger.timer();
-    const result = await builder.build();
-    logModuleStyleBuildResult(logger.child('css'), result, timer.elapsed());
   });
-  return 0;
 }

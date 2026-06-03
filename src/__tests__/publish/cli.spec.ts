@@ -25,6 +25,15 @@ const ensurePnpmExists = vi.mocked(ensurePnpm);
 const createOwnerRunner = vi.mocked(OwnerRunner);
 const createPublishRunner = vi.mocked(PublishRunner);
 
+const expectPublishRunnerOptions = (options: object) => {
+  expect(createPublishRunner).toHaveBeenCalledWith(
+    expect.objectContaining(options),
+    expect.objectContaining({
+      envContext: expect.any(Object),
+    }),
+  );
+};
+
 describe('runPublishCli', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -41,45 +50,61 @@ describe('runPublishCli', () => {
     ]);
 
     expect(ensurePnpmExists).toHaveBeenCalled();
-    expect(createPublishRunner).toHaveBeenCalledWith(
-      expect.objectContaining({
-        version: 'patch',
-        allowDirty: true,
-        format: true,
-        filters: ['@scope/*'],
-      }),
-    );
+    expectPublishRunnerOptions({
+      version: 'patch',
+      allowDirty: true,
+      format: true,
+      filters: ['@scope/*'],
+    });
   });
 
   test('passes --no-format as the publish output format switch', async () => {
     await runPublishCli(['--no-format']);
 
-    expect(createPublishRunner).toHaveBeenCalledWith(
-      expect.objectContaining({
-        format: false,
-      }),
-    );
+    expectPublishRunnerOptions({
+      format: false,
+    });
   });
 
   test('passes --no-git as the publish release git switch', async () => {
     await runPublishCli(['--no-git']);
 
-    expect(createPublishRunner).toHaveBeenCalledWith(
-      expect.objectContaining({
-        git: false,
-      }),
-    );
+    expectPublishRunnerOptions({
+      git: false,
+    });
+  });
+
+  test('resolves env values for publish boolean flags after loading .env', async () => {
+    const project = createVirtualProject();
+    project.writeFile('.env', 'AUKLET_DRY_RUN=true\n');
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(project.root);
+
+    try {
+      await runPublishCli(['--dry-run=env:AUKLET_DRY_RUN']);
+    } finally {
+      cwd.mockRestore();
+      project.cleanup();
+    }
+
+    expectPublishRunnerOptions({
+      dryRun: true,
+    });
   });
 
   test('passes npm token as a publish option', async () => {
     await runPublishCli(['--token', 'npm_secret']);
 
-    expect(ensurePnpmExists).toHaveBeenCalledWith({ token: 'npm_secret' });
-    expect(createPublishRunner).toHaveBeenCalledWith(
-      expect.objectContaining({
-        token: 'npm_secret',
+    expect(ensurePnpmExists).toHaveBeenCalledWith({
+      env: {
+        NODE_AUTH_TOKEN: 'npm_secret',
+        NPM_TOKEN: 'npm_secret',
+      },
+    });
+    expectPublishRunnerOptions({
+      token: expect.objectContaining({
+        raw: 'npm_secret',
       }),
-    );
+    });
   });
 
   test('rejects unknown --no-prefixed flags', async () => {

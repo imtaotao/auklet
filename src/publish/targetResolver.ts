@@ -1,7 +1,8 @@
 import path from 'node:path';
 import semver from 'semver';
-import { createScopedAukletLogger, type AukletLogger } from '#auklet/logger';
 import { findWorkspaceRoot } from '#auklet/workspace/root';
+import { createPublishRootEnv } from '#auklet/publish/publishEnv';
+import { createAukletLogger, type AukletLogger } from '#auklet/logger';
 import {
   getPublishConfig,
   readPackageJson,
@@ -14,6 +15,7 @@ import type {
   PackageJson,
   PublishOptions,
   PublishPlan,
+  PublishRuntime,
   PublishTarget,
   WorkspacePackage,
 } from '#auklet/publish/types';
@@ -34,10 +36,11 @@ type ResolveOwnerTargetsOptions = Pick<
 
 export async function resolvePublishPlan(
   options: ResolvePublishTargetsOptions,
-  logger: AukletLogger = createScopedAukletLogger('publish'),
+  runtime: PublishRuntime,
+  logger: AukletLogger = createAukletLogger({ scope: 'publish' }),
 ) {
   if (options.filters.length) {
-    return resolveMonorepoPublishPlan(options, logger);
+    return resolveMonorepoPublishPlan(options, runtime, logger);
   }
   return resolveCurrentPackagePublishPlan(options);
 }
@@ -107,13 +110,20 @@ const resolveCurrentPackagePublishPlan = async (
 
 const resolveMonorepoPublishPlan = async (
   options: ResolvePublishTargetsOptions,
+  runtime: PublishRuntime,
   logger: AukletLogger,
 ): Promise<PublishPlan> => {
   const root = requireWorkspaceRoot(options.cwd);
   const rootPackageJson = readPackageJson(root);
   const rootVersion = requirePackageVersion(root, rootPackageJson);
+  const { env } = createPublishRootEnv(
+    {
+      token: options.token,
+    },
+    runtime,
+  );
   const workspacePackages = await readPnpmWorkspacePackages(root, {
-    token: options.token,
+    env,
   });
   const selectedPackages = filterWorkspacePackages(
     workspacePackages,

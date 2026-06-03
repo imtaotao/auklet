@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { readPnpmWorkspacePackages } from '#auklet/publish/api/pnpmApi';
+import { AukletEnvContext } from '#auklet/env';
 import {
   resolveOwnerPackageNames,
   resolvePublishPlan,
@@ -23,6 +24,14 @@ const getConsoleMessages = (spy: {
   mock: { calls: Array<Array<unknown>> };
 }) => {
   return spy.mock.calls.map(([message]) => stripAnsi(String(message)));
+};
+
+type ResolvePublishPlanOptions = Parameters<typeof resolvePublishPlan>[0];
+
+const resolveTestPublishPlan = (options: ResolvePublishPlanOptions) => {
+  return resolvePublishPlan(options, {
+    envContext: new AukletEnvContext(options.cwd),
+  });
 };
 
 describe('resolvePublishPlan', () => {
@@ -50,7 +59,7 @@ describe('resolvePublishPlan', () => {
     ]);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/*'],
         dryRun: false,
@@ -65,7 +74,7 @@ describe('resolvePublishPlan', () => {
     writeWorkspacePackage('ui', '1.0.0');
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: packageRoot,
         filters: [],
         dryRun: false,
@@ -85,7 +94,7 @@ describe('resolvePublishPlan', () => {
 
   test('rejects publishing the private monorepo root without filters', async () => {
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: [],
         dryRun: false,
@@ -102,7 +111,7 @@ describe('resolvePublishPlan', () => {
     ]);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/*'],
         version: 'patch',
@@ -133,7 +142,7 @@ describe('resolvePublishPlan', () => {
     ]);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/*'],
         version: 'patch',
@@ -164,7 +173,7 @@ describe('resolvePublishPlan', () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/*'],
         dryRun: false,
@@ -186,7 +195,7 @@ describe('resolvePublishPlan', () => {
     const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/root'],
         dryRun: false,
@@ -214,7 +223,7 @@ describe('resolvePublishPlan', () => {
     ]);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/*'],
         dryRun: false,
@@ -241,7 +250,7 @@ describe('resolvePublishPlan', () => {
     ]);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/*'],
         dryRun: false,
@@ -268,7 +277,7 @@ describe('resolvePublishPlan', () => {
     ]);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/*'],
         dryRun: false,
@@ -295,7 +304,7 @@ describe('resolvePublishPlan', () => {
     ]);
 
     await expect(
-      resolvePublishPlan({
+      resolveTestPublishPlan({
         cwd: project.root,
         filters: ['@scope/*'],
         dryRun: false,

@@ -163,8 +163,25 @@ package directory. Package-local `.npmrc` files and
 `package.json#publishConfig.registry` are respected.
 `--otp` is forwarded to `pnpm publish` for npm accounts or organizations that
 require publish 2FA, and to `pnpm owner add` for owner management 2FA.
-`--token` sets `NODE_AUTH_TOKEN` and `NPM_TOKEN` for publish subprocesses. The
-token still needs npmrc auth config, for example:
+Build and publish commands load `.env` and `.env.local` files by default. In
+monorepos, root env files are loaded before target package env files, and local
+env files override normal env files. Shell environment values keep the highest
+priority:
+
+1. `process.env`
+2. target package `.env.local`
+3. target package `.env`
+4. root `.env.local`
+5. root `.env`
+
+String CLI values can reference the loaded environment with `env:NAME`, for
+example `auk build --source env:AUKLET_SOURCE`. Boolean CLI values also support
+`env:NAME` when passed explicitly, for example
+`auk publish --dry-run=env:AUKLET_DRY_RUN`.
+`--token <value>` sets `NODE_AUTH_TOKEN` and `NPM_TOKEN` for publish
+subprocesses. Use `--token env:NODE_AUTH_TOKEN` to read the token from the
+loaded environment instead of putting the token value in the command.
+The token still needs npmrc auth config, for example:
 
 ```ini
 //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}

@@ -1,10 +1,15 @@
 import { retry } from 'aidly';
 import { getPublishRegistry } from '#auklet/publish/api/registry';
 import {
-  hasPublishedPackageVersion,
   runPnpmWhoami,
+  hasPublishedPackageVersion,
 } from '#auklet/publish/api/pnpmApi';
-import type { PublishOptions, PublishPlan } from '#auklet/publish/types';
+import { createPublishTargetEnv } from '#auklet/publish/publishEnv';
+import type {
+  PublishOptions,
+  PublishPlan,
+  PublishRuntime,
+} from '#auklet/publish/types';
 
 const registryCheckTimeout = 5_000;
 const registryCheckRetryTimes = 2;
@@ -35,13 +40,14 @@ export type PublishRegistryCheckInfo = Pick<
 
 export type InspectPublishRegistryOptions = {
   token?: PublishOptions['token'];
+  runtime: PublishRuntime;
   onCheck?: (info: PublishRegistryCheckInfo) => void;
   onRetry?: (info: PublishRegistryRetryInfo) => void;
 };
 
 export async function inspectPublishRegistry(
   plan: PublishPlan,
-  options: InspectPublishRegistryOptions = {},
+  options: InspectPublishRegistryOptions,
 ) {
   const authResults = new Map<string, Error | null>();
   const checks: Array<PublishRegistryCheck> = [];
@@ -90,6 +96,9 @@ const checkAuth = async (
   registry: string | undefined,
   options: InspectPublishRegistryOptions,
 ) => {
+  const { env } = createPublishTargetEnv(options, options.runtime, {
+    packageRoot,
+  });
   try {
     options.onCheck?.({
       packageName,
@@ -101,7 +110,7 @@ const checkAuth = async (
         runPnpmWhoami(packageRoot, {
           packageName,
           registry,
-          token: options.token,
+          env,
           timeout: registryCheckTimeout,
         }),
       {
@@ -127,6 +136,9 @@ const checkVersion = async (
   registry: string | undefined,
   options: InspectPublishRegistryOptions,
 ) => {
+  const { env } = createPublishTargetEnv(options, options.runtime, {
+    packageRoot,
+  });
   try {
     options.onCheck?.({
       packageName,
@@ -137,7 +149,7 @@ const checkVersion = async (
       () =>
         hasPublishedPackageVersion(packageRoot, packageName, version, {
           registry,
-          token: options.token,
+          env,
           timeout: registryCheckTimeout,
         }),
       {

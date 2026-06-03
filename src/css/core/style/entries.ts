@@ -1,5 +1,4 @@
 import {
-  getExternalStyleDependencies,
   getGlobalStyleDependencies,
   getThemeNames,
   getThemeStyleDependencies,
@@ -50,7 +49,7 @@ export function createThemeEntryParts(
 
 export function createExternalEntryParts(config: NormalizedAukletConfig) {
   return [
-    dependenciesPart(getExternalStyleDependencies(config)),
+    dependenciesPart(getGlobalStyleDependencies(config)),
   ] satisfies Array<ExternalEntryPart>;
 }
 
