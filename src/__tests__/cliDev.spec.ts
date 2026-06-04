@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => {
     output: 'dist',
     source: 'src',
   });
-  const resolveWorkspaceBuildTargets = vi.fn();
+  const resolveWorkspaceScriptTargets = vi.fn();
 
   return {
     createCssWatcher,
@@ -37,7 +37,7 @@ const mocks = vi.hoisted(() => {
     execa,
     jsKill,
     loadAukletConfig,
-    resolveWorkspaceBuildTargets,
+    resolveWorkspaceScriptTargets,
   };
 });
 
@@ -53,12 +53,12 @@ vi.mock('#auklet/css/watch/watcher', () => ({
   ModuleStyleWatcher: mocks.createCssWatcher,
 }));
 
-vi.mock('#auklet/cli/buildWorkspace', () => ({
+vi.mock('#auklet/cli/workspaceScripts', () => ({
   getWorkspacePackageScript: (
     packageJson: { scripts?: Record<string, string> },
     name: string,
   ) => packageJson.scripts?.[name] ?? null,
-  resolveWorkspaceBuildTargets: mocks.resolveWorkspaceBuildTargets,
+  resolveWorkspaceScriptTargets: mocks.resolveWorkspaceScriptTargets,
 }));
 
 vi.mock('#auklet/logger', () => ({
@@ -89,7 +89,7 @@ describe('runDev', () => {
     mocks.execa.mockClear();
     mocks.jsKill.mockClear();
     mocks.loadAukletConfig.mockClear();
-    mocks.resolveWorkspaceBuildTargets.mockClear();
+    mocks.resolveWorkspaceScriptTargets.mockClear();
   });
 
   test('passes build overrides to JavaScript watch env and CSS watcher config', async () => {
@@ -157,7 +157,7 @@ describe('runDev', () => {
   });
 
   test('runs package dev scripts for filtered workspace packages', async () => {
-    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+    mocks.resolveWorkspaceScriptTargets.mockResolvedValue([
       {
         packageName: '@scope/theme',
         packageRoot: '/repo/packages/theme',
@@ -182,11 +182,13 @@ describe('runDev', () => {
       parseTestDevCommand(['--filter', '*', '--private', '--source', 'source']),
     );
 
-    expect(mocks.resolveWorkspaceBuildTargets).toHaveBeenCalledWith(
+    expect(mocks.resolveWorkspaceScriptTargets).toHaveBeenCalledWith(
       process.cwd(),
       ['*'],
       expect.anything(),
       {
+        scope: 'dev',
+        emptyTargetMessage: '[dev] no dev workspace package found.',
         includeDependencies: false,
         includePrivate: true,
       },
@@ -218,7 +220,7 @@ describe('runDev', () => {
   });
 
   test('uses deps as workspace dev target selector option', async () => {
-    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+    mocks.resolveWorkspaceScriptTargets.mockResolvedValue([
       {
         packageName: '@scope/ui',
         packageRoot: '/repo/packages/ui',
@@ -240,11 +242,13 @@ describe('runDev', () => {
       ]),
     );
 
-    expect(mocks.resolveWorkspaceBuildTargets).toHaveBeenCalledWith(
+    expect(mocks.resolveWorkspaceScriptTargets).toHaveBeenCalledWith(
       process.cwd(),
       ['@scope/ui'],
       expect.anything(),
       {
+        scope: 'dev',
+        emptyTargetMessage: '[dev] no dev workspace package found.',
         includeDependencies: true,
         includePrivate: false,
       },
@@ -262,12 +266,12 @@ describe('runDev', () => {
     await expect(runDev(parseTestDevCommand(['--deps']))).rejects.toThrow(
       '--deps requires --filter or --workspace',
     );
-    expect(mocks.resolveWorkspaceBuildTargets).not.toHaveBeenCalled();
+    expect(mocks.resolveWorkspaceScriptTargets).not.toHaveBeenCalled();
     expect(mocks.execa).not.toHaveBeenCalled();
   });
 
   test('uses package dev scripts for workspace dev targets', async () => {
-    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+    mocks.resolveWorkspaceScriptTargets.mockResolvedValue([
       {
         packageName: '@scope/app',
         packageRoot: '/repo/packages/app',
@@ -295,7 +299,7 @@ describe('runDev', () => {
   });
 
   test('rejects workspace dev targets without dev scripts', async () => {
-    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+    mocks.resolveWorkspaceScriptTargets.mockResolvedValue([
       {
         packageName: '@scope/theme',
         packageRoot: '/repo/packages/theme',
@@ -331,7 +335,7 @@ describe('runDev', () => {
       }
     }
 
-    expect(mocks.resolveWorkspaceBuildTargets).not.toHaveBeenCalled();
+    expect(mocks.resolveWorkspaceScriptTargets).not.toHaveBeenCalled();
     expect(mocks.execa).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { AukletEnvContext } from '#auklet/env';
+import {
+  buildOverrideOptions,
+  inspectOptions,
+  workspaceOptions,
+} from '#auklet/cli/help';
 import { parseBuildOverrideArgs } from '#auklet/cli/parse/build';
 import { parseWorkspaceSelectionArgs } from '#auklet/cli/parse/workspace';
 
@@ -10,6 +15,25 @@ const parseBuildOverrides = (args: Array<string>) => {
 const parseWorkspaceSelection = (args: Array<string>) => {
   return parseWorkspaceSelectionArgs(args, new AukletEnvContext(process.cwd()));
 };
+
+const optionFlags = (options: ReadonlyArray<readonly [string, string]>) => {
+  return options.map(([flag]) => flag);
+};
+
+describe('cli help metadata', () => {
+  test('lists key build override and workspace flags', () => {
+    expect(optionFlags(buildOverrideOptions)).toContain('--source <dir>');
+    expect(optionFlags(workspaceOptions)).toContain('--private [value]');
+  });
+
+  test('lists inspect fallback flags from publish, pack, and css', () => {
+    const flags = optionFlags(inspectOptions);
+
+    expect(flags).toContain('--version <value>');
+    expect(flags).toContain('--filter <pattern>');
+    expect(flags).toContain('--source <dir>');
+  });
+});
 
 describe('parseBuildOverrideArgs', () => {
   test('extracts auklet config overrides and keeps non-auklet args', () => {

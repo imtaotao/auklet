@@ -117,9 +117,10 @@ always exclude the workspace root package.
 ```text
 src/cli/
 ├── main.ts               # Command registration and top-level error boundary
+├── help.ts               # CLI help metadata and CAC help formatting
 ├── build.ts              # build/build-js command orchestration
 ├── buildCss.ts           # build-css command orchestration and watch lifecycle
-├── buildWorkspace.ts     # filtered workspace build/dev target selection
+├── workspaceScripts.ts   # filtered workspace script target selection
 ├── dev.ts                # dev command process orchestration
 ├── inspect.ts            # inspect subcommand dispatch
 └── parse/                # command argv parsing and CLI value resolution

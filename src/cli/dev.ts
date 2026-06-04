@@ -7,8 +7,8 @@ import {
 } from '#auklet/cli/buildCss';
 import {
   getWorkspacePackageScript,
-  resolveWorkspaceBuildTargets,
-} from '#auklet/cli/buildWorkspace';
+  resolveWorkspaceScriptTargets,
+} from '#auklet/cli/workspaceScripts';
 import type { ModuleStyleWatcher } from '#auklet/css/watch/watcher';
 import type { DevCommandOptions } from '#auklet/cli/parse/dev';
 import type { AukletEnvContext } from '#auklet/env';
@@ -93,11 +93,13 @@ const runWorkspaceDev = async (options: {
 }) => {
   let closed = false;
   const handles: Array<DevTargetHandle> = [];
-  const targets = await resolveWorkspaceBuildTargets(
+  const targets = await resolveWorkspaceScriptTargets(
     options.cwd,
     options.filters,
     options.envContext,
     {
+      scope: 'dev',
+      emptyTargetMessage: '[dev] no dev workspace package found.',
       includeDependencies: options.includeDependencies,
       includePrivate: options.includePrivate,
     },

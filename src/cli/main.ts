@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cac, type Command } from 'cac';
+import { cac } from 'cac';
 import { AukletEnvContext } from '#auklet/env';
 import { createAukletLogger } from '#auklet/logger';
 import { runOwnerCli, runPublishCli } from '#auklet/publish/cli';
@@ -10,6 +10,11 @@ import { runInspect } from '#auklet/cli/inspect';
 import { runBuildCss } from '#auklet/cli/buildCss';
 import { parseDevCommand } from '#auklet/cli/parse/dev';
 import { runBuild, runBuildJs } from '#auklet/cli/build';
+import {
+  addCommandOptions,
+  commandHelpOptions,
+  createHelpFormatter,
+} from '#auklet/cli/help';
 import {
   parseBuildCommand,
   parseBuildCssCommand,
@@ -52,98 +57,15 @@ const createCommandContext = () => {
   };
 };
 
-const addBuildOverrideOptions = (command: Command) => {
-  return command
-    .option('--source <dir>', 'Source directory')
-    .option('--output <dir>', 'Output directory')
-    .option('--modules [value]', 'Enable unbundled module output')
-    .option('--no-modules', 'Disable unbundled module output')
-    .option(
-      '--build.formats <formats>',
-      'Comma-separated cjs, esm, and/or iife formats',
-    )
-    .option('--build.target <target>', 'JavaScript target passed to tsdown')
-    .option('--build.platform <platform>', 'node, neutral, or browser')
-    .option('--build.tsconfig <file>', 'TypeScript config file');
-};
-
-const addWorkspaceOptions = (command: Command) => {
-  return command
-    .option('--filter <pattern>', 'Select workspace packages by package name')
-    .option('--workspace', "Alias for --filter '*'")
-    .option('--private [value]', 'Include private workspace packages')
-    .option(
-      '--deps [value]',
-      "Include selected packages' workspace dependencies",
-    );
-};
-
-const addPublishOptions = (command: Command) => {
-  return command
-    .option('--filter <pattern>', 'Select workspace packages by package name')
-    .option('--workspace', "Alias for --filter '*'")
-    .option('--version <value>', 'Publish version or version bump')
-    .option(
-      '--dry-run [value]',
-      'Validate without writing git or registry state',
-    )
-    .option('--format [value]', 'Enable publish output formatter')
-    .option('--no-format', 'Disable publish output formatter')
-    .option('--git [value]', 'Create release commit and tag')
-    .option('--no-git', 'Skip release commit and tag')
-    .option('--allow-dirty [value]', 'Allow publishing from a dirty worktree')
-    .option('--ignore-scripts [value]', 'Skip publish lifecycle hooks')
-    .option('--otp <code>', 'Forward an npm 2FA one-time password')
-    .option(
-      '--token <value>',
-      'Set NODE_AUTH_TOKEN and NPM_TOKEN for subprocesses',
-    );
-};
-
-const createHelpFormatter = (cli: ReturnType<typeof cac>) => {
-  return (sections: Array<{ title?: string; body: string }>) => {
-    const command = cli.matchedCommand?.name;
-    return sections.map((section) => {
-      if (section.title !== 'Options') return section;
-
-      let body = section.body.replace(/\s+\(default: true\)/g, '');
-      if (!command) {
-        body = addHelpOptionLine(body, '  -v, --version  Print auklet version');
-      }
-      if (command === 'publish') {
-        body = addHelpOptionLine(
-          body,
-          '  --version <value>        Publish version or version bump',
-        );
-      }
-      if (command === 'inspect') {
-        body = addHelpOptionLine(
-          body,
-          '  --version <value>  Publish version or version bump',
-        );
-      }
-      return {
-        ...section,
-        body,
-      };
-    });
-  };
-};
-
-const addHelpOptionLine = (body: string, line: string) => {
-  if (body.includes(line.trimStart().split(/\s+/)[0]!)) return body;
-  const helpLinePattern = /^  -h, --help/m;
-  if (!helpLinePattern.test(body)) return `${body}\n${line}`;
-  return body.replace(helpLinePattern, `${line}\n  -h, --help`);
-};
-
 async function runCli(argv: Array<string>) {
   const cli = cac('auk');
 
-  addWorkspaceOptions(
-    addBuildOverrideOptions(
+  addCommandOptions(
+    addCommandOptions(
       cli.command('build [...args]', 'Build package JavaScript and CSS output'),
+      commandHelpOptions.buildOverrides,
     ),
+    commandHelpOptions.workspace,
   )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
@@ -156,11 +78,12 @@ async function runCli(argv: Array<string>) {
       }),
     );
 
-  addBuildOverrideOptions(
+  addCommandOptions(
     cli.command(
       'build-js [...args]',
       'Build package JavaScript output with tsdown',
     ),
+    commandHelpOptions.buildOverrides,
   )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
@@ -173,10 +96,11 @@ async function runCli(argv: Array<string>) {
       }),
     );
 
-  addBuildOverrideOptions(
+  addCommandOptions(
     cli
       .command('build-css [...args]', 'Build package module CSS output')
       .option('-w, --watch', 'Watch module CSS output'),
+    commandHelpOptions.buildOverrides,
   )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
@@ -189,10 +113,12 @@ async function runCli(argv: Array<string>) {
       }),
     );
 
-  addWorkspaceOptions(
-    addBuildOverrideOptions(
+  addCommandOptions(
+    addCommandOptions(
       cli.command('dev [...args]', 'Watch package JavaScript and CSS output'),
+      commandHelpOptions.buildOverrides,
     ),
+    commandHelpOptions.workspace,
   )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
@@ -203,11 +129,12 @@ async function runCli(argv: Array<string>) {
       }),
     );
 
-  addPublishOptions(
+  addCommandOptions(
     cli.command(
       'publish [...args]',
       'Build and publish package output with pnpm',
     ),
+    commandHelpOptions.publish,
   )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
@@ -215,60 +142,34 @@ async function runCli(argv: Array<string>) {
       runCliCommand(() => runPublishCli(getRawCommandArgs(argv, 'publish'))),
     );
 
-  cli
-    .command(
+  addCommandOptions(
+    cli.command(
       'owner add <user...>',
       'Add npm owners to the current package or selected packages',
-    )
-    .option('--filter <pattern>', 'Add owners to matching workspace packages')
-    .option('--package <name>', 'Add owners to explicit npm packages')
-    .option('--otp <code>', 'Forward an npm owner-management 2FA code')
+    ),
+    commandHelpOptions.owner,
+  )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
     .action(() =>
       runCliCommand(() => runOwnerCli(getRawCommandArgs(argv, 'owner'))),
     );
 
-  cli
-    .command('owner [...args]', 'Manage npm package owners with pnpm')
-    .usage('add <user...> [options]')
-    .option('--filter <pattern>', 'Add owners to matching workspace packages')
-    .option('--package <name>', 'Add owners to explicit npm packages')
-    .option('--otp <code>', 'Forward an npm owner-management 2FA code')
+  addCommandOptions(
+    cli
+      .command('owner [...args]', 'Manage npm package owners with pnpm')
+      .usage('add <user...> [options]'),
+    commandHelpOptions.owner,
+  )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
     .action(() =>
       runCliCommand(() => runOwnerCli(getRawCommandArgs(argv, 'owner'))),
     );
 
-  cli
-    .command('inspect publish [...args]', 'Check publish readiness')
-    .option('--filter <pattern>', 'Select workspace packages by package name')
-    .option('--workspace', "Alias for --filter '*'")
-    .option('--version <value>', 'Publish version or version bump')
-    .option('--dry-run [value]', 'Preview dry-run publish behavior')
-    .option('--otp <code>', 'Forward an npm 2FA one-time password')
-    .option(
-      '--token <value>',
-      'Set NODE_AUTH_TOKEN and NPM_TOKEN for subprocesses',
-    )
-    .ignoreOptionDefaultValue()
-    .allowUnknownOptions()
-    .action(() =>
-      runCliCommand(() => runInspect(getRawCommandArgs(argv, 'inspect'))),
-    );
-
-  cli
-    .command('inspect pack [...args]', 'Check package entry and export files')
-    .option('--filter <pattern>', 'Select workspace packages by package name')
-    .ignoreOptionDefaultValue()
-    .allowUnknownOptions()
-    .action(() =>
-      runCliCommand(() => runInspect(getRawCommandArgs(argv, 'inspect'))),
-    );
-
-  addBuildOverrideOptions(
-    cli.command('inspect css [...args]', 'Explain CSS output plans'),
+  addCommandOptions(
+    cli.command('inspect publish [...args]', 'Check publish readiness'),
+    commandHelpOptions.inspectPublish,
   )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
@@ -276,19 +177,35 @@ async function runCli(argv: Array<string>) {
       runCliCommand(() => runInspect(getRawCommandArgs(argv, 'inspect'))),
     );
 
-  cli
-    .command('inspect [...args]', 'Inspect auklet plans without side effects')
-    .usage('<publish|pack|css> [...args]')
-    .option('--filter <pattern>', 'Select workspace packages by package name')
-    .option('--workspace', "Alias for --filter '*'")
-    .option('--version <value>', 'Publish version or version bump')
-    .option('--dry-run [value]', 'Preview dry-run publish behavior')
-    .option('--otp <code>', 'Forward an npm 2FA one-time password')
-    .option('--token <value>', 'Set publish auth token')
-    .option('--source <dir>', 'CSS inspect source directory')
-    .option('--output <dir>', 'CSS inspect output directory')
-    .option('--modules [value]', 'Enable CSS inspect module output')
-    .option('--no-modules', 'Disable CSS inspect module output')
+  addCommandOptions(
+    cli.command(
+      'inspect pack [...args]',
+      'Check package entry and export files',
+    ),
+    commandHelpOptions.inspectPack,
+  )
+    .ignoreOptionDefaultValue()
+    .allowUnknownOptions()
+    .action(() =>
+      runCliCommand(() => runInspect(getRawCommandArgs(argv, 'inspect'))),
+    );
+
+  addCommandOptions(
+    cli.command('inspect css [...args]', 'Explain CSS output plans'),
+    commandHelpOptions.inspectCss,
+  )
+    .ignoreOptionDefaultValue()
+    .allowUnknownOptions()
+    .action(() =>
+      runCliCommand(() => runInspect(getRawCommandArgs(argv, 'inspect'))),
+    );
+
+  addCommandOptions(
+    cli
+      .command('inspect [...args]', 'Inspect auklet plans without side effects')
+      .usage('<publish|pack|css> [...args]'),
+    commandHelpOptions.inspect,
+  )
     .ignoreOptionDefaultValue()
     .allowUnknownOptions()
     .action(() =>

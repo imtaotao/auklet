@@ -8,8 +8,8 @@ import { runBuildCss } from '#auklet/cli/buildCss';
 import { createAukletLogger } from '#auklet/logger';
 import {
   getWorkspacePackageScript,
-  resolveWorkspaceBuildTargets,
-} from '#auklet/cli/buildWorkspace';
+  resolveWorkspaceScriptTargets,
+} from '#auklet/cli/workspaceScripts';
 import type {
   BuildCommandOptions,
   BuildJsCommandOptions,
@@ -72,11 +72,13 @@ const runWorkspaceBuild = async (
     includePrivate: boolean;
   },
 ) => {
-  const targets = await resolveWorkspaceBuildTargets(
+  const targets = await resolveWorkspaceScriptTargets(
     options.cwd,
     options.filters,
     options.envContext,
     {
+      scope: 'build',
+      emptyTargetMessage: '[build] no buildable workspace package found.',
       includeDependencies: options.includeDependencies,
       includePrivate: options.includePrivate,
     },

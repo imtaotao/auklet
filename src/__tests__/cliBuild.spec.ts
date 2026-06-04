@@ -15,13 +15,13 @@ const mocks = vi.hoisted(() => {
   const execa = vi.fn().mockResolvedValue({ exitCode: 0 });
   const runBuildCss = vi.fn().mockResolvedValue(0);
   const runTsdown = vi.fn().mockResolvedValue(0);
-  const resolveWorkspaceBuildTargets = vi.fn();
+  const resolveWorkspaceScriptTargets = vi.fn();
 
   return {
     cleanAukletOutputByConfig,
     execa,
     loadAukletConfig,
-    resolveWorkspaceBuildTargets,
+    resolveWorkspaceScriptTargets,
     runBuildCss,
     runTsdown,
   };
@@ -52,12 +52,12 @@ vi.mock('#auklet/cli/buildCss', () => ({
   runBuildCss: mocks.runBuildCss,
 }));
 
-vi.mock('#auklet/cli/buildWorkspace', () => ({
+vi.mock('#auklet/cli/workspaceScripts', () => ({
   getWorkspacePackageScript: (
     packageJson: { scripts?: Record<string, string> },
     name: string,
   ) => packageJson.scripts?.[name] ?? null,
-  resolveWorkspaceBuildTargets: mocks.resolveWorkspaceBuildTargets,
+  resolveWorkspaceScriptTargets: mocks.resolveWorkspaceScriptTargets,
 }));
 
 vi.mock('#auklet/logger', () => ({
@@ -136,7 +136,7 @@ describe('runBuild', () => {
   });
 
   test('builds filtered workspace packages in resolved order', async () => {
-    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+    mocks.resolveWorkspaceScriptTargets.mockResolvedValue([
       {
         packageName: '@scope/theme',
         packageRoot: '/repo/packages/theme',
@@ -169,11 +169,13 @@ describe('runBuild', () => {
       ),
     ).resolves.toBe(0);
 
-    expect(mocks.resolveWorkspaceBuildTargets).toHaveBeenCalledWith(
+    expect(mocks.resolveWorkspaceScriptTargets).toHaveBeenCalledWith(
       process.cwd(),
       ['*'],
       expect.anything(),
       {
+        scope: 'build',
+        emptyTargetMessage: '[build] no buildable workspace package found.',
         includeDependencies: false,
         includePrivate: true,
       },
@@ -209,7 +211,7 @@ describe('runBuild', () => {
   });
 
   test('uses deps as workspace target selector option', async () => {
-    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+    mocks.resolveWorkspaceScriptTargets.mockResolvedValue([
       {
         packageName: '@scope/ui',
         packageRoot: '/repo/packages/ui',
@@ -233,11 +235,13 @@ describe('runBuild', () => {
       ),
     ).resolves.toBe(0);
 
-    expect(mocks.resolveWorkspaceBuildTargets).toHaveBeenCalledWith(
+    expect(mocks.resolveWorkspaceScriptTargets).toHaveBeenCalledWith(
       process.cwd(),
       ['@scope/ui'],
       expect.anything(),
       {
+        scope: 'build',
+        emptyTargetMessage: '[build] no buildable workspace package found.',
         includeDependencies: true,
         includePrivate: false,
       },
@@ -255,12 +259,12 @@ describe('runBuild', () => {
     await expect(runBuild(parseTestBuildCommand(['--deps']))).rejects.toThrow(
       '--deps requires --filter or --workspace',
     );
-    expect(mocks.resolveWorkspaceBuildTargets).not.toHaveBeenCalled();
+    expect(mocks.resolveWorkspaceScriptTargets).not.toHaveBeenCalled();
     expect(mocks.runTsdown).not.toHaveBeenCalled();
   });
 
   test('rejects workspace build targets without build scripts', async () => {
-    mocks.resolveWorkspaceBuildTargets.mockResolvedValue([
+    mocks.resolveWorkspaceScriptTargets.mockResolvedValue([
       {
         packageName: '@scope/theme',
         packageRoot: '/repo/packages/theme',
@@ -293,7 +297,7 @@ describe('runBuild', () => {
       }
     }
 
-    expect(mocks.resolveWorkspaceBuildTargets).not.toHaveBeenCalled();
+    expect(mocks.resolveWorkspaceScriptTargets).not.toHaveBeenCalled();
     expect(mocks.execa).not.toHaveBeenCalled();
   });
 });

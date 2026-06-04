@@ -9,6 +9,7 @@ Check:
 
 - `docs/invariants.md` for CLI, config, and publish flag boundaries.
 - `src/cli/main.ts` for command registration when adding a new command.
+- `src/cli/help.ts` for command help text when adding or changing flags.
 - `src/cli/parse/values.ts` when the flag supports `env:NAME` or deferred
   target-scoped resolution.
 - `src/cli/parse/workspace.ts` for `--filter`, `--workspace`, `--deps`, and
@@ -23,6 +24,7 @@ Check:
 
 Tests:
 
+- Help metadata coverage belongs in `src/__tests__/cli.spec.ts`.
 - Build override parsing belongs in `src/__tests__/cli.spec.ts`.
 - Publish/owner parsing belongs in `src/__tests__/publish/cli.spec.ts`.
 - Runner behavior belongs in the corresponding runner spec.

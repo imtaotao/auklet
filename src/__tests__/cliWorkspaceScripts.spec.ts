@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AukletEnvContext } from '#auklet/env';
 import { readPnpmWorkspacePackageInfo } from '#auklet/workspace/packages';
-import { resolveWorkspaceBuildTargets } from '#auklet/cli/buildWorkspace';
+import { resolveWorkspaceScriptTargets } from '#auklet/cli/workspaceScripts';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -16,7 +16,7 @@ vi.mock('#auklet/workspace/packages', () => ({
 
 const readWorkspacePackages = vi.mocked(readPnpmWorkspacePackageInfo);
 
-describe('resolveWorkspaceBuildTargets', () => {
+describe('resolveWorkspaceScriptTargets', () => {
   let project: VirtualProject;
 
   beforeEach(() => {
@@ -57,7 +57,7 @@ describe('resolveWorkspaceBuildTargets', () => {
     ]);
 
     await expect(
-      resolveWorkspaceBuildTargets(
+      resolveWorkspaceScriptTargets(
         project.root,
         ['*'],
         new AukletEnvContext(project.root),
@@ -85,7 +85,7 @@ describe('resolveWorkspaceBuildTargets', () => {
     ]);
 
     await expect(
-      resolveWorkspaceBuildTargets(
+      resolveWorkspaceScriptTargets(
         project.root,
         ['@scope/ui'],
         new AukletEnvContext(project.root),
@@ -119,7 +119,7 @@ describe('resolveWorkspaceBuildTargets', () => {
     ]);
 
     await expect(
-      resolveWorkspaceBuildTargets(
+      resolveWorkspaceScriptTargets(
         project.root,
         ['@scope/ui'],
         new AukletEnvContext(project.root),
@@ -144,7 +144,7 @@ describe('resolveWorkspaceBuildTargets', () => {
     );
     try {
       await expect(
-        resolveWorkspaceBuildTargets(
+        resolveWorkspaceScriptTargets(
           singleProjectRoot,
           ['*'],
           new AukletEnvContext(singleProjectRoot),

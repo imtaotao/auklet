@@ -137,6 +137,7 @@ const resolveMonorepoPublishPlan = async (
     filters: options.filters,
     getDependencies: getWorkspaceDependencies,
     emptyTargetMessage: '[publish] no publishable package found.',
+    includePrivate: false,
     createTarget: (item, packageJson) =>
       createPublishTarget({
         packageRoot: item.path,

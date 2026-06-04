@@ -30,6 +30,8 @@ the same change and make the reason explicit.
 
 - `bin/entry.mjs` stays a thin bootstrap into the built public API.
 - Command registration belongs in `src/cli/main.ts`.
+- Command help metadata belongs in `src/cli/help.ts` and should stay aligned
+  with parser support.
 - Command-specific orchestration belongs in dedicated `src/cli/*` runners.
 - Domain logic belongs in its domain package, such as `src/publish/*` or
   `src/css/*`, not in CLI glue.
