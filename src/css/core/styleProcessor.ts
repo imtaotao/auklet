@@ -4,6 +4,11 @@ import postcss, { type AtRule, type Root } from 'postcss';
 import type { ModuleStyleBuildConfig } from '#auklet/types';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 
+export type StyleFileImportReference = {
+  importer: string;
+  imported: string;
+};
+
 export class StyleProcessor {
   constructor(
     private readonly config: ModuleStyleBuildConfig,
@@ -71,7 +76,16 @@ export class StyleProcessor {
   }
 
   collectImportedStyleFiles(styleFiles: Array<string>) {
-    const imported = new Set<string>();
+    return new Set(
+      this.collectImportedStyleFileReferences(styleFiles).map(
+        (item) => item.imported,
+      ),
+    );
+  }
+
+  collectImportedStyleFileReferences(styleFiles: Array<string>) {
+    const imports: Array<StyleFileImportReference> = [];
+
     for (const styleFile of styleFiles) {
       const css = fs.readFileSync(styleFile, 'utf8');
       const root = this.parse(css, styleFile);
@@ -84,10 +98,13 @@ export class StyleProcessor {
         ) {
           return;
         }
-        imported.add(path.resolve(path.dirname(styleFile), specifier));
+        imports.push({
+          importer: path.resolve(styleFile),
+          imported: path.resolve(path.dirname(styleFile), specifier),
+        });
       });
     }
-    return imported;
+    return imports;
   }
 
   collectStyleImportSpecifiers(styleFiles: Array<string>) {

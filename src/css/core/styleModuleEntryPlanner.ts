@@ -6,8 +6,8 @@ import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 
 export type ModuleStyleEntryPlan = {
   sourceDir: string;
-  moduleStyleImports: Array<string>;
   ownStyleFiles: Array<string>;
+  moduleStyleImports: Array<string>;
 };
 
 export class StyleModuleEntryPlanner {
@@ -23,6 +23,7 @@ export class StyleModuleEntryPlanner {
       this.packageContext.styleProcessor.collectImportedStyleFiles(
         this.packageContext.styleFiles,
       );
+    this.rejectCrossModuleStyleImports();
   }
 
   createEntries(moduleStyleImports: Map<string, Array<string>>) {
@@ -79,5 +80,54 @@ export class StyleModuleEntryPlanner {
     return (this.styleFilesByDir.get(sourceDir) ?? []).filter(
       (styleFile) => !this.importedStyleFiles.has(path.resolve(styleFile)),
     );
+  }
+
+  private rejectCrossModuleStyleImports() {
+    if (!this.packageContext.normalizedConfig.modules) return;
+
+    const styleFileKeys = new Set(
+      this.packageContext.styleFiles.map((file) => path.resolve(file)),
+    );
+    const imports =
+      this.packageContext.styleProcessor.collectImportedStyleFileReferences(
+        this.packageContext.styleFiles,
+      );
+
+    for (const item of imports) {
+      if (!styleFileKeys.has(item.imported)) continue;
+
+      const importerModuleDir = this.getStyleFileModuleDir(item.importer);
+      const importedModuleDir = this.getStyleFileModuleDir(item.imported);
+
+      if (
+        !importerModuleDir ||
+        !importedModuleDir ||
+        importerModuleDir === importedModuleDir
+      ) {
+        continue;
+      }
+
+      const importer = this.toRelativeSourceFile(item.importer);
+      const imported = this.toRelativeSourceFile(item.imported);
+      throw new Error(
+        `[css] cross-component CSS import detected: ${importer} imports ${imported}. ` +
+          'Use TSX imports to express component dependencies so auklet can ' +
+          'generate module CSS entries correctly.',
+      );
+    }
+  }
+
+  private getStyleFileModuleDir(file: string) {
+    const sourceRelative = toPosixPath(
+      path.relative(this.packageContext.sourceRoot, file),
+    );
+    const parts = sourceRelative.split('/');
+    if (parts.length < 2) return null;
+    if (parts.length === 2) return getSourceModuleDir(sourceRelative);
+    return parts.slice(0, 2).join('/');
+  }
+
+  private toRelativeSourceFile(file: string) {
+    return toPosixPath(path.relative(this.packageContext.sourceRoot, file));
   }
 }

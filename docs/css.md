@@ -142,6 +142,10 @@ composition, not as full CSS bundling.
 Supported import behavior:
 
 - local relative CSS imports inside source style files;
+- local relative CSS imports should stay inside the same component/module
+  directory. Importing another component's CSS from component CSS is rejected;
+  express component reuse through TSX imports so auklet can infer module CSS
+  dependencies.
 - recursive local imports with circular import protection;
 - duplicate local import/content suppression for generated output stability;
 - generated `@import` paths between auklet output entries, produced by
