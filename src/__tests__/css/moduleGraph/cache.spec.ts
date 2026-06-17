@@ -407,6 +407,143 @@ describe('ModuleStyleGraph request cache', () => {
     expect(secondResult.code).toContain('color: black');
   });
 
+  test('invalidates persistent virtual CSS load results when config changes', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    fixture.writeFile(
+      path.join(uiPackageRoot, 'src/components/Card/index.css'),
+      '.card { color: blue; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const firstResult = await firstGraph.createPackageStyleCode(parsed);
+    fixture.writeFile(
+      path.join(appPackageRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const secondResult = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).toContain('color: red');
+    expect(firstResult.code).not.toContain('color: blue');
+    expect(secondResult.code).toContain('color: red');
+    expect(secondResult.code).toContain('color: blue');
+  });
+
+  test('tracks dependency package json as a persistent cache input', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          styles: {
+            dependencies: {
+              dep: {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    const packageJson = fixture.writeJson(
+      path.join(appPackageRoot, 'node_modules/dep/package.json'),
+      {
+        name: 'dep',
+        exports: {
+          './style.css': './style.css',
+        },
+      },
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'node_modules/dep/style.css'),
+      '.dep { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const result = await graph.createPackageStyleCode(parsed);
+
+    expect(result.code).toContain('dep/style.css');
+    expect(result.cacheInputFiles).toContain(packageJson);
+  });
+
+  test('invalidates persistent cache when package json changes', () => {
+    const packageJson = fixture.writeJson(
+      path.join(appPackageRoot, 'node_modules/dep/package.json'),
+      {
+        name: 'dep',
+        exports: {
+          './style.css': './red.css',
+        },
+      },
+    );
+    const cache = new PersistentStyleGraphCache({
+      root: fixture.root,
+    });
+    const key = cache.createKey({
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    });
+
+    cache.write(
+      key,
+      {
+        code: '@import "dep/red.css";',
+        watchFiles: [],
+      },
+      [packageJson],
+    );
+    expect(cache.read(key)?.code).toContain('red.css');
+    fixture.writeJson(
+      path.join(appPackageRoot, 'node_modules/dep/package.json'),
+      {
+        name: 'dep',
+        exports: {
+          './style.css': './blue.css',
+        },
+      },
+    );
+
+    expect(cache.read(key)).toBeNull();
+  });
+
   test('reuses module import collection across source module requests', async () => {
     const collect = vi.spyOn(ModuleStyleImportCollector.prototype, 'collect');
     fixture.writeFile(

@@ -9,6 +9,8 @@ const asRecord = (value: unknown) => {
   return isPlainObject(value) ? value : null;
 };
 
+let configImportVersion = 0;
+
 const assertSupportedConfigFile = (configFile: string) => {
   const basename = path.basename(configFile);
   if (isAukletConfigFile(basename)) return;
@@ -76,7 +78,8 @@ export async function loadAukletConfig(
 
   const url = pathToFileURL(configPath);
   if (options.cacheBust) {
-    url.searchParams.set('t', Date.now().toString());
+    configImportVersion += 1;
+    url.searchParams.set('t', configImportVersion.toString());
   }
 
   const module = (await import(url.href)) as Record<string, unknown>;

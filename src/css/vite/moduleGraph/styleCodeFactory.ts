@@ -118,6 +118,7 @@ export class StyleCodeFactory {
     mapSpecifier: (specifier: string) => string = (specifier) => specifier,
   ) {
     const results: Array<PackageStyleLoadResult> = [];
+    const cacheInputFiles: Array<string> = [];
     const imports: Array<string> = [];
     const watchFiles: Array<string> = [...context.configPaths];
 
@@ -134,6 +135,7 @@ export class StyleCodeFactory {
         outputSpecifier,
       );
       imports.push(resolvedSpecifier.specifier);
+      cacheInputFiles.push(...(resolvedSpecifier.cacheInputFiles ?? []));
       if (resolvedSpecifier.watchFile) {
         watchFiles.push(resolvedSpecifier.watchFile);
       }
@@ -142,6 +144,7 @@ export class StyleCodeFactory {
     return mergeLoadResults(
       {
         code: createImportCode(imports),
+        cacheInputFiles,
         watchFiles,
       },
       ...results,
@@ -258,6 +261,7 @@ export class StyleCodeFactory {
     const moduleStyleResults: Array<PackageStyleLoadResult> = [];
     const moduleStyleSpecifiers: Array<string> = [];
     const moduleStyleWatchFiles: Array<string> = [];
+    const moduleStyleCacheInputFiles: Array<string> = [];
 
     for (const specifier of entry.moduleStyleImports) {
       const result = this.toDevModuleImportSpecifier(
@@ -276,6 +280,9 @@ export class StyleCodeFactory {
       }
       const resolvedSpecifier = toDevDependencyImportSpecifier(context, result);
       moduleStyleSpecifiers.push(resolvedSpecifier.specifier);
+      moduleStyleCacheInputFiles.push(
+        ...(resolvedSpecifier.cacheInputFiles ?? []),
+      );
       if (resolvedSpecifier.watchFile) {
         moduleStyleWatchFiles.push(resolvedSpecifier.watchFile);
       }
@@ -304,6 +311,7 @@ export class StyleCodeFactory {
         ...moduleStyleWatchFiles,
         ...sourceFiles.filter((file) => /\.(ts|tsx)$/.test(file)),
       ],
+      cacheInputFiles: moduleStyleCacheInputFiles,
     });
   }
 

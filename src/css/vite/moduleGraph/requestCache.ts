@@ -207,13 +207,17 @@ export class ModuleStyleGraphRequestCache {
 
     for (const file of sourceFiles) {
       let current = path.dirname(file);
+      let currentKey = normalizeFileKey(current);
 
-      while (true) {
+      while (
+        currentKey === normalizedSourceRoot ||
+        currentKey.startsWith(`${normalizedSourceRoot}/`)
+      ) {
         sourceInputFiles.add(current);
-        if (normalizeFileKey(current) === normalizedSourceRoot) break;
+        if (currentKey === normalizedSourceRoot) break;
         const parent = path.dirname(current);
-        if (parent === current) break;
         current = parent;
+        currentKey = normalizeFileKey(current);
       }
     }
     return Array.from(sourceInputFiles);
@@ -223,15 +227,18 @@ export class ModuleStyleGraphRequestCache {
     const files = [path.join(packageRoot, 'package.json')];
     let current = packageRoot;
     const graphRoot = normalizeFileKey(this.options.root);
+    let reachedGraphRoot = false;
 
-    while (true) {
-      files.push(path.join(current, 'tsconfig.json'));
-      if (normalizeFileKey(current) === graphRoot) break;
+    while (!reachedGraphRoot) {
+      const tsconfig = path.join(current, 'tsconfig.json');
+      files.push(tsconfig);
+      reachedGraphRoot = normalizeFileKey(current) === graphRoot;
+      if (reachedGraphRoot) break;
       const parent = path.dirname(current);
       if (parent === current) break;
       current = parent;
     }
-    return files;
+    return Array.from(new Set(files));
   }
 
   private getLoadResultKey(parsed: PackageStyleId) {

@@ -107,6 +107,12 @@ lifecycle and persists generated virtual CSS results under
 `node_modules/.auklet/cache/vite-style/`. This cache is a local development
 optimization only. Production CSS builds do not read from or write to it, and it
 can be deleted safely; the next Vite dev run will regenerate missing entries.
+The cache records direct inputs such as source/style files, direct config files,
+`tsconfig.json`, and package `package.json` files that affect package
+resolution. Config helper modules imported by config files are not tracked.
+When those helper modules or other config dependencies change without changing
+the direct config file, delete `node_modules/.auklet/cache` and restart the dev
+server to force regeneration.
 
 `moduleGraph/packageSource/monorepo.ts` reads pnpm workspace packages, filters
 out the workspace root package, and surfaces workspace read failures instead of

@@ -91,6 +91,38 @@ describe('loadAukletConfig', () => {
     });
   });
 
+  test('reloads changed config files when cache busting', async () => {
+    project.writeFile(
+      'auklet.config.mjs',
+      `
+        export const config = {
+          source: 'source-a',
+        };
+      `,
+    );
+
+    await expect(
+      loadAukletConfig(project.root, { cacheBust: true }),
+    ).resolves.toEqual({
+      source: 'source-a',
+    });
+
+    project.writeFile(
+      'auklet.config.mjs',
+      `
+        export const config = {
+          source: 'source-b',
+        };
+      `,
+    );
+
+    await expect(
+      loadAukletConfig(project.root, { cacheBust: true }),
+    ).resolves.toEqual({
+      source: 'source-b',
+    });
+  });
+
   test('rejects multiple JavaScript config files', async () => {
     project.writeFile('auklet.config.js', 'export const config = {};');
     project.writeFile('auklet.config.mjs', 'export const config = {};');
