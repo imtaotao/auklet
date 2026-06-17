@@ -1,6 +1,10 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { StyleProcessor } from '#auklet/css/core/styleProcessor';
+import { ModuleStyleImportCollector } from '#auklet/css/core/styleImports/collector';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
+import { PersistentStyleGraphCache } from '#auklet/css/vite/moduleGraph/persistentCache';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -21,6 +25,7 @@ describe('ModuleStyleGraph request cache', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fixture.cleanup();
   });
 
@@ -82,6 +87,27 @@ describe('ModuleStyleGraph request cache', () => {
     await graph.createPackageStyleCode(parsed);
 
     expect(loadAukletConfig).toHaveBeenCalledTimes(1);
+  });
+
+  test('reuses virtual CSS load results inside one graph', async () => {
+    const readStyleFile = vi.spyOn(StyleProcessor.prototype, 'readStyleFile');
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+
+    await graph.createPackageStyleCode(parsed);
+    await graph.createPackageStyleCode(parsed);
+
+    expect(readStyleFile).toHaveBeenCalledTimes(1);
   });
 
   test('invalidates package context for changed package files', async () => {
@@ -171,5 +197,248 @@ describe('ModuleStyleGraph request cache', () => {
     expect(firstResult.code).toContain('color: red');
     expect(secondResult.code).toContain('color: blue');
     expect(secondResult.code).not.toContain('color: red');
+  });
+
+  test('invalidates consumer persistent load results when dependency package adds styles', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join(uiPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const firstResult = await firstGraph.createPackageStyleCode(parsed);
+    fixture.writeFile(
+      path.join(uiPackageRoot, 'src/components/Badge/index.css'),
+      '.badge { color: blue; }',
+    );
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const secondResult = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).toContain('color: red');
+    expect(firstResult.code).not.toContain('color: blue');
+    expect(secondResult.code).toContain('color: red');
+    expect(secondResult.code).toContain('color: blue');
+  });
+
+  test('reuses persistent virtual CSS load results across graphs', async () => {
+    const readStyleFile = vi.spyOn(StyleProcessor.prototype, 'readStyleFile');
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const firstResult = await firstGraph.createPackageStyleCode(parsed);
+    readStyleFile.mockClear();
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const secondResult = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).toContain('color: red');
+    expect(secondResult.code).toBe(firstResult.code);
+    expect(readStyleFile).not.toHaveBeenCalled();
+    expect(fixture.exists('node_modules/.auklet/cache/vite-style/v1')).toBe(
+      true,
+    );
+  });
+
+  test('invalidates persistent virtual CSS load results when inputs change', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    await firstGraph.createPackageStyleCode(parsed);
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: blue; }',
+    );
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const result = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(result.code).toContain('color: blue');
+    expect(result.code).not.toContain('color: red');
+  });
+
+  test('invalidates persistent virtual CSS load results when content changes without stat changes', async () => {
+    const styleFile = fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    await firstGraph.createPackageStyleCode(parsed);
+    const stat = fs.statSync(styleFile);
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: tan; }',
+    );
+    fs.utimesSync(styleFile, stat.atime, stat.mtime);
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const result = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(result.code).toContain('color: tan');
+    expect(result.code).not.toContain('color: red');
+  });
+
+  test('invalidates persistent cache when a symlink target changes', () => {
+    fixture.writeFile('store/dep-v1/style.css', '.dep { color: red; }');
+    fixture.writeFile('store/dep-v2/style.css', '.dep { color: blue; }');
+    const linkPath = fixture.resolve('node_modules/dep');
+    fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+    fs.symlinkSync(fixture.resolve('store/dep-v1'), linkPath, 'dir');
+    const cache = new PersistentStyleGraphCache({
+      root: fixture.root,
+    });
+    const key = cache.createKey({
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    });
+
+    cache.write(
+      key,
+      {
+        code: '.dep { color: red; }',
+        watchFiles: [path.join(linkPath, 'style.css')],
+      },
+      [path.join(linkPath, 'style.css')],
+    );
+    expect(cache.read(key)?.code).toContain('color: red');
+    fs.unlinkSync(linkPath);
+    fs.symlinkSync(fixture.resolve('store/dep-v2'), linkPath, 'dir');
+
+    expect(cache.read(key)).toBeNull();
+  });
+
+  test('invalidates persistent virtual CSS load results when missing inputs are added', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Page/index.tsx'),
+      "import { Button } from '#widgets/components/Button';",
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Page/index.css'),
+      '.page { color: black; }',
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'components/Page.css',
+    };
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const firstResult = await firstGraph.createPackageStyleCode(parsed);
+    fixture.writeJson(path.join(appPackageRoot, 'tsconfig.json'), {
+      compilerOptions: {
+        baseUrl: '.',
+        paths: {
+          '#widgets/*': ['./src/*'],
+        },
+      },
+    });
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const secondResult = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).toContain('color: black');
+    expect(firstResult.code).not.toContain('color: red');
+    expect(secondResult.code).toContain('color: red');
+    expect(secondResult.code).toContain('color: black');
+  });
+
+  test('reuses module import collection across source module requests', async () => {
+    const collect = vi.spyOn(ModuleStyleImportCollector.prototype, 'collect');
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.tsx'),
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Card/index.tsx'),
+      'export function Card() { return null; }',
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Card/index.css'),
+      '.card { color: blue; }',
+    );
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    await graph.createPackageStyleCode({
+      packageName: '@scope/app',
+      stylePath: 'components/Button.css',
+    });
+    await graph.createPackageStyleCode({
+      packageName: '@scope/app',
+      stylePath: 'components/Card.css',
+    });
+
+    expect(collect).toHaveBeenCalledTimes(1);
   });
 });

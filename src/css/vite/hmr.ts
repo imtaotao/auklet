@@ -57,6 +57,20 @@ const getDependencyVirtualModules = (
   });
 };
 
+const createJsUpdates = (virtualIds: Array<string>, timestamp: number) => {
+  return virtualIds.map((id) => {
+    const browserPath = toBrowserVirtualPath(id);
+    return {
+      type: 'js-update' as const,
+      path: browserPath,
+      acceptedPath: browserPath,
+      timestamp,
+      explicitImportRequired: false,
+      isWithinCircularImport: false,
+    };
+  });
+};
+
 export class AukletStyleHmr {
   private readonly lastUpdateTimes = new Map<string, number>();
   private suppressFullReloadUntil = 0;
@@ -101,42 +115,64 @@ export class AukletStyleHmr {
       return [];
     }
 
+    const updates = this.sendVirtualStyleUpdates(
+      context.file,
+      context.server,
+      context.timestamp,
+    );
+    logger.info(
+      `package css hmr ${getRelativeFile(context.file)} tracked=${updates.tracked} updates=${updates.sent}`,
+    );
+    return [];
+  }
+
+  handleSourceModuleChange(
+    server: Pick<ViteDevServer, 'moduleGraph' | 'ws'>,
+    file: string,
+  ) {
+    const graph = this.graph();
+    if (!graph.isSourceGraphFile(file) || !graph.isSourceModuleFile(file)) {
+      return false;
+    }
+
+    graph.invalidateFile(file);
+    const updates = this.sendVirtualStyleUpdates(file, server, Date.now());
+    logger.info(
+      `package css source hmr ${getRelativeFile(file)} tracked=${updates.tracked} updates=${updates.sent}`,
+    );
+    return true;
+  }
+
+  private sendVirtualStyleUpdates(
+    file: string,
+    server: Pick<ViteDevServer, 'moduleGraph' | 'ws'>,
+    timestamp: number,
+  ) {
     const virtualIds = getDependencyVirtualIds(
       this.virtualIdsByDependency,
-      context.file,
+      file,
     );
     const modules = getDependencyVirtualModules(
       this.virtualIdsByDependency,
-      context.server,
-      context.file,
+      server,
+      file,
     );
 
     for (const module of modules) {
-      context.server.moduleGraph.invalidateModule(module);
+      server.moduleGraph.invalidateModule(module);
     }
 
-    const updates = virtualIds.map((id) => {
-      const browserPath = toBrowserVirtualPath(id);
-      return {
-        type: 'js-update' as const,
-        path: browserPath,
-        acceptedPath: browserPath,
-        timestamp: context.timestamp,
-        explicitImportRequired: false,
-        isWithinCircularImport: false,
-      };
-    });
-    logger.info(
-      `package css hmr ${getRelativeFile(context.file)} tracked=${virtualIds.length} updates=${updates.length}`,
-    );
-
+    const updates = createJsUpdates(virtualIds, timestamp);
     if (updates.length) {
-      context.server.ws.send({
+      server.ws.send({
         type: 'update',
         updates,
       });
     }
-    return [];
+    return {
+      sent: updates.length,
+      tracked: virtualIds.length,
+    };
   }
 
   private suppressFullReload() {

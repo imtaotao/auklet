@@ -90,6 +90,7 @@ src/css/vite/
     ├── requestCache.ts
     ├── devDependency.ts
     ├── loadResult.ts
+    ├── persistentCache.ts
     ├── styleId.ts
     └── packageSource/
         ├── monorepo.ts
@@ -100,6 +101,12 @@ src/css/vite/
 The Vite plugin turns package CSS imports into virtual modules and calls
 `moduleGraph/` to generate CSS. HMR logic decides which virtual CSS modules to
 invalidate when source, config, or style files change.
+
+Vite/dev caches virtual CSS generation in memory for the current dev server
+lifecycle and persists generated virtual CSS results under
+`node_modules/.auklet/cache/vite-style/`. This cache is a local development
+optimization only. Production CSS builds do not read from or write to it, and it
+can be deleted safely; the next Vite dev run will regenerate missing entries.
 
 `moduleGraph/packageSource/monorepo.ts` reads pnpm workspace packages, filters
 out the workspace root package, and surfaces workspace read failures instead of
@@ -217,6 +224,7 @@ flowchart TD
   ResolveId --> Graph["ModuleStyleGraph"]
   Graph --> Source["packageSource: package / monorepo"]
   Graph --> Cache["requestCache.ts"]
+  Cache --> DiskCache["node_modules/.auklet/cache/vite-style"]
   Cache --> PackageContext["StylePackageContext"]
   Graph --> Factory["styleCodeFactory.ts"]
   Factory --> SharedGraph["core/style/entries.ts"]

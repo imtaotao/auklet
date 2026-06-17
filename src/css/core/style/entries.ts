@@ -3,7 +3,6 @@ import {
   getThemeNames,
   getThemeStyleDependencies,
 } from '#auklet/css/core/style/dependencies';
-import { StyleModuleEntryPlanner } from '#auklet/css/core/styleModuleEntryPlanner';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import type { NormalizedAukletConfig } from '#auklet/types';
 
@@ -54,26 +53,22 @@ export function createExternalEntryParts(config: NormalizedAukletConfig) {
 }
 
 export function collectModuleStyleImports(packageContext: StylePackageContext) {
-  return packageContext.importCollector.collect(
-    packageContext.sourceFiles,
-    packageContext.normalizedConfig,
-  );
+  return packageContext.getModuleStyleImports();
 }
 
 export function createModuleStyleEntryPlan(
   packageContext: StylePackageContext,
   sourceDir: string,
 ) {
-  return new StyleModuleEntryPlanner(packageContext).createEntry(
-    sourceDir,
-    collectModuleStyleImports(packageContext),
-  );
+  return packageContext
+    .getModuleStyleEntryPlanner()
+    .createEntry(sourceDir, collectModuleStyleImports(packageContext));
 }
 
 export function createModuleStyleEntryPlans(
   packageContext: StylePackageContext,
 ) {
-  return new StyleModuleEntryPlanner(packageContext).createEntries(
-    collectModuleStyleImports(packageContext),
-  );
+  return packageContext
+    .getModuleStyleEntryPlanner()
+    .createEntries(collectModuleStyleImports(packageContext));
 }

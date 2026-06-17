@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ModuleStyleImportCollector } from '#auklet/css/core/styleImports/collector';
+import { StyleModuleEntryPlanner } from '#auklet/css/core/styleModuleEntryPlanner';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import { createStyleFileKeySet } from '#auklet/css/core/style/files';
@@ -31,6 +32,8 @@ export class StylePackageContext {
   readonly themeFiles: Map<string, string>;
   readonly themeNames: Array<string>;
   readonly styleFiles: Array<string>;
+  private moduleStyleEntryPlanner?: StyleModuleEntryPlanner;
+  private moduleStyleImports?: Map<string, Array<string>>;
 
   constructor(private readonly options: StylePackageContextOptions) {
     const { config, context, normalizedConfig } = this.options;
@@ -64,5 +67,18 @@ export class StylePackageContext {
         this.options.config.styleExtensions.includes(path.extname(file)),
       )
       .filter((styleFile) => !themeFileKeys.has(normalizeFileKey(styleFile)));
+  }
+
+  getModuleStyleImports() {
+    this.moduleStyleImports ??= this.importCollector.collect(
+      this.sourceFiles,
+      this.normalizedConfig,
+    );
+    return this.moduleStyleImports;
+  }
+
+  getModuleStyleEntryPlanner() {
+    this.moduleStyleEntryPlanner ??= new StyleModuleEntryPlanner(this);
+    return this.moduleStyleEntryPlanner;
   }
 }

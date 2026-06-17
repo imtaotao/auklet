@@ -38,6 +38,15 @@ export class StyleCodeFactory {
     parsed: PackageStyleId,
     cache: ModuleStyleGraphRequestCache,
   ) {
+    return cache.getLoadResult(parsed, () =>
+      this.createUncachedPackageStyleCode(parsed, cache),
+    );
+  }
+
+  private async createUncachedPackageStyleCode(
+    parsed: PackageStyleId,
+    cache: ModuleStyleGraphRequestCache,
+  ) {
     const context = await cache.getContext(parsed);
     if (!context) {
       return {
@@ -46,23 +55,30 @@ export class StyleCodeFactory {
       };
     }
 
+    const cachedResult = cache.readPersistentLoadResult(parsed, context);
+    if (cachedResult) return cachedResult;
+
+    let result: PackageStyleLoadResult;
     if (parsed.stylePath === STYLE_ENTRY) {
-      return this.createStyleCode(context, cache);
-    }
-    if (parsed.stylePath === EXTERNAL_ENTRY) {
-      return this.createExternalStyleCode(context, cache);
-    }
-    if (parsed.stylePath === MODULE_ENTRY) {
-      return this.createModuleStyleCode(context);
-    }
-    if (parsed.stylePath.startsWith(THEMES_ENTRY_PREFIX)) {
-      return this.createThemeStyleCode(context, cache, [
+      result = await this.createStyleCode(context, cache);
+    } else if (parsed.stylePath === EXTERNAL_ENTRY) {
+      result = await this.createExternalStyleCode(context, cache);
+    } else if (parsed.stylePath === MODULE_ENTRY) {
+      result = this.createModuleStyleCode(context);
+    } else if (parsed.stylePath.startsWith(THEMES_ENTRY_PREFIX)) {
+      result = await this.createThemeStyleCode(context, cache, [
         removeStyleExtension(
           parsed.stylePath.slice(THEMES_ENTRY_PREFIX.length),
         ),
       ]);
+    } else {
+      result = await this.createSourceModuleStyleCode(
+        context,
+        cache,
+        parsed.stylePath,
+      );
     }
-    return this.createSourceModuleStyleCode(context, cache, parsed.stylePath);
+    return cache.writePersistentLoadResult(parsed, context, result);
   }
 
   private async createStyleCode(
@@ -109,7 +125,8 @@ export class StyleCodeFactory {
       const outputSpecifier = mapSpecifier(specifier);
       const parsed = this.parsePackageStyleIdInRequest(outputSpecifier, cache);
       if (parsed) {
-        results.push(await this.createPackageStyleCode(parsed, cache));
+        const result = await this.createPackageStyleCode(parsed, cache);
+        results.push(this.withDependencyPackage(result, parsed.packageName));
         continue;
       }
       const resolvedSpecifier = toDevDependencyImportSpecifier(
@@ -251,8 +268,9 @@ export class StyleCodeFactory {
       );
       const parsed = this.parsePackageStyleIdInRequest(result, cache);
       if (parsed) {
+        const loadResult = await this.createPackageStyleCode(parsed, cache);
         moduleStyleResults.push(
-          await this.createPackageStyleCode(parsed, cache),
+          this.withDependencyPackage(loadResult, parsed.packageName),
         );
         continue;
       }
@@ -324,5 +342,17 @@ export class StyleCodeFactory {
     cache: ModuleStyleGraphRequestCache,
   ) {
     return parsePackageStyleId(id, cache.getPackageNames());
+  }
+
+  private withDependencyPackage(
+    result: PackageStyleLoadResult,
+    packageName: string,
+  ) {
+    return {
+      ...result,
+      dependencyPackages: Array.from(
+        new Set([packageName, ...(result.dependencyPackages ?? [])]),
+      ),
+    };
   }
 }

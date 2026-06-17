@@ -41,6 +41,8 @@ export class ModuleStyleGraph {
             loadAukletConfig: this.loadAukletConfig,
           });
     this.requestCache = new ModuleStyleGraphRequestCache({
+      root: normalizeFileKey(options.root),
+      mode: options.mode ?? 'package',
       packageSource: this.packageSource,
       config: this.config,
       loadAukletConfig: this.loadAukletConfig,

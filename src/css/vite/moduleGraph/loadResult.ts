@@ -11,5 +11,13 @@ export function mergeLoadResults(...results: Array<PackageStyleLoadResult>) {
     watchFiles: Array.from(
       new Set(results.flatMap((result) => result.watchFiles)),
     ),
+
+    cacheInputFiles: Array.from(
+      new Set(results.flatMap((result) => result.cacheInputFiles ?? [])),
+    ),
+
+    dependencyPackages: Array.from(
+      new Set(results.flatMap((result) => result.dependencyPackages ?? [])),
+    ),
   };
 }

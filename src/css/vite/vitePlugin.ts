@@ -165,7 +165,7 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
           return;
         }
         if (graph.isSourceModuleFile(file)) {
-          reloadStyleGraph(file);
+          hmr.handleSourceModuleChange(server, file);
         }
       });
     },

@@ -15,7 +15,9 @@ export type PackageStyleId = {
 
 export type PackageStyleLoadResult = {
   code: string;
+  cacheInputFiles?: Array<string>;
   watchFiles: Array<string>;
+  dependencyPackages?: Array<string>;
 };
 
 export type LoadAukletConfig = (

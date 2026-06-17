@@ -82,6 +82,7 @@ const createGraph = () => {
     isSourceGraphFile: vi.fn((file: string) =>
       file.startsWith(`${fixture.workspaceRoot}/packages/`),
     ),
+    isSourceModuleFile: vi.fn((file: string) => file.endsWith('.tsx')),
     isStyleFile: vi.fn((file: string) => file.endsWith('.css')),
   } as unknown as ModuleStyleGraph;
 };
@@ -178,6 +179,30 @@ describe('AukletStyleHmr', () => {
     expect(result).toBeUndefined();
     expect(context.send).not.toHaveBeenCalled();
     expect(context.invalidateModule).not.toHaveBeenCalled();
+  });
+
+  test('sends js updates for tracked source module dependencies', () => {
+    const context = createHmrTestContext(graph);
+    const trackedDependency = trackVirtualStyleDependency(
+      context,
+      componentVirtualId(fixture.componentName),
+    );
+    context.hmr.trackVirtualStyleDependency(
+      fixture.sourceFile,
+      trackedDependency.id,
+    );
+
+    const result = context.hmr.handleSourceModuleChange(
+      context.server,
+      fixture.sourceFile,
+    );
+
+    expect(result).toBe(true);
+    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.sourceFile);
+    expect(context.invalidateModule).toHaveBeenCalledWith(
+      trackedDependency.module,
+    );
+    expectJsUpdates(context, [trackedDependency.id]);
   });
 
   test('ignores duplicate updates in a short time window', () => {
