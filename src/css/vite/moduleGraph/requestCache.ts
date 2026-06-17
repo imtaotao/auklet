@@ -119,6 +119,8 @@ export class ModuleStyleGraphRequestCache {
       ...result,
       cacheInputFiles,
     };
+    if (!result.code.trim()) return cacheResult;
+
     this.persistentCache.write(
       this.createPersistentKey(parsed, context),
       cacheResult,

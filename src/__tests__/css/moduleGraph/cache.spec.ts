@@ -231,8 +231,8 @@ describe('ModuleStyleGraph request cache', () => {
       `,
     );
     fixture.writeFile(
-      path.join(uiPackageRoot, 'src/components/Button/index.css'),
-      '.button { color: red; }',
+      path.join(appPackageRoot, 'src/components/App/index.css'),
+      '.app { color: red; }',
     );
     const parsed = {
       packageName: '@scope/app',
@@ -244,8 +244,53 @@ describe('ModuleStyleGraph request cache', () => {
     });
     const firstResult = await firstGraph.createPackageStyleCode(parsed);
     fixture.writeFile(
-      path.join(uiPackageRoot, 'src/components/Badge/index.css'),
-      '.badge { color: blue; }',
+      path.join(uiPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: blue; }',
+    );
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const secondResult = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).toContain('color: red');
+    expect(firstResult.code).not.toContain('color: blue');
+    expect(secondResult.code).toContain('color: red');
+    expect(secondResult.code).toContain('color: blue');
+  });
+
+  test('invalidates consumer persistent load results when an empty dependency package later adds styles', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/App/index.css'),
+      '.app { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const firstResult = await firstGraph.createPackageStyleCode(parsed);
+    fixture.writeFile(
+      path.join(uiPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: blue; }',
     );
     const secondGraph = new ModuleStyleGraph({
       root: fixture.root,
@@ -288,6 +333,26 @@ describe('ModuleStyleGraph request cache', () => {
     expect(readStyleFile).not.toHaveBeenCalled();
     expect(fixture.exists('node_modules/.auklet/cache/vite-style/v1')).toBe(
       true,
+    );
+  });
+
+  test('does not persist empty virtual CSS load results', async () => {
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const result = await graph.createPackageStyleCode({
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    });
+
+    expect(result.code).toBe('');
+    expect(result.cacheInputFiles).toContain(
+      fixture.resolve(path.join(appPackageRoot, 'src')),
+    );
+    expect(fixture.exists('node_modules/.auklet/cache/vite-style/v1')).toBe(
+      false,
     );
   });
 

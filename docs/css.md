@@ -117,6 +117,7 @@ the direct config file, delete `node_modules/.auklet/cache` and restart the dev
 server to force regeneration.
 Cache files are best-effort cleaned after writes: entries older than 7 days are
 removed, and the current cache version directory is capped at 5000 JSON files.
+Empty virtual CSS results are not persisted.
 
 `moduleGraph/packageSource/monorepo.ts` reads pnpm workspace packages, filters
 out the workspace root package, and surfaces workspace read failures instead of
