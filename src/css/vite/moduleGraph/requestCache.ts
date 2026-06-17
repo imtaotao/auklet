@@ -29,7 +29,7 @@ export type PackageStyleContext = {
   styleProcessor: StyleProcessor;
 };
 
-// 单次虚拟 CSS 请求内的上下文缓存；每次请求新建，确保跨请求能看到配置和源码变化。
+// Vite dev graph 生命周期内的上下文缓存；文件变化时由 graph/watcher 按包失效。
 export type ModuleStyleGraphRequestCacheOptions = {
   packageSource: StylePackageSource;
   config: ModuleStyleBuildConfig;
@@ -62,6 +62,10 @@ export class ModuleStyleGraphRequestCache {
     const context = this.createContext(parsed);
     this.contexts.set(parsed.packageName, context);
     return context;
+  }
+
+  invalidatePackage(packageName: string) {
+    this.contexts.delete(packageName);
   }
 
   private async createContext(parsed: PackageStyleId) {

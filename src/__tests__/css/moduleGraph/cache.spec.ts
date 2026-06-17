@@ -5,7 +5,12 @@ import {
   createVirtualProject,
   type VirtualProject,
 } from '../../fixtures/virtualProject';
-import { setupMonorepoPackages } from './helpers';
+import {
+  appPackageRoot,
+  packagePath,
+  setupMonorepoPackages,
+  uiPackageRoot,
+} from './helpers';
 
 describe('ModuleStyleGraph request cache', () => {
   let fixture: VirtualProject;
@@ -61,7 +66,7 @@ describe('ModuleStyleGraph request cache', () => {
     ).toBe(true);
   });
 
-  test('creates a fresh package context cache for each CSS request', async () => {
+  test('reuses package contexts across CSS requests', async () => {
     const loadAukletConfig = vi.fn(async () => ({}));
     const graph = new ModuleStyleGraph({
       root: fixture.root,
@@ -76,6 +81,95 @@ describe('ModuleStyleGraph request cache', () => {
     await graph.createPackageStyleCode(parsed);
     await graph.createPackageStyleCode(parsed);
 
+    expect(loadAukletConfig).toHaveBeenCalledTimes(1);
+  });
+
+  test('invalidates package context for changed package files', async () => {
+    const loadAukletConfig = vi.fn(async () => ({}));
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+      loadAukletConfig,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+
+    await graph.createPackageStyleCode(parsed);
+    expect(
+      graph.invalidateFile(
+        packagePath(fixture, appPackageRoot, 'src/components/Button/index.css'),
+      ),
+    ).toBe('@scope/app');
+    await graph.createPackageStyleCode(parsed);
+
     expect(loadAukletConfig).toHaveBeenCalledTimes(2);
+  });
+
+  test('invalidates package context for config changes', async () => {
+    const loadAukletConfig = vi.fn(async () => ({}));
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+      loadAukletConfig,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+
+    await graph.createPackageStyleCode(parsed);
+    expect(
+      graph.invalidateFile(
+        packagePath(fixture, appPackageRoot, 'auklet.config.js'),
+      ),
+    ).toBe('@scope/app');
+    await graph.createPackageStyleCode(parsed);
+
+    expect(loadAukletConfig).toHaveBeenCalledTimes(2);
+  });
+
+  test('uses fresh dependency package context from cached recursive requests', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join(uiPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+
+    const firstResult = await graph.createPackageStyleCode(parsed);
+    fixture.writeFile(
+      path.join(uiPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: blue; }',
+    );
+    graph.invalidateFile(
+      packagePath(fixture, uiPackageRoot, 'src/components/Button/index.css'),
+    );
+    const secondResult = await graph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).toContain('color: red');
+    expect(secondResult.code).toContain('color: blue');
+    expect(secondResult.code).not.toContain('color: red');
   });
 });

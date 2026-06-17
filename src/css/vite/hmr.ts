@@ -1,11 +1,6 @@
 import path from 'node:path';
 import { isString } from 'aidly';
-import type {
-  HotPayload,
-  HotUpdateOptions,
-  ModuleNode,
-  ViteDevServer,
-} from 'vite';
+import type { HotPayload, HotUpdateOptions, ViteDevServer } from 'vite';
 import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { normalizeFileKey } from '#auklet/utils';
 import { createAukletLogger } from '#auklet/logger';
@@ -30,24 +25,6 @@ const toBrowserVirtualPath = (id: string) => {
 
 const getRelativeFile = (file: string) => {
   return path.relative(process.cwd(), file);
-};
-
-const invalidateVirtualModules = (
-  server: Pick<ViteDevServer, 'moduleGraph'>,
-  graph: ModuleStyleGraph,
-) => {
-  const modules: Array<ModuleNode> = [];
-  for (const packageName of graph.getPackageNames()) {
-    for (const entry of ['style.css', 'external.css', 'module.css']) {
-      const module = server.moduleGraph.getModuleById(
-        `\0auklet-css:${packageName}/${entry}`,
-      );
-      if (!module) continue;
-      server.moduleGraph.invalidateModule(module);
-      modules.push(module);
-    }
-  }
-  return modules;
 };
 
 const addVirtualStyleDependency = (
@@ -118,11 +95,11 @@ export class AukletStyleHmr {
     ) {
       return;
     }
+    this.suppressFullReload();
+    graph.invalidateFile(context.file);
     if (this.isDuplicateUpdate(context.file)) {
       return [];
     }
-
-    this.suppressFullReload();
 
     const virtualIds = getDependencyVirtualIds(
       this.virtualIdsByDependency,
@@ -137,7 +114,6 @@ export class AukletStyleHmr {
     for (const module of modules) {
       context.server.moduleGraph.invalidateModule(module);
     }
-    invalidateVirtualModules(context.server, graph);
 
     const updates = virtualIds.map((id) => {
       const browserPath = toBrowserVirtualPath(id);

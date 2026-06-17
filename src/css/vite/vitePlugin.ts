@@ -139,6 +139,7 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
       const invalidateStyleGraph = (file: string) => {
         if (!graph.isSourceGraphFile(file)) return false;
+        graph.invalidateFile(file);
         invalidateVirtualModules(server, graph);
         return true;
       };
@@ -150,7 +151,7 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
       const handleSourceAddOrUnlink = (file: string) => {
         if (graph.isStyleFile(file)) {
-          invalidateStyleGraph(file);
+          reloadStyleGraph(file);
           return;
         }
         reloadStyleGraph(file);
@@ -160,6 +161,10 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
       server.watcher.on('unlink', handleSourceAddOrUnlink);
       server.watcher.on('change', (file) => {
         if (graph.isStyleConfigFile(file)) {
+          reloadStyleGraph(file);
+          return;
+        }
+        if (graph.isSourceModuleFile(file)) {
           reloadStyleGraph(file);
         }
       });

@@ -19,12 +19,6 @@ const fixture = {
   outsideFile: '/workspace/README.md',
 };
 
-const packageStyleEntries = [
-  'style.css',
-  'external.css',
-  'module.css',
-] as const;
-
 const packageVirtualId = (entry: string) => {
   return `\0auklet-css:${fixture.packageName}/${entry}`;
 };
@@ -43,12 +37,6 @@ const registerModule = (context: HmrTestContext, id: string) => {
   const module = createModule(id);
   context.modules.set(id, module);
   return module;
-};
-
-const registerPackageStyleModules = (context: HmrTestContext) => {
-  return packageStyleEntries.map((entry) =>
-    registerModule(context, packageVirtualId(entry)),
-  );
 };
 
 const trackVirtualStyleDependency = (
@@ -90,6 +78,7 @@ const expectJsUpdates = (
 const createGraph = () => {
   return {
     getPackageNames: vi.fn(() => [fixture.packageName]),
+    invalidateFile: vi.fn(),
     isSourceGraphFile: vi.fn((file: string) =>
       file.startsWith(`${fixture.workspaceRoot}/packages/`),
     ),
@@ -159,17 +148,15 @@ describe('AukletStyleHmr', () => {
   test('sends js updates for tracked virtual css dependencies', () => {
     const context = createHmrTestContext(graph);
     const trackedDependency = trackVirtualStyleDependency(context);
-    const packageModules = registerPackageStyleModules(context);
 
     const result = handleStyleUpdate(context);
 
     expect(result).toEqual([]);
+    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
     expect(context.invalidateModule).toHaveBeenCalledWith(
       trackedDependency.module,
     );
-    for (const module of packageModules) {
-      expect(context.invalidateModule).toHaveBeenCalledWith(module);
-    }
+    expect(context.invalidateModule).toHaveBeenCalledTimes(1);
     expectJsUpdates(context, [trackedDependency.id]);
   });
 
@@ -199,22 +186,23 @@ describe('AukletStyleHmr', () => {
     trackVirtualStyleDependency(context);
     handleStyleUpdate(context);
     context.send.mockClear();
+    vi.mocked(graph.invalidateFile).mockClear();
 
     const result = handleStyleUpdate(context);
 
     expect(result).toEqual([]);
+    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
     expect(context.send).not.toHaveBeenCalled();
   });
 
   test('does not send updates when no virtual dependency is tracked', () => {
     const context = createHmrTestContext(graph);
 
-    const [packageModule] = registerPackageStyleModules(context);
-
     const result = handleStyleUpdate(context);
 
     expect(result).toEqual([]);
-    expect(context.invalidateModule).toHaveBeenCalledWith(packageModule);
+    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
+    expect(context.invalidateModule).not.toHaveBeenCalled();
     expect(context.send).not.toHaveBeenCalled();
   });
 
