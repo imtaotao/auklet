@@ -176,6 +176,7 @@ export class ModuleStyleGraphRequestCache {
       normalizedConfig: context.normalizedConfig,
       packageName: context.packageName,
       packageNames: this.getPackageNames(),
+      packages: this.getPackageKeyEntries(),
       packageRoot: normalizeFileKey(context.context.packageRoot),
       parsed,
       root: normalizeFileKey(this.options.root),
@@ -198,7 +199,27 @@ export class ModuleStyleGraphRequestCache {
         context.packageContext.sourceFiles,
       ),
       ...this.getResolutionInputFiles(context.context.packageRoot),
+      ...this.getWorkspaceInputFiles(),
     ];
+  }
+
+  private getPackageKeyEntries() {
+    return this.options.packageSource
+      .getPackages()
+      .map((item) => ({
+        packageName: item.packageName,
+        packageRoot: normalizeFileKey(item.packageRoot),
+      }))
+      .sort((left, right) => {
+        const nameOrder = left.packageName.localeCompare(right.packageName);
+        if (nameOrder !== 0) return nameOrder;
+        return left.packageRoot.localeCompare(right.packageRoot);
+      });
+  }
+
+  private getWorkspaceInputFiles() {
+    if (this.options.mode !== 'monorepo') return [];
+    return [path.join(this.options.root, 'pnpm-workspace.yaml')];
   }
 
   private getSourceInputFiles(sourceRoot: string, sourceFiles: Array<string>) {

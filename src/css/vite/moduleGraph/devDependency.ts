@@ -1,12 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { toFsSpecifier } from '#auklet/utils';
 import type { PackageStyleContext } from '#auklet/css/vite/moduleGraph/requestCache';
-import { normalizeFileKey, toFsSpecifier } from '#auklet/utils';
 
 const getPackageName = (specifier: string) => {
   if (!specifier.startsWith('@')) return specifier.split('/')[0] ?? specifier;
   const [scope, name] = specifier.split('/');
+  if (!scope || !name) return null;
   return `${scope}/${name}`;
+};
+
+const findNodeModulesPackageRoot = (file: string, packageName: string) => {
+  const resolved = path.resolve(file);
+  const root = path.parse(resolved).root;
+  const parts = path.relative(root, resolved).split(path.sep);
+  const packageParts = packageName.split('/');
+  const packageLength = packageParts.length;
+
+  for (let index = parts.length - packageLength - 1; index >= 0; index -= 1) {
+    if (parts[index] !== 'node_modules') continue;
+    const candidateParts = parts.slice(index + 1, index + 1 + packageLength);
+    if (candidateParts.join('/') !== packageName) continue;
+    return path.join(root, ...parts.slice(0, index + 1 + packageLength));
+  }
+  return null;
 };
 
 const findPackageJson = (
@@ -14,25 +31,34 @@ const findPackageJson = (
   context: PackageStyleContext,
   specifier: string,
 ) => {
-  let current = path.dirname(file);
-  let currentKey = normalizeFileKey(current);
-  const packageRootKey = normalizeFileKey(context.context.packageRoot);
+  const packageName = getPackageName(specifier);
+  if (!packageName) return null;
+  const packageRoot = findNodeModulesPackageRoot(file, packageName);
+  if (!packageRoot) {
+    return path.join(
+      context.context.packageRoot,
+      'node_modules',
+      packageName,
+      'package.json',
+    );
+  }
 
-  while (
-    currentKey === packageRootKey ||
-    currentKey.startsWith(`${packageRootKey}/`)
-  ) {
+  let current = path.dirname(file);
+  let next = current;
+  const packageRootKey = path.resolve(packageRoot);
+
+  do {
     const packageJson = path.join(current, 'package.json');
     if (fs.existsSync(packageJson)) return packageJson;
-    if (currentKey === packageRootKey) break;
-    current = path.dirname(current);
-    currentKey = normalizeFileKey(current);
-  }
+    if (path.resolve(current) === packageRootKey) break;
+    next = path.dirname(current);
+    if (next !== current) current = next;
+  } while (next !== current);
 
   return path.join(
     context.context.packageRoot,
     'node_modules',
-    getPackageName(specifier),
+    packageName,
     'package.json',
   );
 };
@@ -46,8 +72,9 @@ export function toDevDependencyImportSpecifier(
     return { specifier };
   }
   const resolved = context.resolver.resolveStyleDependency(specifier);
+  const packageJson = findPackageJson(resolved, context, specifier);
   return {
-    cacheInputFiles: [findPackageJson(resolved, context, specifier)],
+    cacheInputFiles: packageJson ? [packageJson] : [],
     specifier: toFsSpecifier(resolved),
     watchFile: resolved,
   };

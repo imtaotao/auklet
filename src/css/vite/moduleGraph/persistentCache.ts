@@ -38,6 +38,8 @@ export type PersistentStyleGraphCacheOptions = {
 };
 
 const cacheVersion = 'v1';
+const maxCacheFiles = 5000;
+const staleCacheAgeMs = 7 * 24 * 60 * 60 * 1000;
 
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
@@ -108,6 +110,7 @@ const statCachedFile = (file: string) => {
 };
 
 export class PersistentStyleGraphCache {
+  private static readonly cleanedRoots = new Set<string>();
   private readonly cacheRoot: string;
 
   constructor(options: PersistentStyleGraphCacheOptions) {
@@ -173,6 +176,48 @@ export class PersistentStyleGraphCache {
       );
     } catch {
       // Cache writes are an optimization; dev CSS generation must keep working.
+      return;
+    }
+
+    this.cleanupStaleEntries();
+  }
+
+  private cleanupStaleEntries() {
+    if (PersistentStyleGraphCache.cleanedRoots.has(this.cacheRoot)) return;
+    PersistentStyleGraphCache.cleanedRoots.add(this.cacheRoot);
+
+    try {
+      const now = Date.now();
+      const entries = fs
+        .readdirSync(this.cacheRoot, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+        .map((entry) => {
+          const file = path.join(this.cacheRoot, entry.name);
+          return {
+            file,
+            mtimeMs: fs.statSync(file).mtimeMs,
+          };
+        });
+
+      const freshEntries = [];
+      for (const entry of entries) {
+        if (now - entry.mtimeMs > staleCacheAgeMs) {
+          fs.unlinkSync(entry.file);
+          continue;
+        }
+        freshEntries.push(entry);
+      }
+
+      const overflowCount = freshEntries.length - maxCacheFiles;
+      if (overflowCount <= 0) return;
+
+      for (const entry of freshEntries
+        .sort((left, right) => left.mtimeMs - right.mtimeMs)
+        .slice(0, overflowCount)) {
+        fs.unlinkSync(entry.file);
+      }
+    } catch {
+      // Cache cleanup is best-effort and must not affect dev CSS generation.
     }
   }
 

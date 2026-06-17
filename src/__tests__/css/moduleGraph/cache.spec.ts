@@ -3,8 +3,14 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import { ModuleStyleImportCollector } from '#auklet/css/core/styleImports/collector';
+import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { PersistentStyleGraphCache } from '#auklet/css/vite/moduleGraph/persistentCache';
+import { ModuleStyleGraphRequestCache } from '#auklet/css/vite/moduleGraph/requestCache';
+import type {
+  StylePackageInfo,
+  StylePackageSource,
+} from '#auklet/css/vite/moduleGraph/packageSource/types';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -28,6 +34,16 @@ describe('ModuleStyleGraph request cache', () => {
     vi.restoreAllMocks();
     fixture.cleanup();
   });
+
+  const createPackageSource = (packages: Array<StylePackageInfo>) =>
+    ({
+      getPackages: () => packages,
+      getPackageNames: () => packages.map((item) => item.packageName),
+      getWatchRoots: async () => [],
+      isKnownPackageName: (packageName: string) =>
+        packages.some((item) => item.packageName === packageName),
+      isSourceGraphFile: () => true,
+    }) satisfies StylePackageSource;
 
   test('reuses package contexts inside one CSS request', async () => {
     const loadAukletConfig = vi.fn(
@@ -275,6 +291,67 @@ describe('ModuleStyleGraph request cache', () => {
     );
   });
 
+  test('keeps persistent cache keys stable for duplicate package names', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    fixture.writeJson('packages/dup-a/package.json', {
+      name: '@scope/dup',
+    });
+    fixture.writeJson('packages/dup-b/package.json', {
+      name: '@scope/dup',
+    });
+    const appPackage = {
+      packageName: '@scope/app',
+      packageRoot: fixture.resolve(appPackageRoot),
+    };
+    const duplicatePackageA = {
+      packageName: '@scope/dup',
+      packageRoot: fixture.resolve('packages/dup-a'),
+    };
+    const duplicatePackageB = {
+      packageName: '@scope/dup',
+      packageRoot: fixture.resolve('packages/dup-b'),
+    };
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const firstCache = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        appPackage,
+        duplicatePackageB,
+        duplicatePackageA,
+      ]),
+      root: fixture.root,
+    });
+    const firstContext = await firstCache.getContext(parsed);
+    expect(firstContext).not.toBeNull();
+    firstCache.writePersistentLoadResult(parsed, firstContext!, {
+      code: '.button { color: red; }',
+      watchFiles: [],
+    });
+    const secondCache = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        appPackage,
+        duplicatePackageA,
+        duplicatePackageB,
+      ]),
+      root: fixture.root,
+    });
+    const secondContext = await secondCache.getContext(parsed);
+    expect(secondContext).not.toBeNull();
+
+    const cached = secondCache.readPersistentLoadResult(parsed, secondContext!);
+
+    expect(cached?.code).toContain('color: red');
+  });
+
   test('invalidates persistent virtual CSS load results when inputs change', async () => {
     fixture.writeFile(
       path.join(appPackageRoot, 'src/components/Button/index.css'),
@@ -362,6 +439,60 @@ describe('ModuleStyleGraph request cache', () => {
     fs.symlinkSync(fixture.resolve('store/dep-v2'), linkPath, 'dir');
 
     expect(cache.read(key)).toBeNull();
+  });
+
+  test('cleans stale persistent cache files after a write', () => {
+    const cache = new PersistentStyleGraphCache({
+      root: fixture.root,
+    });
+    const staleFile = fixture.writeFile(
+      'node_modules/.auklet/cache/vite-style/v1/stale.json',
+      '{}',
+    );
+    const staleTime = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(staleFile, staleTime, staleTime);
+
+    cache.write(
+      cache.createKey({ test: 'cleanup-stale' }),
+      {
+        code: '.button { color: red; }',
+        watchFiles: [],
+      },
+      [],
+    );
+
+    expect(fs.existsSync(staleFile)).toBe(false);
+  });
+
+  test('limits persistent cache file count after a write', () => {
+    const cacheRoot = 'node_modules/.auklet/cache/vite-style/v1';
+    const cache = new PersistentStyleGraphCache({
+      root: fixture.root,
+    });
+
+    for (let index = 0; index < 5002; index += 1) {
+      const file = fixture.writeFile(
+        path.join(cacheRoot, `entry-${index}.json`),
+        '{}',
+      );
+      const time = new Date(Date.now() - (5002 - index) * 1000);
+      fs.utimesSync(file, time, time);
+    }
+
+    cache.write(
+      cache.createKey({ test: 'cleanup-count' }),
+      {
+        code: '.button { color: red; }',
+        watchFiles: [],
+      },
+      [],
+    );
+
+    expect(
+      fs
+        .readdirSync(fixture.resolve(cacheRoot), { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.json')),
+    ).toHaveLength(5000);
   });
 
   test('invalidates persistent virtual CSS load results when missing inputs are added', async () => {
@@ -502,6 +633,135 @@ describe('ModuleStyleGraph request cache', () => {
 
     expect(result.code).toContain('dep/style.css');
     expect(result.cacheInputFiles).toContain(packageJson);
+  });
+
+  test('tracks hoisted dependency package json as a persistent cache input', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          styles: {
+            dependencies: {
+              dep: {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    const packageJson = fixture.writeJson(
+      path.join('node_modules/dep/package.json'),
+      {
+        name: 'dep',
+        exports: {
+          './style.css': './style.css',
+        },
+      },
+    );
+    fixture.writeFile(
+      path.join('node_modules/dep/style.css'),
+      '.dep { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const result = await graph.createPackageStyleCode(parsed);
+    const cache = new PersistentStyleGraphCache({
+      root: fixture.root,
+    });
+    const key = cache.createKey({
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+      source: 'hoisted-dependency',
+    });
+    cache.write(key, result, result.cacheInputFiles ?? []);
+    fixture.writeJson(path.join('node_modules/dep/package.json'), {
+      name: 'dep',
+      exports: {
+        './style.css': './blue.css',
+      },
+    });
+
+    expect(result.code).toContain('dep/style.css');
+    expect(result.cacheInputFiles).toContain(packageJson);
+    expect(result.cacheInputFiles).not.toContain(
+      fixture.resolve(
+        path.join(appPackageRoot, 'node_modules/dep/package.json'),
+      ),
+    );
+    expect(cache.read(key)).toBeNull();
+  });
+
+  test('invalidates persistent cache when workspace package root changes', async () => {
+    const appRoot = 'apps/app-package';
+    const firstUiRoot = 'libs-v1/ui-package';
+    const secondUiRoot = 'libs-v2/ui-package';
+    fixture.writeFile(
+      'pnpm-workspace.yaml',
+      'packages:\n  - apps/*\n  - libs-v1/*\n',
+    );
+    fixture.writeJson(path.join(appRoot, 'package.json'), {
+      name: '@scope/app',
+    });
+    fixture.writeJson(path.join(firstUiRoot, 'package.json'), {
+      name: '@scope/ui',
+    });
+    fixture.writeFile(
+      path.join(appRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join(firstUiRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const firstResult = await firstGraph.createPackageStyleCode(parsed);
+    fixture.writeFile(
+      'pnpm-workspace.yaml',
+      'packages:\n  - apps/*\n  - libs-v2/*\n',
+    );
+    fixture.writeJson(path.join(secondUiRoot, 'package.json'), {
+      name: '@scope/ui',
+    });
+    fixture.writeFile(
+      path.join(secondUiRoot, 'src/components/Button/index.css'),
+      '.button { color: blue; }',
+    );
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    const secondResult = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).toContain('color: red');
+    expect(firstResult.code).not.toContain('color: blue');
+    expect(secondResult.code).toContain('color: blue');
+    expect(secondResult.code).not.toContain('color: red');
   });
 
   test('invalidates persistent cache when package json changes', () => {
