@@ -82,6 +82,12 @@ export class AukletStyleHmr {
     addVirtualStyleDependency(this.virtualIdsByDependency, file, virtualId);
   }
 
+  hasTrackedStyleDependency(file: string) {
+    return (
+      getDependencyVirtualIds(this.virtualIdsByDependency, file).length > 0
+    );
+  }
+
   installFullReloadGuard(server: Pick<ViteDevServer, 'ws'>) {
     const send = server.ws.send.bind(server.ws) as ViteDevServer['ws']['send'];
     server.ws.send = ((payload: HotPayload, data?: unknown) => {

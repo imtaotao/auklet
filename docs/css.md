@@ -100,7 +100,10 @@ src/css/vite/
 
 The Vite plugin turns package CSS imports into virtual modules and calls
 `moduleGraph/` to generate CSS. HMR logic decides which virtual CSS modules to
-invalidate when source, config, or style files change.
+invalidate when source, config, or style files change. Tracked style files use
+auklet's own js-update path so dependency packages can refresh their virtual
+CSS without a full reload; CSS files outside the tracked style graph stay on
+Vite's native CSS HMR.
 
 Vite/dev caches virtual CSS generation in memory for the current dev server
 lifecycle and persists generated virtual CSS results under

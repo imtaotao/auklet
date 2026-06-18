@@ -100,6 +100,228 @@ describe('aukletStylePlugin Vite server integration', () => {
     expect(context.send).not.toHaveBeenCalledWith({ type: 'full-reload' });
   });
 
+  test('updates virtual css when a tracked css file changes through watcher', async () => {
+    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    fixture.writeJson(path.join('packages/app/package.json'), {
+      name: '@scope/app',
+    });
+    fixture.writeJson(path.join('packages/ui/package.json'), {
+      name: '@scope/ui',
+    });
+    fixture.writeFile(
+      path.join('packages/app/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/ui/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.tsx'),
+      'export function App() { return null; }',
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.css'),
+      '.app { color: red; }',
+    );
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.tsx'),
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+
+    const context = createServer();
+    const plugin = aukletStylePlugin({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const virtualId = '\0auklet-css:@scope/app/style.css';
+    const styleFile = path.join(
+      fixture.root,
+      'packages/ui/src/components/Button/index.css',
+    );
+
+    await plugin.configureServer?.(context.server);
+    await plugin.load?.call(
+      {
+        addWatchFile: vi.fn(),
+      },
+      virtualId,
+    );
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    context.handlers.get('change')?.(styleFile);
+
+    expect(context.server.moduleGraph.getModuleById).toHaveBeenCalledWith(
+      virtualId,
+    );
+    expect(context.invalidateModule).toHaveBeenCalledWith({
+      id: virtualId,
+    });
+    expect(context.send).toHaveBeenCalledWith({
+      type: 'update',
+      updates: [
+        expect.objectContaining({
+          path: '/@id/__x00__auklet-css:@scope/app/style.css',
+          type: 'js-update',
+        }),
+      ],
+    });
+  });
+
+  test('does not intercept untracked css file changes', async () => {
+    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    fixture.writeJson(path.join('packages/app/package.json'), {
+      name: '@scope/app',
+    });
+    fixture.writeFile(
+      path.join('packages/app/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.tsx'),
+      'export function App() { return null; }',
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.css'),
+      '.app { color: red; }',
+    );
+
+    const context = createServer();
+    const plugin = aukletStylePlugin({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const styleFile = path.join(
+      fixture.root,
+      'packages/app/src/components/App/index.css',
+    );
+
+    await plugin.configureServer?.(context.server);
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    context.handlers.get('change')?.(styleFile);
+
+    expect(context.invalidateModule).not.toHaveBeenCalled();
+    expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('does not send duplicate updates for watcher and hotUpdate on the same css file', async () => {
+    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    fixture.writeJson(path.join('packages/app/package.json'), {
+      name: '@scope/app',
+    });
+    fixture.writeJson(path.join('packages/ui/package.json'), {
+      name: '@scope/ui',
+    });
+    fixture.writeFile(
+      path.join('packages/app/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                entry: '/style.css',
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/ui/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.tsx'),
+      'export function App() { return null; }',
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.css'),
+      '.app { color: red; }',
+    );
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.tsx'),
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+
+    const context = createServer();
+    const plugin = aukletStylePlugin({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const virtualId = '\0auklet-css:@scope/app/style.css';
+    const styleFile = path.join(
+      fixture.root,
+      'packages/ui/src/components/Button/index.css',
+    );
+
+    await plugin.configureServer?.(context.server);
+    await plugin.load?.call(
+      {
+        addWatchFile: vi.fn(),
+      },
+      virtualId,
+    );
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    context.handlers.get('change')?.(styleFile);
+    await plugin.hotUpdate?.handler?.({
+      file: styleFile,
+      modules: [],
+      server: context.server,
+      timestamp: Date.now(),
+      type: 'update',
+      read: vi.fn(),
+    } as never);
+
+    expect(context.invalidateModule).toHaveBeenCalledTimes(1);
+    expect(context.send).toHaveBeenCalledTimes(1);
+    expect(context.send).toHaveBeenCalledWith({
+      type: 'update',
+      updates: [
+        expect.objectContaining({
+          path: '/@id/__x00__auklet-css:@scope/app/style.css',
+          type: 'js-update',
+        }),
+      ],
+    });
+  });
+
   test('sends full reload for style config changes', async () => {
     const context = createServer();
     const plugin = aukletStylePlugin({

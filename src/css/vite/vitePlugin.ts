@@ -149,22 +149,24 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
         server.ws.send({ type: 'full-reload' });
       };
 
-      const handleSourceAddOrUnlink = (file: string) => {
-        if (graph.isStyleFile(file)) {
-          reloadStyleGraph(file);
-          return;
-        }
-        reloadStyleGraph(file);
-      };
-
-      server.watcher.on('add', handleSourceAddOrUnlink);
-      server.watcher.on('unlink', handleSourceAddOrUnlink);
+      server.watcher.on('add', reloadStyleGraph);
+      server.watcher.on('unlink', reloadStyleGraph);
       server.watcher.on('change', (file) => {
         if (graph.isStyleConfigFile(file)) {
           reloadStyleGraph(file);
-          return;
-        }
-        if (graph.isSourceModuleFile(file)) {
+        } else if (
+          graph.isStyleFile(file) &&
+          hmr.hasTrackedStyleDependency(file)
+        ) {
+          hmr.handleStyleHotUpdate({
+            file,
+            modules: [],
+            server,
+            timestamp: Date.now(),
+            type: 'update',
+            read: async () => '',
+          });
+        } else if (graph.isSourceModuleFile(file)) {
           hmr.handleSourceModuleChange(server, file);
         }
       });
