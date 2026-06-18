@@ -198,6 +198,28 @@ describe('ModuleStyleImportCollector dependency imports', () => {
     expectNoStyles(entries);
   });
 
+  test('propagates external component styles through same-package file modules', () => {
+    fixture.writeDeps('@scope/ui/components/Spinner.css');
+    const tableFile = fixture.writeSource(
+      'components/Table/index.tsx',
+      "import { TableView } from '#fixture/components/Table/TableView';",
+    );
+    const tableViewFile = fixture.writeSource(
+      'components/Table/TableView.tsx',
+      "import { Spinner } from '@scope/ui';",
+    );
+
+    const entries = fixture.collector.collect(
+      [tableFile, tableViewFile],
+      defaultConfig,
+    );
+
+    expectStyles(entries, 'components/Table', ['../TableView/style/index.css']);
+    expectStyles(entries, 'components/Table/TableView', [
+      '@scope/ui/components/Spinner.css',
+    ]);
+  });
+
   test('throws when a local re-export cannot be resolved', () => {
     const file = fixture.writeSource(
       'pages/Article.tsx',

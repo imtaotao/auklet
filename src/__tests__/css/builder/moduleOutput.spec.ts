@@ -86,6 +86,113 @@ describe('ModuleStyleBuilder module output', () => {
     );
   });
 
+  test('builds parent module CSS entries with nested file module dependencies', async () => {
+    writePackageImports(fixture);
+    fixture.writeFile(
+      'source/components/Table/index.tsx',
+      `
+        import { TableView } from '#fixture/components/Table/TableView';
+        export function Table() { return TableView; }
+      `,
+    );
+    fixture.writeFile(
+      'source/components/Table/TableView.tsx',
+      `
+        import { EmptyState } from '#fixture/components/EmptyState';
+        import { Spinner } from '#fixture/components/Spinner';
+        export function TableView() { return EmptyState ?? Spinner; }
+      `,
+    );
+    fixture.writeFile(
+      'source/components/EmptyState/index.tsx',
+      'export function EmptyState() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/Spinner/index.tsx',
+      'export function Spinner() { return null; }',
+    );
+    fixture.writeFile('source/components/Table/index.css', '.table {}');
+    fixture.writeFile(
+      'source/components/EmptyState/index.css',
+      '.empty-state {}',
+    );
+    fixture.writeFile('source/components/Spinner/index.css', '.spinner {}');
+
+    await createBuilder(fixture, moduleConfig).build();
+
+    const tableStyle = fixture.readFile(
+      'output/es/components/Table/style/index.css',
+    );
+    const tableViewStyle = fixture.readFile(
+      'output/es/components/Table/TableView/style/index.css',
+    );
+
+    expect(tableStyle).toBe(
+      '@import "../TableView/style/index.css";\n' + '@import "../index.css";\n',
+    );
+    expect(tableViewStyle).toBe(
+      '@import "../../../EmptyState/style/index.css";\n' +
+        '@import "../../../Spinner/style/index.css";\n',
+    );
+  });
+
+  test('does not create CSS import cycles for circular source imports', async () => {
+    writePackageImports(fixture);
+    fixture.writeFile(
+      'source/components/A/index.tsx',
+      `
+        import { B } from '#fixture/components/B';
+        export function A() { return B; }
+      `,
+    );
+    fixture.writeFile(
+      'source/components/B/index.tsx',
+      `
+        import { A } from '#fixture/components/A';
+        export function B() { return A; }
+      `,
+    );
+    fixture.writeFile('source/components/A/index.css', '.a {}');
+
+    await createBuilder(fixture, moduleConfig).build();
+
+    const aStyle = fixture.readFile('output/es/components/A/style/index.css');
+    const bStyle = fixture.readFile('output/es/components/B/style/index.css');
+
+    expect(aStyle).toBe('@import "../index.css";\n');
+    expect(bStyle).toBe('@import "../../A/style/index.css";\n');
+  });
+
+  test('keeps one source import direction when circular imports both have own CSS', async () => {
+    writePackageImports(fixture);
+    fixture.writeFile(
+      'source/components/A/index.tsx',
+      `
+        import { B } from '#fixture/components/B';
+        export function A() { return B; }
+      `,
+    );
+    fixture.writeFile(
+      'source/components/B/index.tsx',
+      `
+        import { A } from '#fixture/components/A';
+        export function B() { return A; }
+      `,
+    );
+    fixture.writeFile('source/components/A/index.css', '.a {}');
+    fixture.writeFile('source/components/B/index.css', '.b {}');
+
+    await createBuilder(fixture, moduleConfig).build();
+
+    const aStyle = fixture.readFile('output/es/components/A/style/index.css');
+    const bStyle = fixture.readFile('output/es/components/B/style/index.css');
+
+    expect(aStyle).toBe(
+      '@import "../../B/style/index.css";\n' + '@import "../index.css";\n',
+    );
+    expect(bStyle).toBe('@import "../index.css";\n');
+  });
+
   test('builds empty module CSS entries for second-level tsx modules without styles', async () => {
     fixture.writeFile('source/index.ts', 'export const root = true;');
     fixture.writeFile(

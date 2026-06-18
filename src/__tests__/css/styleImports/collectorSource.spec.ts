@@ -146,4 +146,54 @@ describe('ModuleStyleImportCollector source imports', () => {
       '../../Button/style/index.css',
     ]);
   });
+
+  test('collects styles from same-package file modules with transitive style imports', () => {
+    const file = fixture.writeSource(
+      'components/Table/index.tsx',
+      "import { TableView } from '#fixture/components/Table/TableView';",
+    );
+    const tableViewFile = fixture.writeSource(
+      'components/Table/TableView.tsx',
+      "import { Spinner } from '#fixture/components/Spinner';",
+    );
+    const spinnerFile = fixture.writeSource(
+      'components/Spinner/index.tsx',
+      'export function Spinner() { return null; }',
+    );
+    fixture.writeStyles('components/Spinner/index.css');
+
+    const entries = fixture.collector.collect(
+      [file, tableViewFile, spinnerFile],
+      emptyConfig,
+    );
+
+    expectStyles(entries, 'components/Table', ['../TableView/style/index.css']);
+    expectStyles(entries, 'components/Table/TableView', [
+      '../../../Spinner/style/index.css',
+    ]);
+  });
+
+  test('does not treat non-tsx source modules as transitive style modules', () => {
+    const file = fixture.writeSource(
+      'components/A/index.tsx',
+      "import { B } from '#fixture/components/B';",
+    );
+    const bFile = fixture.writeSource(
+      'components/B.ts',
+      "import { C } from '#fixture/components/C';\nexport const B = C;",
+    );
+    const cFile = fixture.writeSource(
+      'components/C/index.tsx',
+      'export function C() { return null; }',
+    );
+    fixture.writeStyles('components/C/index.css');
+
+    const entries = fixture.collector.collect(
+      [file, bFile, cFile],
+      emptyConfig,
+    );
+
+    expect(entries.get('components/A')).toBeUndefined();
+    expect(entries.get('components/B')).toBeUndefined();
+  });
 });

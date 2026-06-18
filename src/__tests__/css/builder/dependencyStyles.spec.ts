@@ -130,6 +130,51 @@ describe('ModuleStyleBuilder dependency styles', () => {
     ).toHaveLength(1);
   });
 
+  test('builds parent module CSS entries with nested external component dependencies', async () => {
+    fixture.writeFile(
+      'source/components/Table/index.tsx',
+      `
+        import { TableView } from './TableView';
+        export function Table() { return TableView; }
+      `,
+    );
+    fixture.writeFile(
+      'source/components/Table/TableView.tsx',
+      `
+        import { Spinner } from '@scope/ui';
+        export function TableView() { return Spinner; }
+      `,
+    );
+    fixture.writeFile('source/components/Table/index.css', '.table {}');
+    fixture.writeFile('node_modules/@scope/ui/components/Spinner.css', '');
+
+    await createBuilder(fixture, {
+      ...moduleConfig,
+      styles: {
+        dependencies: {
+          '@scope/ui': {
+            components: '/components/**.css',
+          },
+        },
+      },
+    }).build();
+
+    const tableStyle = fixture.readFile(
+      'output/es/components/Table/style/index.css',
+    );
+    const tableViewStyle = fixture.readFile(
+      'output/es/components/Table/TableView/style/index.css',
+    );
+
+    expect(collectStyleImports(tableStyle)).toEqual([
+      '../TableView/style/index.css',
+      '../index.css',
+    ]);
+    expect(collectStyleImports(tableViewStyle)).toEqual([
+      '@scope/ui/components/Spinner.css',
+    ]);
+  });
+
   test('does not infer external component CSS without components config', async () => {
     fixture.writeFile('node_modules/@scope/ui/style.css', '');
     fixture.writeFile('node_modules/@scope/ui/components/Skeleton.css', '');

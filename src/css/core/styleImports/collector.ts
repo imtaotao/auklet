@@ -20,8 +20,19 @@ import {
   createDirectStyleAutoImportSpecifier,
 } from '#auklet/css/core/styleImports/autoImportRules';
 
+const SOURCE_MODULE_EXTENSION = '.tsx';
 const SOURCE_EXTENSION_RE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const SOURCE_INDEX_RE = new RegExp(`[/\\\\]index${SOURCE_EXTENSION_RE.source}`);
+
+type SourceImportStyleReference = {
+  sourceDir: string;
+  styleEntry: string;
+  hasOwnStyle: boolean;
+};
+
+type SourceImportStyleEdge = SourceImportStyleReference & {
+  specifier: string;
+};
 
 export class ModuleStyleImportCollector {
   constructor(
@@ -33,6 +44,8 @@ export class ModuleStyleImportCollector {
 
   collect(files: Array<string>, config: NormalizedAukletConfig) {
     const entries = new Map<string, Array<string>>();
+    const sourceImportEdges = new Map<string, Array<SourceImportStyleEdge>>();
+    const acceptedSourceImportEdges = new Map<string, Set<string>>();
     const rules = createStyleAutoImportRules(config);
 
     for (const file of files) {
@@ -48,6 +61,8 @@ export class ModuleStyleImportCollector {
       for (const item of imports) {
         this.collectSourceImportStyle(
           entries,
+          sourceImportEdges,
+          acceptedSourceImportEdges,
           sourceDir,
           sourceModuleDir,
           item,
@@ -96,11 +111,18 @@ export class ModuleStyleImportCollector {
         }
       }
     }
+    this.appendResolvedSourceImportStyles(
+      entries,
+      sourceImportEdges,
+      acceptedSourceImportEdges,
+    );
     return entries;
   }
 
   private collectSourceImportStyle(
     entries: Map<string, Array<string>>,
+    sourceImportEdges: Map<string, Array<SourceImportStyleEdge>>,
+    acceptedSourceImportEdges: Map<string, Set<string>>,
     sourceDir: string,
     sourceModuleDir: string,
     item: ModuleImportReference,
@@ -114,11 +136,28 @@ export class ModuleStyleImportCollector {
     if (!importedStyleEntry) return;
 
     const sourceStyleDir = path.join(this.srcRoot, sourceModuleDir, 'style');
-    appendUniqueMapValue(
-      entries,
-      sourceModuleDir,
-      this.toRelativeSpecifier(sourceStyleDir, importedStyleEntry),
-    );
+    const edge = {
+      ...importedStyleEntry,
+      specifier: this.toRelativeSpecifier(
+        sourceStyleDir,
+        importedStyleEntry.styleEntry,
+      ),
+    };
+
+    if (importedStyleEntry.hasOwnStyle) {
+      if (
+        !this.addAcceptedSourceImportEdge(
+          acceptedSourceImportEdges,
+          sourceModuleDir,
+          edge.sourceDir,
+        )
+      ) {
+        return;
+      }
+      appendUniqueMapValue(entries, sourceModuleDir, edge.specifier);
+      return;
+    }
+    appendUniqueMapValue(sourceImportEdges, sourceModuleDir, edge);
   }
 
   private resolveSourceImportStyleEntry(sourceDir: string, importPath: string) {
@@ -132,19 +171,101 @@ export class ModuleStyleImportCollector {
       if (!this.isInsideSourceRoot(sourceBase)) continue;
 
       const directoryStyleEntry = path.join(sourceBase, 'style', 'index.css');
-
-      for (const extension of this.styleExtensions) {
-        const directorySourceStyle = path.join(sourceBase, `index${extension}`);
-        if (fs.existsSync(directorySourceStyle)) return directoryStyleEntry;
+      const directorySourceStyle = this.styleExtensions.some((extension) =>
+        fs.existsSync(path.join(sourceBase, `index${extension}`)),
+      );
+      const directorySourceModule = this.hasSourceModule(
+        path.join(sourceBase, 'index'),
+      );
+      if (directorySourceStyle || directorySourceModule) {
+        return {
+          sourceDir: path.relative(this.srcRoot, sourceBase),
+          styleEntry: directoryStyleEntry,
+          hasOwnStyle: directorySourceStyle,
+        } satisfies SourceImportStyleReference;
       }
 
       const hasFileSourceStyle = this.styleExtensions.some((extension) =>
         fs.existsSync(`${sourceBase}${extension}`),
       );
-      if (hasFileSourceStyle)
-        return path.join(sourceBase, 'style', 'index.css');
+      const hasFileSourceModule = this.hasSourceModule(sourceBase);
+      if (hasFileSourceStyle || hasFileSourceModule)
+        return {
+          sourceDir: path.relative(this.srcRoot, sourceBase),
+          styleEntry: path.join(sourceBase, 'style', 'index.css'),
+          hasOwnStyle: hasFileSourceStyle,
+        } satisfies SourceImportStyleReference;
     }
     return null;
+  }
+
+  private appendResolvedSourceImportStyles(
+    entries: Map<string, Array<string>>,
+    sourceImportEdges: Map<string, Array<SourceImportStyleEdge>>,
+    acceptedSourceImportEdges: Map<string, Set<string>>,
+  ) {
+    const styledSourceDirs = new Set(entries.keys());
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      for (const [sourceModuleDir, edges] of sourceImportEdges) {
+        for (const edge of edges) {
+          if (!edge.hasOwnStyle && !styledSourceDirs.has(edge.sourceDir)) {
+            continue;
+          }
+          if (
+            !this.addAcceptedSourceImportEdge(
+              acceptedSourceImportEdges,
+              sourceModuleDir,
+              edge.sourceDir,
+            )
+          ) {
+            continue;
+          }
+          const before = entries.get(sourceModuleDir)?.length ?? 0;
+          appendUniqueMapValue(entries, sourceModuleDir, edge.specifier);
+          const after = entries.get(sourceModuleDir)?.length ?? 0;
+          if (after === before) continue;
+          styledSourceDirs.add(sourceModuleDir);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  private addAcceptedSourceImportEdge(
+    edges: Map<string, Set<string>>,
+    sourceDir: string,
+    targetDir: string,
+  ) {
+    if (sourceDir === targetDir) return false;
+    if (this.hasSourceImportPath(edges, targetDir, sourceDir)) return false;
+
+    const targets = edges.get(sourceDir) ?? new Set<string>();
+    targets.add(targetDir);
+    edges.set(sourceDir, targets);
+    return true;
+  }
+
+  private hasSourceImportPath(
+    edges: Map<string, Set<string>>,
+    fromDir: string,
+    toDir: string,
+    seen = new Set<string>(),
+  ) {
+    if (fromDir === toDir) return true;
+    if (seen.has(fromDir)) return false;
+    seen.add(fromDir);
+
+    for (const nextDir of edges.get(fromDir) ?? []) {
+      if (this.hasSourceImportPath(edges, nextDir, toDir, seen)) return true;
+    }
+    return false;
+  }
+
+  private hasSourceModule(sourceBase: string) {
+    return fs.existsSync(`${sourceBase}${SOURCE_MODULE_EXTENSION}`);
   }
 
   private isInsideSourceRoot(file: string) {

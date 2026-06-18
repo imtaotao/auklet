@@ -365,4 +365,66 @@ describe('ModuleStyleGraph entries', () => {
       'src/pages/BlogArticlePage.css',
     );
   });
+
+  test('creates source module CSS with nested same-package file module dependencies', async () => {
+    fixture.writeFile(
+      'packages/app-package/auklet.config.js',
+      `
+        export const config = {
+          source: 'src',
+          output: 'dist',
+          modules: true,
+        };
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/Table/index.tsx',
+      `
+        import { TableView } from './TableView';
+        export function Table() { return TableView; }
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/Table/TableView.tsx',
+      `
+        import { EmptyState } from '../EmptyState';
+        import { Spinner } from '../Spinner';
+        export function TableView() { return EmptyState ?? Spinner; }
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/EmptyState/index.tsx',
+      'export function EmptyState() { return null; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/Spinner/index.tsx',
+      'export function Spinner() { return null; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/Table/index.css',
+      '.table { display: grid; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/EmptyState/index.css',
+      '.empty-state { padding: 16px; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/Spinner/index.css',
+      '.spinner { animation: spin 1s linear infinite; }',
+    );
+
+    const graph = createMonorepoGraph(fixture);
+    const result = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/components/Table.css')!,
+    );
+
+    expectContentOrder(result.code, '.empty-state', '.table');
+    expectContentOrder(result.code, '.spinner', '.table');
+    expectWatchFile(
+      result.watchFiles,
+      fixture,
+      appPackageRoot,
+      'src/components/Table/TableView.tsx',
+    );
+  });
 });
