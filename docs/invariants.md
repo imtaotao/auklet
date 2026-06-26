@@ -64,6 +64,10 @@ the same change and make the reason explicit.
   and Vite/dev graph structure.
 - auklet is a style entry generator, not a general CSS bundler. Do not add
   partial CSS transform behavior inside entry writers.
+- `styles.shared` is the only same-package exception to component-local CSS
+  imports. It must stay limited to current source-root CSS files and must not
+  permit component-to-component or package-to-package CSS imports. Nested shared
+  imports must stay limited to non-module, non-theme helper CSS.
 - CSS auto import inference only reads the supported source model. `.tsx` named
   imports/re-exports are supported; `.ts`, `.d.ts`, and `export * from` remain
   outside the inference model unless the model is intentionally changed.

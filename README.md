@@ -161,6 +161,7 @@ export const config = defineConfig({
       light: './src/themes/light.css',
       dark: './src/themes/dark.css',
     },
+    shared: ['./src/internal/**/*.css'],
     dependencies: {
       '@scope/ui': {
         entry: '/style.css',
@@ -170,3 +171,15 @@ export const config = defineConfig({
   },
 });
 ```
+
+`styles.shared` declares same-package CSS fragments that component CSS may
+import directly. Matched files must live under the current source root. The
+pattern syntax is a small glob subset: `*`, `**`, and `?`.
+
+For example, `components/CodeBlock/index.css` may import
+`../../internal/syntaxHighlight.css` when it matches `styles.shared`; component
+CSS outputs inline that shared CSS and its local helper CSS imports, while
+package-level CSS dedupes repeated shared imports. Shared CSS cannot import
+component CSS or theme CSS. Component-to-component CSS imports are still
+rejected; package CSS dependencies should be expressed through
+`styles.dependencies`.

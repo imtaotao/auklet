@@ -9,6 +9,10 @@ export type StyleFileImportReference = {
   imported: string;
 };
 
+export type StyleFileImportExpandOptions = {
+  shouldExpandImport?: (reference: StyleFileImportReference) => boolean;
+};
+
 export class StyleProcessor {
   constructor(
     private readonly config: ModuleStyleBuildConfig,
@@ -42,7 +46,11 @@ export class StyleProcessor {
     target.append(...(root.nodes ?? []));
   }
 
-  readStyleFile(stylePath: string, seen = new Set<string>()) {
+  readStyleFile(
+    stylePath: string,
+    seen = new Set<string>(),
+    options: StyleFileImportExpandOptions = {},
+  ) {
     if (!fs.existsSync(stylePath)) {
       return '';
     }
@@ -65,7 +73,12 @@ export class StyleProcessor {
         path.dirname(stylePath),
       );
       if (!importedPath) continue;
-      const content = this.readStyleFile(importedPath, seen);
+      const reference = {
+        importer: normalizedPath,
+        imported: path.resolve(importedPath),
+      };
+      if (options.shouldExpandImport?.(reference) === false) continue;
+      const content = this.readStyleFile(importedPath, seen, options);
       if (!content.trim()) {
         rule.remove();
         continue;

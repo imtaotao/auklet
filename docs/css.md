@@ -143,6 +143,11 @@ The supported input surface is intentionally narrow:
 - Source style files are regular CSS files discovered under the configured
   source root.
 - Current package theme entries come from `styles.themes`.
+- Controlled same-package shared CSS fragments come from `styles.shared`.
+  Matched files must be under the current package source root. Component CSS may
+  import them directly, and generated component CSS inlines them so single
+  component CSS remains self-contained. Shared patterns support a small glob
+  subset: `*`, `**`, and `?`.
 - External package style entries, theme entries, and component auto-import rules
   come from `styles.dependencies`.
 - `auk inspect css` is read-only. It can explain the current package plan before
@@ -167,6 +172,13 @@ Supported import behavior:
   directory. Importing another component's CSS from component CSS is rejected;
   express component reuse through TSX imports so auklet can infer module CSS
   dependencies.
+- component CSS may import local CSS outside its component/module directory only
+  when the imported file is under the current source root and matches
+  `styles.shared`;
+- CSS imports inside a shared fragment are recursively inlined when they resolve
+  to non-module, non-theme helper CSS under the current source root, so nested
+  shared fragments stay self-contained in component CSS output without bypassing
+  component or theme boundaries;
 - recursive local imports with circular import protection;
 - duplicate local import/content suppression for generated output stability;
 - generated `@import` paths between auklet output entries, produced by

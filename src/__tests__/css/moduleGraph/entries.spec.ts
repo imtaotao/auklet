@@ -427,4 +427,77 @@ describe('ModuleStyleGraph entries', () => {
       'src/components/Table/TableView.tsx',
     );
   });
+
+  test('inlines configured shared CSS into source module CSS and dedupes style CSS', async () => {
+    fixture.writeFile(
+      'packages/app-package/auklet.config.js',
+      `
+        export const config = {
+          source: 'src',
+          output: 'dist',
+          modules: true,
+          styles: {
+            shared: './src/internal/syntaxHighlight.css',
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/internal/syntaxHighlight.css',
+      '@import "./tokens.css";\n.syntax-highlight { color: var(--syntax-text); }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/internal/tokens.css',
+      '.syntax-token { color: red; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/CodeBlock/index.tsx',
+      'export function CodeBlock() { return null; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/DiffViewer/index.tsx',
+      'export function DiffViewer() { return null; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/CodeBlock/index.css',
+      '@import "../../internal/syntaxHighlight.css";\n.code-block {}',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/DiffViewer/index.css',
+      '@import "../../internal/syntaxHighlight.css";\n.diff-viewer {}',
+    );
+
+    const graph = createMonorepoGraph(fixture);
+    const codeBlock = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/components/CodeBlock.css')!,
+    );
+    const diffViewer = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/components/DiffViewer.css')!,
+    );
+    const style = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/style.css')!,
+    );
+
+    expect(codeBlock.code).toContain('.syntax-highlight');
+    expect(codeBlock.code).toContain('.syntax-token');
+    expect(codeBlock.code).toContain('.code-block');
+    expect(codeBlock.code).not.toContain('@import "./tokens.css"');
+    expect(diffViewer.code).toContain('.syntax-highlight');
+    expect(diffViewer.code).toContain('.syntax-token');
+    expect(diffViewer.code).toContain('.diff-viewer');
+    expect(style.code.match(/\.syntax-highlight/g)).toHaveLength(1);
+    expect(style.code.match(/\.syntax-token/g)).toHaveLength(1);
+    expectWatchFile(
+      codeBlock.watchFiles,
+      fixture,
+      appPackageRoot,
+      'src/internal/syntaxHighlight.css',
+    );
+    expectWatchFile(
+      codeBlock.watchFiles,
+      fixture,
+      appPackageRoot,
+      'src/internal/tokens.css',
+    );
+  });
 });

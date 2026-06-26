@@ -12,6 +12,8 @@ export type StyleDependencyGroup = {
 export type StyleOptions = {
   // 当前包主题样式入口，key 是主题名，value 是相对于当前包根目录的样式文件路径。
   themes?: Record<string, string>;
+  // 当前包内可被组件 CSS 受控复用的共享样式片段。
+  shared?: string | Array<string>;
   // 外部包样式依赖配置，key 是包名前缀，value 是该包的样式依赖规则。
   dependencies?: Record<string, StyleDependencyGroup>;
 };
@@ -31,6 +33,7 @@ export interface NormalizedAukletConfig {
   modules: boolean;
   styles: {
     themes: Record<string, string>;
+    shared: Array<string>;
     dependencies: Record<string, NormalizedStyleDependencyGroup>;
   };
   build: Required<Pick<PackageBuildOptions, 'formats' | 'target' | 'platform'>>;

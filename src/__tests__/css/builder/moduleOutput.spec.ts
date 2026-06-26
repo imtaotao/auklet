@@ -57,6 +57,83 @@ describe('ModuleStyleBuilder module output', () => {
     expect(esStyleEntry).toBe('@import "./module.css";\n');
   });
 
+  test('inlines configured same-package shared CSS into component outputs and dedupes aggregates', async () => {
+    fixture.writeFile(
+      'source/internal/syntaxHighlight.css',
+      '@import "./tokens.css";\n.syntax-highlight { color: var(--syntax-text); }',
+    );
+    fixture.writeFile(
+      'source/internal/tokens.css',
+      '.syntax-token { color: red; }',
+    );
+    fixture.writeFile(
+      'source/components/CodeBlock/index.tsx',
+      'export function CodeBlock() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/DiffViewer/index.tsx',
+      'export function DiffViewer() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/CodeBlock/index.css',
+      '@import "./base.css";\n@import "../../internal/syntaxHighlight.css";\n.code-block {}',
+    );
+    fixture.writeFile(
+      'source/components/CodeBlock/base.css',
+      '.code-block-base {}',
+    );
+    fixture.writeFile(
+      'source/components/DiffViewer/index.css',
+      '@import "../../internal/syntaxHighlight.css";\n.diff-viewer {}',
+    );
+
+    await createBuilder(fixture, {
+      ...moduleConfig,
+      styles: {
+        shared: './source/internal/syntaxHighlight.css',
+      },
+    }).build();
+
+    const packageStyle = fixture.readFile('output/index.css');
+    const moduleStyle = fixture.readFile('output/es/style/module.css');
+    const codeBlockStyle = fixture.readFile(
+      'output/es/components/CodeBlock/index.css',
+    );
+    const diffViewerStyle = fixture.readFile(
+      'output/es/components/DiffViewer/index.css',
+    );
+    const codeBlockEntry = fixture.readFile(
+      'output/es/components/CodeBlock/style/index.css',
+    );
+
+    expect(codeBlockStyle).toContain('.syntax-highlight');
+    expect(codeBlockStyle).toContain('.syntax-token');
+    expect(codeBlockStyle).toContain('.code-block');
+    expect(codeBlockStyle).toContain('@import "./base.css"');
+    expect(codeBlockStyle).not.toContain('.code-block-base');
+    expect(codeBlockStyle).not.toContain(
+      '@import "../../internal/syntaxHighlight.css"',
+    );
+    expect(codeBlockStyle).not.toContain('@import "./tokens.css"');
+    expect(diffViewerStyle).toContain('.syntax-highlight');
+    expect(diffViewerStyle).toContain('.syntax-token');
+    expect(diffViewerStyle).toContain('.diff-viewer');
+    expect(diffViewerStyle).not.toContain(
+      '@import "../../internal/syntaxHighlight.css"',
+    );
+    expect(codeBlockEntry).toBe('@import "../index.css";\n');
+    expect(packageStyle.match(/\.syntax-highlight/g)).toHaveLength(1);
+    expect(packageStyle.match(/\.syntax-token/g)).toHaveLength(1);
+    expect(moduleStyle.match(/\.syntax-highlight/g)).toHaveLength(1);
+    expect(moduleStyle.match(/\.syntax-token/g)).toHaveLength(1);
+    expect(
+      fixture.exists('output/es/internal/syntaxHighlight/style/index.css'),
+    ).toBe(false);
+    expect(fixture.exists('output/es/internal/tokens/style/index.css')).toBe(
+      false,
+    );
+  });
+
   test('builds module CSS entries for source modules without own CSS', async () => {
     writePackageImports(fixture);
     fixture.writeFile(

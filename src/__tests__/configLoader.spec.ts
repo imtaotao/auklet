@@ -174,6 +174,7 @@ describe('normalizeAukletConfig', () => {
           themes: {
             light: './source/themes/light.css',
           },
+          shared: './source/internal/**/*.css',
           dependencies: {
             '@scope/ui': {
               entry: '/style.css',
@@ -195,6 +196,7 @@ describe('normalizeAukletConfig', () => {
         themes: {
           light: './source/themes/light.css',
         },
+        shared: ['./source/internal/**/*.css'],
         dependencies: {
           '@scope/ui': {
             entry: '/style.css',
@@ -222,8 +224,31 @@ describe('normalizeAukletConfig', () => {
       },
       styles: {
         themes: {},
+        shared: [],
         dependencies: {},
       },
     });
+  });
+
+  test('rejects invalid styles.shared values', () => {
+    expect(() =>
+      normalizeAukletConfig({
+        styles: {
+          shared: {} as never,
+        },
+      }),
+    ).toThrow(
+      '[config] styles.shared must be a string or an array of strings.',
+    );
+
+    expect(() =>
+      normalizeAukletConfig({
+        styles: {
+          shared: [1] as never,
+        },
+      }),
+    ).toThrow(
+      '[config] styles.shared must be a string or an array of strings.',
+    );
   });
 });

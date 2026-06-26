@@ -70,7 +70,9 @@ export class StyleModuleEntryPlanner {
     return Array.from(this.styleFilesByDir.entries())
       .filter(([, dirStyleFiles]) =>
         dirStyleFiles.some(
-          (styleFile) => !this.importedStyleFiles.has(path.resolve(styleFile)),
+          (styleFile) =>
+            !this.isImportedStyleFile(styleFile) &&
+            !this.isSharedStyleFile(styleFile),
         ),
       )
       .map(([sourceDir]) => sourceDir);
@@ -78,7 +80,9 @@ export class StyleModuleEntryPlanner {
 
   private getOwnStyleFiles(sourceDir: string) {
     return (this.styleFilesByDir.get(sourceDir) ?? []).filter(
-      (styleFile) => !this.importedStyleFiles.has(path.resolve(styleFile)),
+      (styleFile) =>
+        !this.isImportedStyleFile(styleFile) &&
+        !this.isSharedStyleFile(styleFile),
     );
   }
 
@@ -94,6 +98,25 @@ export class StyleModuleEntryPlanner {
       );
 
     for (const item of imports) {
+      if (!this.isInsideSourceRoot(item.imported)) {
+        const importer = this.toRelativeSourceFile(item.importer);
+        const imported = toPosixPath(item.imported);
+        throw new Error(
+          `[css] cross-package CSS import detected: ${importer} imports ${imported}. ` +
+            'Use styles.dependencies to express package style dependencies.',
+        );
+      }
+
+      if (this.packageContext.shouldInlineSharedStyleImport(item)) continue;
+
+      if (this.packageContext.isSharedStyleFile(item.importer)) {
+        const importer = this.toRelativeSourceFile(item.importer);
+        const imported = this.toRelativeSourceFile(item.imported);
+        throw new Error(
+          `[css] shared CSS import must target non-module source CSS: ${importer} imports ${imported}.`,
+        );
+      }
+
       if (!styleFileKeys.has(item.imported)) continue;
 
       const importerModuleDir = this.getStyleFileModuleDir(item.importer);
@@ -129,5 +152,18 @@ export class StyleModuleEntryPlanner {
 
   private toRelativeSourceFile(file: string) {
     return toPosixPath(path.relative(this.packageContext.sourceRoot, file));
+  }
+
+  private isImportedStyleFile(styleFile: string) {
+    return this.importedStyleFiles.has(path.resolve(styleFile));
+  }
+
+  private isSharedStyleFile(styleFile: string) {
+    return this.packageContext.isSharedStyleFile(styleFile);
+  }
+
+  private isInsideSourceRoot(file: string) {
+    const relative = path.relative(this.packageContext.sourceRoot, file);
+    return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
   }
 }
