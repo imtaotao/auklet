@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { AukletEnvContext } from '#auklet/env';
 import {
   buildOverrideOptions,
+  inspectPackOptions,
   inspectOptions,
   workspaceOptions,
 } from '#auklet/cli/help';
@@ -32,6 +33,10 @@ describe('cli help metadata', () => {
     expect(flags).toContain('--version <value>');
     expect(flags).toContain('--filter <pattern>');
     expect(flags).toContain('--source <dir>');
+  });
+
+  test('lists inspect pack workspace alias', () => {
+    expect(optionFlags(inspectPackOptions)).toContain('--workspace');
   });
 });
 

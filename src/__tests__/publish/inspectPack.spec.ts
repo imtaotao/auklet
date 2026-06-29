@@ -1,10 +1,20 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { inspectPackageFiles } from '#auklet/publish/inspectPack';
-import type { PublishTarget } from '#auklet/publish/types';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  inspectPackageFiles,
+  runInspectPackCli,
+} from '#auklet/publish/inspectPack';
+import { resolvePublishPlan } from '#auklet/publish/targetResolver';
+import type { PublishPlan, PublishTarget } from '#auklet/publish/types';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../fixtures/virtualProject';
+
+vi.mock('#auklet/publish/targetResolver', () => ({
+  resolvePublishPlan: vi.fn(),
+}));
+
+const resolvePlan = vi.mocked(resolvePublishPlan);
 
 describe('inspectPackageFiles', () => {
   let project: VirtualProject;
@@ -82,6 +92,42 @@ describe('inspectPackageFiles', () => {
   });
 });
 
+describe('runInspectPackCli', () => {
+  let project: VirtualProject;
+
+  beforeEach(() => {
+    project = createVirtualProject('auklet-inspect-pack-cli-');
+  });
+
+  afterEach(() => {
+    project.cleanup();
+    vi.clearAllMocks();
+  });
+
+  test('passes --workspace as a wildcard filter to publish plan selection', async () => {
+    resolvePlan.mockResolvedValue(createPlan([createTarget(project, {})]));
+
+    await expect(runInspectPackCli(['--workspace'])).resolves.toBe(0);
+
+    expect(resolvePlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: ['*'],
+        dryRun: true,
+      }),
+      expect.objectContaining({
+        envContext: expect.any(Object),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  test('rejects workspace values', async () => {
+    await expect(runInspectPackCli(['--workspace=true'])).rejects.toThrow(
+      '--workspace does not accept a value.',
+    );
+  });
+});
+
 const createTarget = (
   project: VirtualProject,
   packageJson: PublishTarget['packageJson'],
@@ -96,4 +142,18 @@ const createTarget = (
     workspaceMode: 'single',
     packageJson,
   };
+};
+
+const createPlan = (targets: Array<PublishTarget>) => {
+  const [firstTarget] = targets;
+  const root = firstTarget ? firstTarget.packageRoot : process.cwd();
+
+  return {
+    root,
+    version: '1.0.0',
+    dryRun: true,
+    targets,
+    config: {},
+    workspaceMode: 'single',
+  } satisfies PublishPlan;
 };

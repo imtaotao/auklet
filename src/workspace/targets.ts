@@ -33,13 +33,18 @@ export async function resolveWorkspacePackageInfos(
   cwd: string,
   filters: Array<string>,
   options: {
+    excludeRoot?: boolean;
     env?: Record<string, string | undefined>;
     scope: string;
     readErrorMessage?: string;
   },
 ) {
   const root = requireWorkspaceRoot(cwd, options.scope);
-  const packages = await readWorkspacePackageInfo(root, options);
+  const packages = filterWorkspaceRootPackage(
+    await readWorkspacePackageInfo(root, options),
+    root,
+    options,
+  );
   return filterWorkspacePackages(packages, filters, options.scope);
 }
 

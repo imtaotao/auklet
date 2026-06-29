@@ -27,7 +27,6 @@ export async function runInspectPackCli(args: Array<string>) {
         cwd: options.cwd,
         filters: options.filters,
         dryRun: true,
-        version: undefined,
       },
       { envContext },
       logger,
@@ -56,12 +55,19 @@ const resolveInspectPackOptions = (args: Array<string>) => {
       filters.push(arg.slice('--filter='.length));
       continue;
     }
+    if (arg === '--workspace') {
+      filters.push('*');
+      continue;
+    }
+    if (arg.startsWith('--workspace=')) {
+      throw new Error('[inspect] --workspace does not accept a value.');
+    }
     throw new Error(`[inspect] unknown inspect pack argument: ${arg}`);
   }
 
   return {
     cwd: process.cwd(),
-    filters,
+    filters: [...new Set(filters)],
   };
 };
 

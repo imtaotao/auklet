@@ -56,6 +56,7 @@ export const inspectPublishOptions = [
 
 export const inspectPackOptions = [
   ['--filter <pattern>', 'Select workspace packages by package name'],
+  ['--workspace', "Alias for --filter '*'"],
 ] satisfies Array<HelpOption>;
 
 export const inspectCssOptions = [

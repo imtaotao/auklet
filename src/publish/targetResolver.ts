@@ -59,6 +59,7 @@ export async function resolveOwnerPackageNames(
   if (options.filters.length) {
     const root = requireWorkspaceRoot(options.cwd);
     const packages = await resolveWorkspacePackageInfos(root, options.filters, {
+      excludeRoot: true,
       scope: 'publish',
       readErrorMessage: publishWorkspaceReadErrorMessage,
     });
@@ -137,6 +138,7 @@ const resolveMonorepoPublishPlan = async (
     filters: options.filters,
     getDependencies: getWorkspaceDependencies,
     emptyTargetMessage: '[publish] no publishable package found.',
+    excludeRoot: true,
     includePrivate: false,
     createTarget: (item, packageJson) =>
       createPublishTarget({

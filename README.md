@@ -96,6 +96,7 @@ Inspect flags:
 | -------------------- | ----------------- | ------------------------------------------------------------ |
 | publish flags        | `inspect publish` | Uses the same selection/version/auth flags as `auk publish`. |
 | `--filter <pattern>` | `inspect pack`    | Select workspace packages by package name.                   |
+| `--workspace`        | `inspect pack`    | Alias for `--filter '*'`.                                    |
 | build/dev flags      | `inspect css`     | Uses the same build override flags as `auk build`.           |
 
 ### Owner
@@ -125,6 +126,8 @@ Owner flags:
 - `--filter` is a package-name filter, not pnpm's full filter syntax.
   Supported patterns are `*`, exact package names, and scoped globs such as
   `@scope/*`.
+- Workspace publish, inspect pack, and owner filters skip the workspace root
+  package and private packages.
 - String and boolean CLI values can reference loaded environment variables with
   `env:NAME`, for example `auk build --source env:AUKLET_SOURCE` or
   `auk publish --token env:NODE_AUTH_TOKEN`.

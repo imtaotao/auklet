@@ -82,7 +82,8 @@ the same change and make the reason explicit.
 - Monorepo package sources should filter the workspace root package.
 - Build/dev workspace commands exclude the workspace root package. They skip
   private workspace packages by default and include them only with `--private`.
-- Publish and owner workspace selection skip private packages.
+- Publish and owner workspace selection skip the workspace root package and
+  private packages.
 
 ## Publish Workflow Boundary
 

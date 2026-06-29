@@ -275,21 +275,56 @@ describe('resolvePublishPlan', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  test('excludes the non-private workspace root from wildcard filters', async () => {
+    project.writePackageJson({
+      name: '@scope/root',
+      version: '1.0.0',
+    });
+    writeWorkspacePackage('ui', '1.0.0');
+    readWorkspacePackages.mockResolvedValue([
+      workspacePackage('@scope/root', project.root, '1.0.0'),
+      workspacePackage('@scope/ui', project.resolve('packages/ui'), '1.0.0'),
+    ]);
+
+    await expect(
+      resolveTestPublishPlan({
+        cwd: project.root,
+        filters: ['*'],
+        dryRun: false,
+      }),
+    ).resolves.toMatchObject({
+      targets: [
+        {
+          packageName: '@scope/ui',
+        },
+      ],
+    });
+  });
+
   test('warns when a private package is matched exactly', async () => {
+    writeWorkspacePackage('private', '1.0.0', {
+      private: true,
+    });
     readWorkspacePackages.mockResolvedValue([
       workspacePackage('@scope/root', project.root, '1.0.0', true),
+      workspacePackage(
+        '@scope/private',
+        project.resolve('packages/private'),
+        '1.0.0',
+        true,
+      ),
     ]);
     const warn = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(
       resolveTestPublishPlan({
         cwd: project.root,
-        filters: ['@scope/root'],
+        filters: ['@scope/private'],
         dryRun: false,
       }),
     ).rejects.toThrow('no publishable package found');
     expect(getConsoleMessages(warn)).toContain(
-      'publish › package @scope/root is private, skipping.',
+      'publish › package @scope/private is private, skipping.',
     );
   });
 
@@ -464,6 +499,41 @@ describe('resolveOwnerPackageNames', () => {
         packages: [],
       }),
     ).rejects.toThrow('current package is private');
+  });
+
+  test('filters out workspace root and private packages with wildcard filters', async () => {
+    project.writePackageJson({
+      name: '@scope/root',
+      version: '1.0.0',
+    });
+    project.writeJson('packages/ui/package.json', {
+      name: '@scope/ui',
+      version: '1.0.0',
+    });
+    project.writeJson('packages/private/package.json', {
+      name: '@scope/private',
+      version: '1.0.0',
+      private: true,
+    });
+    project.writeFile('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
+    readWorkspacePackages.mockResolvedValue([
+      workspacePackage('@scope/root', project.root, '1.0.0'),
+      workspacePackage('@scope/ui', project.resolve('packages/ui'), '1.0.0'),
+      workspacePackage(
+        '@scope/private',
+        project.resolve('packages/private'),
+        '1.0.0',
+        true,
+      ),
+    ]);
+
+    await expect(
+      resolveOwnerPackageNames({
+        cwd: project.root,
+        filters: ['*'],
+        packages: [],
+      }),
+    ).resolves.toEqual(['@scope/ui']);
   });
 
   test('rejects owner add when filter and package selectors are combined', async () => {
