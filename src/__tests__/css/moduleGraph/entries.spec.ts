@@ -1,7 +1,11 @@
 import path from 'node:path';
+import postcss, { type ChildNode } from 'postcss';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { normalizeFileKey } from '#auklet/utils';
-import { normalizeGraphStyleStructure } from '../../fixtures/styleStructure';
+import { normalizeFileKey, toFsSpecifier } from '#auklet/utils';
+import {
+  collectStyleImports,
+  normalizeGraphStyleStructure,
+} from '../../fixtures/styleStructure';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -13,9 +17,34 @@ import {
   expectWatchFile,
   getKatexStylePath,
   getKatexStyleSpecifier,
+  packagePath,
   setupMonorepoPackages,
   uiPackageRoot,
 } from './helpers';
+
+const isAllowedImportPreludeNode = (node: ChildNode) => {
+  if (node.type === 'comment') return true;
+  if (node.type !== 'atrule') return false;
+  if (node.name === 'charset') return true;
+  return node.name === 'layer' && !node.nodes?.length;
+};
+
+const collectLateStyleImports = (code: string) => {
+  const imports: Array<string> = [];
+  const root = postcss.parse(code);
+  let hasSeenStyleNode = false;
+
+  for (const node of root.nodes ?? []) {
+    if (isAllowedImportPreludeNode(node)) continue;
+    if (node.type === 'atrule' && node.name === 'import') {
+      if (hasSeenStyleNode) imports.push(node.params);
+      continue;
+    }
+    hasSeenStyleNode = true;
+  }
+
+  return imports;
+};
 
 describe('ModuleStyleGraph entries', () => {
   let fixture: VirtualProject;
@@ -364,6 +393,87 @@ describe('ModuleStyleGraph entries', () => {
       appPackageRoot,
       'src/pages/BlogArticlePage.css',
     );
+  });
+
+  test('hoists source module dependency imports before ordinary rules', async () => {
+    fixture.writeFile(
+      'packages/app-package/auklet.config.js',
+      `
+        export const config = {
+          source: 'src',
+          output: 'dist',
+          modules: true,
+          styles: {
+            dependencies: {
+              dep: {
+                components: ['/*.css'],
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/pages/Article.tsx',
+      `
+        import { ThemeToggle } from '../components/ThemeToggle';
+        import { Button, IconButton } from 'dep';
+        export function Article() { return ThemeToggle ?? Button ?? IconButton; }
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/pages/Article.css',
+      '.article { color: var(--article-text); }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/ThemeToggle/index.tsx',
+      `
+        import { IconButton } from 'dep';
+        export function ThemeToggle() { return IconButton; }
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/ThemeToggle/index.css',
+      '@layer app;\n.theme-toggle { color: var(--toggle-text); }',
+    );
+    fixture.writeFile('packages/app-package/node_modules/dep/Button.css', '');
+    fixture.writeFile(
+      'packages/app-package/node_modules/dep/IconButton.css',
+      '',
+    );
+
+    const graph = createMonorepoGraph(fixture);
+    const result = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/pages/Article.css')!,
+    );
+    const buttonImport = packagePath(
+      fixture,
+      appPackageRoot,
+      'node_modules/dep/Button.css',
+    );
+    const iconButtonImport = packagePath(
+      fixture,
+      appPackageRoot,
+      'node_modules/dep/IconButton.css',
+    );
+
+    expect(collectLateStyleImports(result.code)).toEqual([]);
+    expect(collectStyleImports(result.code)).toEqual([
+      toFsSpecifier(iconButtonImport),
+      toFsSpecifier(buttonImport),
+    ]);
+    expectContentOrder(
+      result.code,
+      toFsSpecifier(iconButtonImport),
+      '@layer app',
+    );
+    expectContentOrder(result.code, '@layer app', toFsSpecifier(buttonImport));
+    expectContentOrder(
+      result.code,
+      toFsSpecifier(buttonImport),
+      '.theme-toggle',
+    );
+    expectContentOrder(result.code, '.theme-toggle', '.article');
   });
 
   test('creates source module CSS with nested same-package file module dependencies', async () => {

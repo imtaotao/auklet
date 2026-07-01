@@ -1,8 +1,9 @@
 import path from 'node:path';
+import postcss, { type AtRule, type ChildNode } from 'postcss';
 import type { ModuleStyleBuildConfig } from '#auklet/types';
 import type {
-  ModuleStyleGraphRequestCache,
   PackageStyleContext,
+  ModuleStyleGraphRequestCache,
 } from '#auklet/css/vite/moduleGraph/requestCache';
 import { mergeLoadResults } from '#auklet/css/vite/moduleGraph/loadResult';
 import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
@@ -38,8 +39,10 @@ export class StyleCodeFactory {
     parsed: PackageStyleId,
     cache: ModuleStyleGraphRequestCache,
   ) {
-    return cache.getLoadResult(parsed, () =>
-      this.createUncachedPackageStyleCode(parsed, cache),
+    return cache.getLoadResult(parsed, async () =>
+      this.normalizeTopLevelImports(
+        await this.createUncachedPackageStyleCode(parsed, cache),
+      ),
     );
   }
 
@@ -78,7 +81,11 @@ export class StyleCodeFactory {
         parsed.stylePath,
       );
     }
-    return cache.writePersistentLoadResult(parsed, context, result);
+    return cache.writePersistentLoadResult(
+      parsed,
+      context,
+      this.normalizeTopLevelImports(result),
+    );
   }
 
   private async createStyleCode(
@@ -362,5 +369,72 @@ export class StyleCodeFactory {
         new Set([packageName, ...(result.dependencyPackages ?? [])]),
       ),
     };
+  }
+
+  private normalizeTopLevelImports(result: PackageStyleLoadResult) {
+    if (!result.code.includes('@import')) return result;
+
+    const lateImports: Array<AtRule> = [];
+    const removedImports: Array<AtRule> = [];
+    const seenImportParams = new Set<string>();
+    const root = postcss.parse(result.code);
+    let hasChanges = false;
+    let hasSeenStyleNode = false;
+
+    for (const node of root.nodes ?? []) {
+      if (this.isImportPreludeNode(node)) continue;
+      if (this.isTopLevelImportRule(node)) {
+        if (seenImportParams.has(node.params)) {
+          hasChanges = true;
+          removedImports.push(node);
+          continue;
+        }
+
+        seenImportParams.add(node.params);
+        if (hasSeenStyleNode) {
+          hasChanges = true;
+          lateImports.push(node.clone());
+          removedImports.push(node);
+        }
+        continue;
+      }
+      hasSeenStyleNode = true;
+    }
+
+    if (!hasChanges) return result;
+
+    for (const node of removedImports) {
+      node.remove();
+    }
+
+    const firstStyleNode = root.nodes?.find(
+      (node) =>
+        !this.isImportPreludeNode(node) && !this.isTopLevelImportRule(node),
+    );
+    if (firstStyleNode) {
+      for (const rule of lateImports) {
+        firstStyleNode.before(rule);
+      }
+    } else {
+      for (const rule of lateImports) {
+        root.append(rule);
+      }
+    }
+
+    return {
+      ...result,
+      code: root.toString(),
+    };
+  }
+
+  private isTopLevelImportRule(node: ChildNode): node is AtRule {
+    return node.type === 'atrule' && node.name === 'import';
+  }
+
+  private isImportPreludeNode(node: ChildNode) {
+    if (node.type === 'comment') return true;
+    if (node.type !== 'atrule') return false;
+    if (node.name === 'charset') return true;
+    return node.name === 'layer' && !node.nodes?.length;
   }
 }
