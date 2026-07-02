@@ -46,6 +46,10 @@ const collectLateStyleImports = (code: string) => {
   return imports;
 };
 
+const virtualStyleSpecifier = (specifier: string) => {
+  return `auklet-css:${specifier}`;
+};
+
 describe('ModuleStyleGraph entries', () => {
   let fixture: VirtualProject;
 
@@ -388,7 +392,7 @@ describe('ModuleStyleGraph entries', () => {
     );
 
     expect(collectStyleImports(result.code)).toEqual([
-      '@scope/ui/components/Renderer.css',
+      virtualStyleSpecifier('@scope/ui/components/Renderer.css'),
     ]);
     expect(result.code).toContain('.article { color: var(--blog-text); }');
     expect(result.dependencyPackages).toContain('@scope/ui');
@@ -470,7 +474,7 @@ describe('ModuleStyleGraph entries', () => {
 
     expect(collectLateStyleImports(result.code)).toEqual([]);
     expect(collectStyleImports(result.code)).toEqual([
-      '@scope/app/components/ThemeToggle.css',
+      virtualStyleSpecifier('@scope/app/components/ThemeToggle.css'),
       toFsSpecifier(buttonImport),
       toFsSpecifier(iconButtonImport),
     ]);
@@ -530,7 +534,7 @@ describe('ModuleStyleGraph entries', () => {
     );
 
     expect(collectStyleImports(result.code)).toEqual([
-      '@scope/app/components/Table/TableView.css',
+      virtualStyleSpecifier('@scope/app/components/Table/TableView.css'),
     ]);
     expect(result.code).toContain('.table { display: grid; }');
     expectWatchFile(

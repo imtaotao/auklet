@@ -9,16 +9,16 @@ import type { ViteDevServer } from 'vite';
 
 type WatchHandler = (file: string) => void;
 
-const createServer = () => {
+const createServer = (
+  moduleIds: Array<string> = [
+    '\0auklet-css:@scope/app/style.css',
+    '\0auklet-css:@scope/app/components/Button.css',
+  ],
+) => {
   const handlers = new Map<string, WatchHandler>();
   const send = vi.fn();
   const invalidateModule = vi.fn();
-  const modules = new Map(
-    [
-      '\0auklet-css:@scope/app/style.css',
-      '\0auklet-css:@scope/app/components/Button.css',
-    ].map((id) => [id, { id }]),
-  );
+  const modules = new Map(moduleIds.map((id) => [id, { id }]));
 
   return {
     handlers,
@@ -54,6 +54,25 @@ describe('aukletStylePlugin Vite server integration', () => {
 
   afterEach(() => {
     fixture.cleanup();
+  });
+
+  test('resolves browser virtual CSS imports for known package style ids', () => {
+    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    fixture.writeJson(path.join('packages/app/package.json'), {
+      name: '@scope/app',
+    });
+    fixture.writeJson(path.join('packages/ui/package.json'), {
+      name: '@scope/ui',
+    });
+
+    const plugin = aukletStylePlugin({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    expect(
+      plugin.resolveId?.('auklet-css:@scope/ui/components/Button.css'),
+    ).toBe('\0auklet-css:@scope/ui/components/Button.css');
   });
 
   test('does not send full reload for source module changes', async () => {
@@ -185,6 +204,103 @@ describe('aukletStylePlugin Vite server integration', () => {
           type: 'js-update',
         }),
       ],
+    });
+  });
+
+  test('keeps HMR tracking for preserved workspace package CSS imports', async () => {
+    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    fixture.writeJson(path.join('packages/app/package.json'), {
+      name: '@scope/app',
+    });
+    fixture.writeJson(path.join('packages/ui/package.json'), {
+      name: '@scope/ui',
+    });
+    fixture.writeFile(
+      path.join('packages/app/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                components: ['/components/**.css'],
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/ui/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.tsx'),
+      `
+        import { Button } from '@scope/ui';
+        export function App() { return Button; }
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.css'),
+      '.app { color: red; }',
+    );
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.tsx'),
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.css'),
+      '.button { color: blue; }',
+    );
+    fixture.writeFile(
+      path.join('packages/app/node_modules/@scope/ui/components/Button.css'),
+      '',
+    );
+
+    const appVirtualId = '\0auklet-css:@scope/app/components/App.css';
+    const uiVirtualId = '\0auklet-css:@scope/ui/components/Button.css';
+    const context = createServer([appVirtualId, uiVirtualId]);
+    const plugin = aukletStylePlugin({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const addWatchFile = vi.fn();
+    const styleFile = path.join(
+      fixture.root,
+      'packages/ui/src/components/Button/index.css',
+    );
+
+    await plugin.configureServer?.(context.server);
+    const appCode = await plugin.load?.call({ addWatchFile }, appVirtualId);
+    await plugin.load?.call({ addWatchFile }, uiVirtualId);
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    context.handlers.get('change')?.(styleFile);
+
+    expect(appCode).toContain(
+      '@import "auklet-css:@scope/ui/components/Button.css";',
+    );
+    expect(addWatchFile).toHaveBeenCalledWith(styleFile);
+    expect(context.invalidateModule).toHaveBeenCalledWith({ id: appVirtualId });
+    expect(context.invalidateModule).toHaveBeenCalledWith({ id: uiVirtualId });
+    expect(context.send).toHaveBeenCalledWith({
+      type: 'update',
+      updates: expect.arrayContaining([
+        expect.objectContaining({
+          path: '/@id/__x00__auklet-css:@scope/app/components/App.css',
+          type: 'js-update',
+        }),
+        expect.objectContaining({
+          path: '/@id/__x00__auklet-css:@scope/ui/components/Button.css',
+          type: 'js-update',
+        }),
+      ]),
     });
   });
 

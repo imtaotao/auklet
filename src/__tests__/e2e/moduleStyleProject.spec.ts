@@ -101,6 +101,10 @@ const nodeModuleStyleSpecifier = (
   return toFsSpecifier(`${fixture.packageRoot}/node_modules/${specifier}`);
 };
 
+const virtualStyleSpecifier = (specifier: string) => {
+  return `auklet-css:${specifier}`;
+};
+
 const sourceStyleSpecifier = (
   fixture: StyleProjectTemplate,
   specifier: string,
@@ -190,7 +194,7 @@ describe('module style project output', () => {
       nodeModuleStyleSpecifier(fixture, '@scope/theme/themes/light.css'),
     ]);
     expectEntryImports(graphStructure, 'components/Card.css', [
-      '@fixture/app/components/Button.css',
+      virtualStyleSpecifier('@fixture/app/components/Button.css'),
       nodeModuleStyleSpecifier(fixture, '@scope/ui/components/Button.css'),
       nodeModuleStyleSpecifier(fixture, '@scope/ui/components/Callout.css'),
       sourceStyleSpecifier(fixture, 'components/Card/tokens.css'),

@@ -309,7 +309,7 @@ export class StyleCodeFactory {
             parsed.packageName,
           ),
         );
-        moduleStyleSpecifiers.push(result);
+        moduleStyleSpecifiers.push(this.toBrowserVirtualStyleSpecifier(parsed));
         continue;
       }
       const resolvedSpecifier = toDevDependencyImportSpecifier(context, result);
@@ -404,6 +404,10 @@ export class StyleCodeFactory {
     cache: ModuleStyleGraphRequestCache,
   ) {
     return parsePackageStyleId(id, cache.getPackageNames());
+  }
+
+  private toBrowserVirtualStyleSpecifier(parsed: PackageStyleId) {
+    return `auklet-css:${parsed.packageName}/${parsed.stylePath}`;
   }
 
   private withDependencyPackage(

@@ -601,7 +601,7 @@ describe('ModuleStyleGraph request cache', () => {
     expect(collectStyleImports(firstResult.code)).toEqual([]);
     expect(firstResult.code).toContain('.page { color: black; }');
     expect(collectStyleImports(secondResult.code)).toEqual([
-      '@scope/app/components/Button.css',
+      'auklet-css:@scope/app/components/Button.css',
     ]);
     expect(secondResult.code).toContain('.page { color: black; }');
   });
