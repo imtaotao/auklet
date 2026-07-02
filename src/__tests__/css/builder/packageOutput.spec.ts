@@ -54,4 +54,41 @@ describe('ModuleStyleBuilder package output', () => {
     );
     expect(fixture.exists('output/lib/style/index.css')).toBe(false);
   });
+
+  test('rejects source-root escaping local CSS imports before writing package output', async () => {
+    fixture.writeFile(
+      'source/components/Button/index.tsx',
+      'export const Button = null;',
+    );
+    fixture.writeFile(
+      'source/components/Button/index.css',
+      '@import "../../../outside.css";\n.button {}',
+    );
+    fixture.writeFile('outside.css', '.outside {}');
+
+    await expect(createBuilder(fixture, baseConfig).build()).rejects.toThrow(
+      '[css] local CSS import escapes source root:',
+    );
+    expect(fixture.exists('output/index.css')).toBe(false);
+  });
+
+  test('rejects source-root escaping local CSS imports from theme files', async () => {
+    fixture.writeFile(
+      'source/themes/light.css',
+      '@import "../../outside.css";\n:root { color-scheme: light; }',
+    );
+    fixture.writeFile('outside.css', '.outside {}');
+
+    await expect(
+      createBuilder(fixture, {
+        ...baseConfig,
+        styles: {
+          themes: {
+            light: './source/themes/light.css',
+          },
+        },
+      }).build(),
+    ).rejects.toThrow('[css] local CSS import escapes source root:');
+    expect(fixture.exists('output/index.css')).toBe(false);
+  });
 });

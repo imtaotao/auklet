@@ -176,6 +176,10 @@ describe('ModuleStyleGraph entries', () => {
       '.markdown-prose { color: var(--markdown-text); }',
     );
     fixture.writeFile(
+      'packages/app-package/node_modules/@scope/ui/components/Renderer.css',
+      '',
+    );
+    fixture.writeFile(
       'packages/app-package/src/themes/light.css',
       ':root { --bg: white; }',
     );
@@ -373,14 +377,21 @@ describe('ModuleStyleGraph entries', () => {
       'packages/ui-package/src/components/Renderer/index.css',
       '.markdown-prose { color: var(--markdown-text); }',
     );
+    fixture.writeFile(
+      'packages/app-package/node_modules/@scope/ui/components/Renderer.css',
+      '',
+    );
 
     const graph = createMonorepoGraph(fixture);
     const result = await graph.createPackageStyleCode(
       graph.parsePackageStyleId('@scope/app/pages/BlogArticlePage.css')!,
     );
 
-    expectContentOrder(result.code, '.markdown-prose', '.article');
-    expect(result.code).not.toContain('.markdown-shell');
+    expect(collectStyleImports(result.code)).toEqual([
+      '@scope/ui/components/Renderer.css',
+    ]);
+    expect(result.code).toContain('.article { color: var(--blog-text); }');
+    expect(result.dependencyPackages).toContain('@scope/ui');
     expectWatchFile(
       result.watchFiles,
       fixture,
@@ -459,21 +470,11 @@ describe('ModuleStyleGraph entries', () => {
 
     expect(collectLateStyleImports(result.code)).toEqual([]);
     expect(collectStyleImports(result.code)).toEqual([
-      toFsSpecifier(iconButtonImport),
+      '@scope/app/components/ThemeToggle.css',
       toFsSpecifier(buttonImport),
+      toFsSpecifier(iconButtonImport),
     ]);
-    expectContentOrder(
-      result.code,
-      toFsSpecifier(iconButtonImport),
-      '@layer app',
-    );
-    expectContentOrder(result.code, '@layer app', toFsSpecifier(buttonImport));
-    expectContentOrder(
-      result.code,
-      toFsSpecifier(buttonImport),
-      '.theme-toggle',
-    );
-    expectContentOrder(result.code, '.theme-toggle', '.article');
+    expect(result.code).toContain('.article { color: var(--article-text); }');
   });
 
   test('creates source module CSS with nested same-package file module dependencies', async () => {
@@ -528,8 +529,10 @@ describe('ModuleStyleGraph entries', () => {
       graph.parsePackageStyleId('@scope/app/components/Table.css')!,
     );
 
-    expectContentOrder(result.code, '.empty-state', '.table');
-    expectContentOrder(result.code, '.spinner', '.table');
+    expect(collectStyleImports(result.code)).toEqual([
+      '@scope/app/components/Table/TableView.css',
+    ]);
+    expect(result.code).toContain('.table { display: grid; }');
     expectWatchFile(
       result.watchFiles,
       fixture,
@@ -538,7 +541,13 @@ describe('ModuleStyleGraph entries', () => {
     );
   });
 
-  test('inlines configured shared CSS into source module CSS and dedupes style CSS', async () => {
+  test('preserves configured shared CSS imports in source module CSS and aggregate entries', async () => {
+    fixture.writeJson('packages/app-package/package.json', {
+      name: '@scope/app',
+      imports: {
+        '#styles/*': './src/internal/*.css',
+      },
+    });
     fixture.writeFile(
       'packages/app-package/auklet.config.js',
       `
@@ -570,7 +579,7 @@ describe('ModuleStyleGraph entries', () => {
     );
     fixture.writeFile(
       'packages/app-package/src/components/CodeBlock/index.css',
-      '@import "../../internal/syntaxHighlight.css";\n.code-block {}',
+      '@import "#styles/syntaxHighlight";\n.code-block {}',
     );
     fixture.writeFile(
       'packages/app-package/src/components/DiffViewer/index.css',
@@ -584,19 +593,70 @@ describe('ModuleStyleGraph entries', () => {
     const diffViewer = await graph.createPackageStyleCode(
       graph.parsePackageStyleId('@scope/app/components/DiffViewer.css')!,
     );
+    const module = await graph.createPackageStyleCode(
+      graph.parsePackageStyleId('@scope/app/module.css')!,
+    );
     const style = await graph.createPackageStyleCode(
       graph.parsePackageStyleId('@scope/app/style.css')!,
     );
 
-    expect(codeBlock.code).toContain('.syntax-highlight');
-    expect(codeBlock.code).toContain('.syntax-token');
-    expect(codeBlock.code).toContain('.code-block');
-    expect(codeBlock.code).not.toContain('@import "./tokens.css"');
-    expect(diffViewer.code).toContain('.syntax-highlight');
-    expect(diffViewer.code).toContain('.syntax-token');
-    expect(diffViewer.code).toContain('.diff-viewer');
+    expect(collectStyleImports(codeBlock.code)).toEqual([
+      toFsSpecifier(
+        packagePath(
+          fixture,
+          appPackageRoot,
+          'src/internal/syntaxHighlight.css',
+        ),
+      ),
+    ]);
+    expect(codeBlock.code).toContain('.code-block {}');
+    expect(codeBlock.code).not.toContain('#styles/syntaxHighlight');
+    expect(codeBlock.code).not.toContain(
+      toFsSpecifier(
+        packagePath(
+          fixture,
+          appPackageRoot,
+          'src/components/CodeBlock/index.css',
+        ),
+      ),
+    );
+    expect(collectStyleImports(diffViewer.code)).toEqual([
+      toFsSpecifier(
+        packagePath(
+          fixture,
+          appPackageRoot,
+          'src/internal/syntaxHighlight.css',
+        ),
+      ),
+    ]);
+    expect(diffViewer.code).toContain('.diff-viewer {}');
+    expect(collectStyleImports(module.code)).toEqual([
+      toFsSpecifier(
+        packagePath(
+          fixture,
+          appPackageRoot,
+          'src/components/CodeBlock/index.css',
+        ),
+      ),
+      toFsSpecifier(
+        packagePath(
+          fixture,
+          appPackageRoot,
+          'src/components/DiffViewer/index.css',
+        ),
+      ),
+    ]);
+    expect(style.code).toContain('.syntax-highlight');
+    expect(style.code).toContain('.syntax-token');
+    expect(style.code).toContain('.code-block');
+    expect(style.code).toContain('.diff-viewer');
     expect(style.code.match(/\.syntax-highlight/g)).toHaveLength(1);
     expect(style.code.match(/\.syntax-token/g)).toHaveLength(1);
+    expect(
+      fixture.readFile(
+        'packages/app-package/src/components/CodeBlock/index.css',
+      ),
+    ).toContain('@import "#styles/syntaxHighlight"');
     expectWatchFile(
       codeBlock.watchFiles,
       fixture,
@@ -608,6 +668,72 @@ describe('ModuleStyleGraph entries', () => {
       fixture,
       appPackageRoot,
       'src/internal/tokens.css',
+    );
+  });
+
+  test('rejects local CSS import cycles before preserving dev source module CSS', async () => {
+    fixture.writeFile(
+      'packages/app-package/auklet.config.js',
+      `
+        export const config = {
+          source: 'src',
+          output: 'dist',
+          modules: true,
+        };
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/CodeBlock/index.tsx',
+      'export function CodeBlock() { return null; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/CodeBlock/index.css',
+      '@import "./index.css";\n.code-block {}',
+    );
+
+    const graph = createMonorepoGraph(fixture);
+
+    await expect(
+      graph.createPackageStyleCode(
+        graph.parsePackageStyleId('@scope/app/components/CodeBlock.css')!,
+      ),
+    ).rejects.toThrow('[css] circular CSS import detected:');
+  });
+
+  test('rejects unresolved source CSS aliases before preserving dev source module CSS', async () => {
+    fixture.writeJson('packages/app-package/package.json', {
+      name: '@scope/app',
+      imports: {
+        '#style/*': './src/internal/*.css',
+      },
+    });
+    fixture.writeFile(
+      'packages/app-package/auklet.config.js',
+      `
+        export const config = {
+          source: 'src',
+          output: 'dist',
+          modules: true,
+        };
+      `,
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/CodeBlock/index.tsx',
+      'export function CodeBlock() { return null; }',
+    );
+    fixture.writeFile(
+      'packages/app-package/src/components/CodeBlock/index.css',
+      '@import "#styles/missing.css";\n.code-block {}',
+    );
+
+    const graph = createMonorepoGraph(fixture);
+
+    await expect(
+      graph.createPackageStyleCode(
+        graph.parsePackageStyleId('@scope/app/components/CodeBlock.css')!,
+      ),
+    ).rejects.toThrow(
+      '[css] local CSS import not found: #styles/missing.css from',
     );
   });
 });

@@ -32,6 +32,8 @@ export class ModuleStyleBuilder {
     const normalizedConfig = normalizeAukletConfig(rawConfig);
     const context = this.createBuildContext(normalizedConfig);
     const packageContext = this.createPackageContext(context, normalizedConfig);
+    packageContext.assertNoSourceRootEscapingLocalStyleImports();
+
     const writerOptions = {
       config: this.config,
       context,

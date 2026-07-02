@@ -57,7 +57,13 @@ describe('ModuleStyleBuilder module output', () => {
     expect(esStyleEntry).toBe('@import "./module.css";\n');
   });
 
-  test('inlines configured same-package shared CSS into component outputs and dedupes aggregates', async () => {
+  test('preserves configured same-package shared CSS imports in component outputs and aggregate entries', async () => {
+    fixture.writePackageJson({
+      name: 'fixture-package',
+      imports: {
+        '#styles/*': './source/internal/*.css',
+      },
+    });
     fixture.writeFile(
       'source/internal/syntaxHighlight.css',
       '@import "./tokens.css";\n.syntax-highlight { color: var(--syntax-text); }',
@@ -76,7 +82,7 @@ describe('ModuleStyleBuilder module output', () => {
     );
     fixture.writeFile(
       'source/components/CodeBlock/index.css',
-      '@import "./base.css";\n@import "../../internal/syntaxHighlight.css";\n.code-block {}',
+      '@import "./base.css";\n@import "#styles/syntaxHighlight";\n.code-block {}',
     );
     fixture.writeFile(
       'source/components/CodeBlock/base.css',
@@ -106,31 +112,115 @@ describe('ModuleStyleBuilder module output', () => {
       'output/es/components/CodeBlock/style/index.css',
     );
 
-    expect(codeBlockStyle).toContain('.syntax-highlight');
-    expect(codeBlockStyle).toContain('.syntax-token');
-    expect(codeBlockStyle).toContain('.code-block');
-    expect(codeBlockStyle).toContain('@import "./base.css"');
-    expect(codeBlockStyle).not.toContain('.code-block-base');
-    expect(codeBlockStyle).not.toContain(
-      '@import "../../internal/syntaxHighlight.css"',
-    );
-    expect(codeBlockStyle).not.toContain('@import "./tokens.css"');
-    expect(diffViewerStyle).toContain('.syntax-highlight');
-    expect(diffViewerStyle).toContain('.syntax-token');
-    expect(diffViewerStyle).toContain('.diff-viewer');
-    expect(diffViewerStyle).not.toContain(
-      '@import "../../internal/syntaxHighlight.css"',
-    );
-    expect(codeBlockEntry).toBe('@import "../index.css";\n');
+    expect(packageStyle).toContain('.syntax-highlight');
+    expect(packageStyle).toContain('.syntax-token');
+    expect(packageStyle).toContain('.code-block');
+    expect(packageStyle).toContain('.diff-viewer');
     expect(packageStyle.match(/\.syntax-highlight/g)).toHaveLength(1);
     expect(packageStyle.match(/\.syntax-token/g)).toHaveLength(1);
-    expect(moduleStyle.match(/\.syntax-highlight/g)).toHaveLength(1);
-    expect(moduleStyle.match(/\.syntax-token/g)).toHaveLength(1);
+    expect(codeBlockStyle).toContain('@import "./base.css"');
+    expect(codeBlockStyle).toContain(
+      '@import "../../internal/syntaxHighlight.css"',
+    );
+    expect(codeBlockStyle).not.toContain('#styles/syntaxHighlight');
+    expect(codeBlockStyle).toContain('.code-block');
+    expect(codeBlockStyle).not.toContain('.code-block-base');
+    expect(codeBlockStyle).not.toContain('.syntax-highlight');
+    expect(codeBlockStyle).not.toContain('.syntax-token');
+    expect(diffViewerStyle).toContain(
+      '@import "../../internal/syntaxHighlight.css"',
+    );
+    expect(diffViewerStyle).toContain('.diff-viewer');
+    expect(diffViewerStyle).not.toContain('.syntax-highlight');
+    expect(diffViewerStyle).not.toContain('.syntax-token');
+    expect(codeBlockEntry).toBe('@import "../index.css";\n');
+    expect(moduleStyle).toBe(
+      '@import "../components/CodeBlock/index.css";\n' +
+        '@import "../components/DiffViewer/index.css";\n',
+    );
+    expect(fixture.readFile('output/es/internal/syntaxHighlight.css')).toBe(
+      '@import "./tokens.css";\n.syntax-highlight { color: var(--syntax-text); }',
+    );
+    expect(fixture.readFile('output/es/internal/tokens.css')).toBe(
+      '.syntax-token { color: red; }',
+    );
     expect(
       fixture.exists('output/es/internal/syntaxHighlight/style/index.css'),
     ).toBe(false);
     expect(fixture.exists('output/es/internal/tokens/style/index.css')).toBe(
       false,
+    );
+  });
+
+  test('rejects missing local CSS imports during build', async () => {
+    fixture.writeFile(
+      'source/components/CodeBlock/index.tsx',
+      'export function CodeBlock() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/CodeBlock/index.css',
+      '@import "./missing.css";\n.code-block {}',
+    );
+
+    await expect(createBuilder(fixture, moduleConfig).build()).rejects.toThrow(
+      '[css] local CSS import not found: ./missing.css from',
+    );
+  });
+
+  test('rejects unresolved source CSS aliases during build', async () => {
+    fixture.writePackageJson({
+      name: 'fixture-package',
+      imports: {
+        '#style/*': './source/internal/*.css',
+      },
+    });
+    fixture.writeFile(
+      'source/components/CodeBlock/index.tsx',
+      'export function CodeBlock() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/CodeBlock/index.css',
+      '@import "#styles/missing.css";\n.code-block {}',
+    );
+
+    await expect(createBuilder(fixture, moduleConfig).build()).rejects.toThrow(
+      '[css] local CSS import not found: #styles/missing.css from',
+    );
+  });
+
+  test('rejects source-root escaping local CSS imports before preserving source CSS output', async () => {
+    fixture.writeFile(
+      'source/components/CodeBlock/index.tsx',
+      'export function CodeBlock() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/CodeBlock/index.css',
+      '@import "../../../outside.css";\n.code-block {}',
+    );
+    fixture.writeFile('outside.css', '.outside {}');
+
+    await expect(createBuilder(fixture, moduleConfig).build()).rejects.toThrow(
+      '[css] local CSS import escapes source root:',
+    );
+    expect(fixture.exists('output/index.css')).toBe(false);
+  });
+
+  test('rejects local CSS import cycles before preserving source CSS output', async () => {
+    fixture.writeFile(
+      'source/components/CodeBlock/index.tsx',
+      'export function CodeBlock() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/CodeBlock/index.css',
+      '@import "./base.css";\n.code-block {}',
+    );
+    fixture.writeFile(
+      'source/components/CodeBlock/base.css',
+      '@import "./index.css";\n.code-block-base {}',
+    );
+
+    await expect(createBuilder(fixture, moduleConfig).build()).rejects.toThrow(
+      '[css] circular CSS import detected:',
     );
   });
 

@@ -107,7 +107,7 @@ export class StyleModuleEntryPlanner {
         );
       }
 
-      if (this.packageContext.shouldInlineSharedStyleImport(item)) continue;
+      if (this.packageContext.shouldAllowSharedStyleImport(item)) continue;
 
       if (this.packageContext.isSharedStyleFile(item.importer)) {
         const importer = this.toRelativeSourceFile(item.importer);

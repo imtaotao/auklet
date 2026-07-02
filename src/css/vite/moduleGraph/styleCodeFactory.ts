@@ -30,6 +30,7 @@ import {
   createImportCode,
   removeStyleExtension,
 } from '#auklet/css/core/style/specifier';
+import { toFsSpecifier } from '#auklet/utils';
 
 // 生成 Vite/dev 虚拟 CSS；production writer 共享入口语义，但写入真实文件。
 export class StyleCodeFactory {
@@ -112,7 +113,7 @@ export class StyleCodeFactory {
         );
         continue;
       }
-      results.push(this.createModuleStyleCode(context));
+      results.push(this.createFullModuleStyleCode(context));
     }
 
     return mergeLoadResults(...results);
@@ -231,7 +232,7 @@ export class StyleCodeFactory {
     );
   }
 
-  private createModuleStyleCode(context: PackageStyleContext) {
+  private createFullModuleStyleCode(context: PackageStyleContext) {
     const { styleFiles } = context.packageContext;
     const root = context.styleProcessor.createRoot();
     const seen = new Set<string>();
@@ -249,11 +250,27 @@ export class StyleCodeFactory {
     };
   }
 
+  private createModuleStyleCode(context: PackageStyleContext) {
+    context.packageContext.assertPreservedLocalStyleImports();
+
+    const { styleFiles } = context.packageContext;
+    const imports = context.packageContext
+      .getStyleEntryFiles()
+      .map((styleFile) => toFsSpecifier(styleFile));
+
+    return {
+      code: createImportCode(imports),
+      watchFiles: [...context.configPaths, ...styleFiles],
+    };
+  }
+
   private async createSourceModuleStyleCode(
     context: PackageStyleContext,
     cache: ModuleStyleGraphRequestCache,
     stylePath: string,
   ) {
+    context.packageContext.assertPreservedLocalStyleImports();
+
     const sourceModuleDir = removeStyleExtension(stylePath);
     const { styleFiles, sourceFiles } = context.packageContext;
     const entry = createModuleStyleEntryPlan(
@@ -279,10 +296,20 @@ export class StyleCodeFactory {
       );
       const parsed = this.parsePackageStyleIdInRequest(result, cache);
       if (parsed) {
-        const loadResult = await this.createPackageStyleCode(parsed, cache);
-        moduleStyleResults.push(
-          this.withDependencyPackage(loadResult, parsed.packageName),
+        const dependencyResult = await this.createPackageStyleCode(
+          parsed,
+          cache,
         );
+        moduleStyleResults.push(
+          this.withDependencyPackage(
+            {
+              ...dependencyResult,
+              code: '',
+            },
+            parsed.packageName,
+          ),
+        );
+        moduleStyleSpecifiers.push(result);
         continue;
       }
       const resolvedSpecifier = toDevDependencyImportSpecifier(context, result);
@@ -295,18 +322,10 @@ export class StyleCodeFactory {
       }
     }
 
-    const root = context.styleProcessor.createRoot();
-    const seen = new Set<string>();
-
-    for (const ownStyleFile of entry.ownStyleFiles) {
-      const content = context.styleProcessor.readStyleFile(ownStyleFile, seen);
-      if (content.trim()) {
-        context.styleProcessor.appendStyleContent(root, content, ownStyleFile);
-      }
-    }
-    const ownStyleCode = root.nodes?.length
-      ? context.styleProcessor.stringify(root)
-      : '';
+    const ownStyleCode = this.createOwnSourceStyleCode(
+      context,
+      entry.ownStyleFiles,
+    );
 
     return mergeLoadResults(...moduleStyleResults, {
       code: [createImportCode(moduleStyleSpecifiers), ownStyleCode]
@@ -320,6 +339,34 @@ export class StyleCodeFactory {
       ],
       cacheInputFiles: moduleStyleCacheInputFiles,
     });
+  }
+
+  private createOwnSourceStyleCode(
+    context: PackageStyleContext,
+    styleFiles: Array<string>,
+  ) {
+    const root = context.styleProcessor.createRoot();
+
+    for (const styleFile of styleFiles) {
+      const content = context.styleProcessor.readStyleFile(
+        styleFile,
+        undefined,
+        {
+          mapImportSpecifier: (reference) => {
+            if (!context.resolver.isInsideSourceRoot(reference.imported)) {
+              return reference.specifier;
+            }
+            return toFsSpecifier(reference.imported);
+          },
+          shouldExpandImport: () => false,
+        },
+      );
+      if (content.trim()) {
+        context.styleProcessor.appendStyleContent(root, content, styleFile);
+      }
+    }
+
+    return root.nodes?.length ? context.styleProcessor.stringify(root) : '';
   }
 
   private toDevModuleImportSpecifier(

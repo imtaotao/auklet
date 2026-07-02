@@ -3,10 +3,12 @@ import type { ModuleStyleBuildConfig } from '#auklet/types';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import {
   type FormatWriterOptions,
+  toRelativeImportSpecifier,
   writeStyleFile,
 } from '#auklet/css/production/format/shared';
 
 export class ModuleStyleWriter {
+  private readonly sourceRoot: string;
   private readonly config: ModuleStyleBuildConfig;
   private readonly packageContext: StylePackageContext;
   private readonly styleProcessor: StylePackageContext['styleProcessor'];
@@ -14,6 +16,7 @@ export class ModuleStyleWriter {
   constructor(options: FormatWriterOptions) {
     this.config = options.config;
     this.packageContext = options.packageContext;
+    this.sourceRoot = options.packageContext.sourceRoot;
     this.styleProcessor = options.packageContext.styleProcessor;
   }
 
@@ -23,14 +26,18 @@ export class ModuleStyleWriter {
       this.config.output.styleDir,
       this.config.output.moduleStyleFile,
     );
-    const seen = new Set<string>();
+    const targetDir = path.dirname(target);
     const root = this.styleProcessor.createRoot();
 
-    for (const styleFile of this.packageContext.styleFiles) {
-      const content = this.styleProcessor.readStyleFile(styleFile, seen);
-      if (content.trim()) {
-        this.styleProcessor.appendStyleContent(root, content, styleFile);
-      }
+    for (const styleFile of this.packageContext.getStyleEntryFiles()) {
+      const outputStyleFile = path.join(
+        outRoot,
+        path.relative(this.sourceRoot, styleFile),
+      );
+      this.styleProcessor.appendImportRule(
+        root,
+        toRelativeImportSpecifier(targetDir, outputStyleFile),
+      );
     }
 
     if (!root.nodes?.length) return null;

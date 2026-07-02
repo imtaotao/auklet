@@ -51,7 +51,7 @@ describe('ModuleStyleBuilder dependency styles', () => {
     expect(esStyleEntry).toBe(
       '@import "@scope/ui/es/style/index.css";\n@import "./module.css";\n',
     );
-    expect(esModuleStyle).toBe('.local {}\n');
+    expect(esModuleStyle).toBe('@import "../index.css";\n');
   });
 
   test('keeps handwritten external component CSS imports in source styles', async () => {

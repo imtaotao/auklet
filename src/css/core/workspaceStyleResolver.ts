@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { NODE_MODULES_DIR } from '#auklet/css/constants';
+import { resolvePackageImportsSourceImport } from '#auklet/css/core/resolvers/packageImports';
+import { resolveTsconfigPathsSourceImport } from '#auklet/css/core/resolvers/tsconfigPaths';
 import {
   createExternalStyleSpecifier,
   createOutputStyleSpecifier,
@@ -12,11 +14,15 @@ import type {
 
 export class WorkspaceStyleResolver {
   private readonly require: ReturnType<typeof createRequire>;
+  readonly sourceRoot: string;
 
   constructor(
     private readonly config: ModuleStyleBuildConfig,
     private readonly context: ResolvedModuleStyleBuildContext,
   ) {
+    this.sourceRoot = path.isAbsolute(context.sourceDir)
+      ? context.sourceDir
+      : path.join(context.packageRoot, context.sourceDir);
     this.require = createRequire(
       path.join(this.context.packageRoot, 'package.json'),
     );
@@ -26,9 +32,11 @@ export class WorkspaceStyleResolver {
     specifier: string,
     fromDir = this.context.packageRoot,
   ) {
-    if (specifier.startsWith('.')) {
-      return path.resolve(fromDir, specifier);
-    }
+    const sourceStyleDependency = this.resolveSourceStyleDependency(
+      specifier,
+      fromDir,
+    );
+    if (sourceStyleDependency) return sourceStyleDependency;
 
     try {
       return this.require.resolve(specifier, {
@@ -41,6 +49,34 @@ export class WorkspaceStyleResolver {
         specifier,
       );
     }
+  }
+
+  resolveSourceStyleDependency(
+    specifier: string,
+    fromDir = this.context.packageRoot,
+  ) {
+    if (specifier.startsWith('.')) {
+      return path.resolve(fromDir, specifier);
+    }
+
+    for (const sourceRelativePath of this.resolveSourceImportPaths(specifier)) {
+      const file = path.join(this.sourceRoot, sourceRelativePath);
+      if (this.isStyleFile(file)) return file;
+    }
+    return null;
+  }
+
+  isInsideSourceRoot(file: string) {
+    const relative = path.relative(this.sourceRoot, file);
+    return (
+      Boolean(relative) &&
+      !relative.startsWith('..') &&
+      !path.isAbsolute(relative)
+    );
+  }
+
+  isStyleFile(file: string) {
+    return this.config.styleExtensions.includes(path.extname(file));
   }
 
   toOutputStyleSpecifier(specifier: string, outRoot: string) {
@@ -58,5 +94,20 @@ export class WorkspaceStyleResolver {
       indexStyleFile: this.config.output.indexStyleFile,
       externalStyleFile: this.config.output.externalStyleFile,
     });
+  }
+
+  private resolveSourceImportPaths(specifier: string) {
+    return [
+      ...resolvePackageImportsSourceImport(
+        this.context.packageRoot,
+        this.sourceRoot,
+        specifier,
+      ),
+      ...resolveTsconfigPathsSourceImport(
+        this.context.packageRoot,
+        this.sourceRoot,
+        specifier,
+      ),
+    ];
   }
 }

@@ -181,8 +181,10 @@ pattern syntax is a small glob subset: `*`, `**`, and `?`.
 
 For example, `components/CodeBlock/index.css` may import
 `../../internal/syntaxHighlight.css` when it matches `styles.shared`; component
-CSS outputs inline that shared CSS and its local helper CSS imports, while
-package-level CSS dedupes repeated shared imports. Shared CSS cannot import
-component CSS or theme CSS. Component-to-component CSS imports are still
-rejected; package CSS dependencies should be expressed through
-`styles.dependencies`.
+CSS outputs keep that `@import` relationship instead of expanding the shared
+rules into every component output. The shared CSS file is still copied as its
+own source-level CSS file. `dist/index.css` remains the full package CSS
+aggregate, while format-level and component-level CSS entries preserve the
+import graph as much as possible. Shared CSS cannot import component CSS or
+theme CSS. Component-to-component CSS imports are still rejected; package CSS
+dependencies should be expressed through `styles.dependencies`.

@@ -21,6 +21,7 @@ import {
   setupMonorepoPackages,
   uiPackageRoot,
 } from './helpers';
+import { collectStyleImports } from '../../fixtures/styleStructure';
 
 describe('ModuleStyleGraph request cache', () => {
   let fixture: VirtualProject;
@@ -597,10 +598,12 @@ describe('ModuleStyleGraph request cache', () => {
 
     const secondResult = await secondGraph.createPackageStyleCode(parsed);
 
-    expect(firstResult.code).toContain('color: black');
-    expect(firstResult.code).not.toContain('color: red');
-    expect(secondResult.code).toContain('color: red');
-    expect(secondResult.code).toContain('color: black');
+    expect(collectStyleImports(firstResult.code)).toEqual([]);
+    expect(firstResult.code).toContain('.page { color: black; }');
+    expect(collectStyleImports(secondResult.code)).toEqual([
+      '@scope/app/components/Button.css',
+    ]);
+    expect(secondResult.code).toContain('.page { color: black; }');
   });
 
   test('invalidates persistent virtual CSS load results when config changes', async () => {

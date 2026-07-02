@@ -33,6 +33,24 @@ describe('StyleModuleEntryPlanner diagnostics', () => {
     );
   });
 
+  test('rejects direct component CSS imports through local aliases', () => {
+    project.writePackageJson({
+      name: '@scope/ui',
+      imports: {
+        '#styles/*': './src/*.css',
+      },
+    });
+    project.writeFile('src/components/Image/index.css', '.image {}');
+    project.writeFile(
+      'src/components/ImageGallery/index.css',
+      '@import "#styles/components/Image/index";\n.gallery {}',
+    );
+
+    expect(() => createPlanner(project)).toThrow(
+      '[css] cross-component CSS import detected: components/ImageGallery/index.css imports components/Image/index.css. Use TSX imports to express component dependencies so auklet can generate module CSS entries correctly.',
+    );
+  });
+
   test('rejects direct component CSS imports to non-index style files', () => {
     project.writeFile('src/components/Image/base.css', '.image-base {}');
     project.writeFile(

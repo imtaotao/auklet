@@ -41,8 +41,8 @@ Key modules:
 
 - `StylePackageContext`: aggregates package root, source/output directories,
   theme files, style files, resolver, and processor.
-- `StyleProcessor`: reads CSS files, expands local `@import`, and merges PostCSS
-  roots.
+- `StyleProcessor`: reads CSS files, can expand local `@import` when a writer
+  needs merged CSS, and merges PostCSS roots.
 - `WorkspaceStyleResolver`: resolves style dependencies from config to real
   files or output paths.
 - `styleImports/collector.ts`: scans `.tsx` source files and infers module-level
@@ -145,9 +145,9 @@ The supported input surface is intentionally narrow:
 - Current package theme entries come from `styles.themes`.
 - Controlled same-package shared CSS fragments come from `styles.shared`.
   Matched files must be under the current package source root. Component CSS may
-  import them directly, and generated component CSS inlines them so single
-  component CSS remains self-contained. Shared patterns support a small glob
-  subset: `*`, `**`, and `?`.
+  import them directly, and generated component CSS preserves those imports so
+  shared style layers stay represented as shared files. Shared patterns support a
+  small glob subset: `*`, `**`, and `?`.
 - External package style entries, theme entries, and component auto-import rules
   come from `styles.dependencies`.
 - `auk inspect css` is read-only. It can explain the current package plan before
@@ -161,13 +161,28 @@ The supported input surface is intentionally narrow:
 
 ## Import Semantics
 
-`StyleProcessor` expands local CSS `@import` rules so generated entries can
-merge source styles and avoid duplicate content. Treat this as source-file
-composition, not as full CSS bundling.
+Generated CSS preserves local source `@import` rules whenever the output has a
+real file or virtual entry that can represent the relationship. `StyleProcessor`
+still expands imports for full aggregate package output, while production
+format/module output and component-level Vite/dev entries prefer an import graph
+over duplicated rules. Treat this as source-file composition, not as full CSS
+bundling.
 
 Supported import behavior:
 
 - local relative CSS imports inside source style files;
+- local CSS imports may also use `package.json#imports` or
+  `tsconfig.compilerOptions.paths` when they resolve to CSS files under the
+  current package source root. Production source CSS copies rewrite those
+  specifiers to relative output paths so published CSS does not depend on source
+  aliases;
+- source-local CSS import intent is strict: unresolved relative CSS imports and
+  `#...` source aliases fail the build/dev CSS request instead of falling back
+  to package resolution;
+- preserved local import graphs require resolved local CSS files to stay inside
+  the current package source root. Relative CSS imports that escape the source
+  root are rejected instead of being copied to dist as stale source-relative
+  links. The same boundary applies to configured theme CSS files;
 - local relative CSS imports should stay inside the same component/module
   directory. Importing another component's CSS from component CSS is rejected;
   express component reuse through TSX imports so auklet can infer module CSS
@@ -175,12 +190,17 @@ Supported import behavior:
 - component CSS may import local CSS outside its component/module directory only
   when the imported file is under the current source root and matches
   `styles.shared`;
-- CSS imports inside a shared fragment are recursively inlined when they resolve
-  to non-module, non-theme helper CSS under the current source root, so nested
-  shared fragments stay self-contained in component CSS output without bypassing
-  component or theme boundaries;
+- CSS imports inside a shared fragment may target non-module, non-theme helper
+  CSS under the current source root. Those imports stay in the shared file copy,
+  preserving the shared layer without bypassing component or theme boundaries;
 - recursive local imports with circular import protection;
+- preserved local import graphs reject circular CSS imports instead of emitting
+  self-referential `@import` rules to production source copies or dev virtual
+  CSS;
 - duplicate local import/content suppression for generated output stability;
+- when a preserved local import is rewritten, the specifier changes but media,
+  supports, and layer conditions after the import target are kept as source
+  text;
 - generated `@import` paths between auklet output entries, produced by
   `style/entries.ts` and the production/dev writers.
 
@@ -192,8 +212,8 @@ Out of scope:
 - minification, autoprefixing, nesting transforms, or other PostCSS plugin
   behavior;
 - arbitrary package CSS bundling beyond configured style dependencies;
-- semantic handling of conditional CSS imports such as media, supports, or
-  layer-specific import conditions.
+- interpreting conditional CSS import semantics such as media, supports, or
+  layer-specific conditions during aggregate expansion.
 
 ## Production And Dev Alignment
 
@@ -233,13 +253,19 @@ flowchart TD
 Output semantics:
 
 - `dist/index.css`: package-level aggregate CSS for direct package style imports.
+  It remains a full aggregate file even when module output is enabled, so
+  package-level CSS imports work without requiring a downstream CSS graph.
 - `dist/{es,lib}/style/index.css`: style entry for the current format.
 - `dist/{es,lib}/style/module.css`: module style collection for the current
-  package.
+  package. It imports source-level CSS entry files instead of flattening their
+  rules.
 - `dist/{es,lib}/style/external.css`: external style entry.
 - `dist/{es,lib}/themes/*.css`: theme entries including theme dependencies and
   current theme files.
 - `dist/{es,lib}/components/*/style/index.css`: module-level style entry.
+  Source CSS subpaths such as `dist/es/components/Button/index.css` are entry
+  files with their own imports preserved; they are not independent complete
+  style copies.
 
 ## Dev/Vite Flow
 

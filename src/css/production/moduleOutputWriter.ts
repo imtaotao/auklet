@@ -44,6 +44,8 @@ export class ModuleStyleOutputWriter {
   }
 
   write() {
+    this.packageContext.assertPreservedLocalStyleImports();
+
     const moduleEntries = this.createModuleEntries();
     const outputs: Array<string> = [];
 

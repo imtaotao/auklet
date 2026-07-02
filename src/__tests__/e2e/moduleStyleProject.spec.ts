@@ -51,6 +51,8 @@ const expectedOutputFiles = [
   'lib/themes/light.css',
 ];
 
+const expectedComponents = ['components/Button', 'components/Card'];
+const expectedThemes = ['dark', 'light'];
 const packageEntryContent = [
   ':root { --color: white; }',
   ':root[data-theme="dark"] { --color: black; }',
@@ -60,34 +62,12 @@ const packageEntryContent = [
   '.card { color: red; }',
 ];
 
-const expectedComponents = ['components/Button', 'components/Card'];
-const expectedThemes = ['dark', 'light'];
-
 const expectEntryImports = (
   structure: StyleStructure,
   entryId: string,
   imports: Array<string>,
 ) => {
   expect(structure.entries[entryId]?.imports).toEqual(imports);
-};
-
-const expectEntryContent = (
-  structure: StyleStructure,
-  entryId: string,
-  content: Array<string>,
-) => {
-  for (const item of content) {
-    expect(structure.entries[entryId]?.content).toContain(item);
-  }
-};
-
-const expectPackageEntryContent = (
-  structure: StyleStructure,
-  content: Array<string>,
-) => {
-  for (const item of content) {
-    expect(structure.packageEntry?.content).toContain(item);
-  }
 };
 
 const expectComponentStyleImports = (
@@ -100,6 +80,15 @@ const expectComponentStyleImports = (
   expect(component?.styleEntry?.imports).toEqual(imports);
 };
 
+const expectPackageEntryContent = (
+  structure: StyleStructure,
+  content: Array<string>,
+) => {
+  for (const item of content) {
+    expect(structure.packageEntry?.content).toContain(item);
+  }
+};
+
 const expectStyleKeys = (structure: StyleStructure) => {
   expect(Object.keys(structure.components).sort()).toEqual(expectedComponents);
   expect(Object.keys(structure.themes).sort()).toEqual(expectedThemes);
@@ -110,6 +99,15 @@ const nodeModuleStyleSpecifier = (
   specifier: string,
 ) => {
   return toFsSpecifier(`${fixture.packageRoot}/node_modules/${specifier}`);
+};
+
+const sourceStyleSpecifier = (
+  fixture: StyleProjectTemplate,
+  specifier: string,
+) => {
+  return toFsSpecifier(
+    `${fixture.packageRoot}/${fixture.sourceDir}/${specifier}`,
+  );
 };
 
 describe('module style project output', () => {
@@ -180,21 +178,26 @@ describe('module style project output', () => {
       nodeModuleStyleSpecifier(fixture, '@scope/theme/style.css'),
       nodeModuleStyleSpecifier(fixture, '@scope/ui/style.css'),
     ]);
+    expectEntryImports(graphStructure, 'style.css', [
+      nodeModuleStyleSpecifier(fixture, '@scope/theme/style.css'),
+      nodeModuleStyleSpecifier(fixture, '@scope/ui/style.css'),
+    ]);
+    expectPackageEntryContent(graphStructure, [
+      '.button { color: green; }',
+      '.card { color: red; }',
+    ]);
     expectEntryImports(graphStructure, 'themes/light.css', [
       nodeModuleStyleSpecifier(fixture, '@scope/theme/themes/light.css'),
     ]);
-    expectEntryContent(graphStructure, 'style.css', [
-      '.button { color: green; }',
-      '.card { color: red; }',
-    ]);
     expectEntryImports(graphStructure, 'components/Card.css', [
+      '@fixture/app/components/Button.css',
       nodeModuleStyleSpecifier(fixture, '@scope/ui/components/Button.css'),
       nodeModuleStyleSpecifier(fixture, '@scope/ui/components/Callout.css'),
+      sourceStyleSpecifier(fixture, 'components/Card/tokens.css'),
     ]);
-    expectEntryContent(graphStructure, 'components/Card.css', [
-      '.button { color: green; }',
+    expect(graphStructure.entries['components/Card.css']?.content).toContain(
       '.card { color: red; }',
-    ]);
+    );
 
     expectStyleKeys(buildStructure);
     expectStyleKeys(graphStructure);

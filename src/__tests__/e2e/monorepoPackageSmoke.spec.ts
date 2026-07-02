@@ -48,6 +48,7 @@ describe('monorepo package smoke', () => {
       stylePath: 'components/Button.css',
     });
 
+    expect(collectStyleImports(result.code)).toEqual([]);
     expect(result.code).toContain('.button {}');
   });
 });

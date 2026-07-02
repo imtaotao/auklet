@@ -95,6 +95,34 @@ describe('WorkspaceStyleResolver', () => {
     );
   });
 
+  test('resolves package imports CSS aliases inside the source root', () => {
+    project.writePackageJson({
+      name: 'fixture-package',
+      imports: {
+        '#styles/*': './src/styles/*.css',
+      },
+    });
+
+    expect(resolve('#styles/base')).toBe(
+      project.resolve('src/styles/base.css'),
+    );
+  });
+
+  test('resolves tsconfig paths CSS aliases inside the source root', () => {
+    project.writeJson('tsconfig.json', {
+      compilerOptions: {
+        baseUrl: '.',
+        paths: {
+          '#styles/*': ['./src/styles/*.css'],
+        },
+      },
+    });
+
+    expect(resolve('#styles/base')).toBe(
+      project.resolve('src/styles/base.css'),
+    );
+  });
+
   test('rewrites package style specifiers to the current output format', () => {
     expect(output('@scope/ui/es/components/Button/style/index.css')).toBe(
       '@scope/ui/lib/components/Button/style/index.css',

@@ -1,7 +1,7 @@
 import type { UserConfig } from 'tsdown/config';
 
 export type StyleDependencyGroup = {
-  // 包级样式入口依赖，会被合并进包级 dist/index.css。
+  // 包级样式入口依赖，会进入包级样式入口引用图。
   entry?: string | Array<string>;
   // 主题样式依赖，key 是当前包主题名，value 是依赖包对应主题入口。
   themes?: Record<string, string>;
@@ -19,7 +19,7 @@ export type StyleOptions = {
 };
 
 export type NormalizedStyleDependencyGroup = {
-  // 全局 CSS 依赖，会被合并进包级 dist/index.css。
+  // 全局 CSS 依赖，会进入包级样式入口引用图。
   entry?: string | Array<string>;
   // 主题 CSS 依赖，key 是当前包主题名，value 是依赖包对应主题入口。
   themes?: Record<string, string>;

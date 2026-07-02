@@ -45,6 +45,8 @@ export class StylePackageContext {
   private readonly sourceModuleDirs: Set<string>;
   private readonly themeStyleFileKeys: Set<string>;
   private readonly sharedStyleFileKeys: Set<string>;
+  private hasValidatedSourceRootLocalStyleImports = false;
+  private hasValidatedPreservedLocalStyleImports = false;
   private moduleStyleEntryPlanner?: StyleModuleEntryPlanner;
   private moduleStyleImports?: Map<string, Array<string>>;
 
@@ -104,17 +106,42 @@ export class StylePackageContext {
     return this.moduleStyleEntryPlanner;
   }
 
+  getStyleEntryFiles() {
+    const importedStyleFiles = this.styleProcessor.collectImportedStyleFiles(
+      this.styleFiles,
+    );
+    return this.styleFiles.filter(
+      (styleFile) => !importedStyleFiles.has(path.resolve(styleFile)),
+    );
+  }
+
   isSharedStyleFile(file: string) {
     return this.sharedStyleFileKeys.has(normalizeFileKey(file));
   }
 
-  shouldInlineSharedStyleImport(reference: StyleFileImportReference) {
+  shouldAllowSharedStyleImport(reference: StyleFileImportReference) {
     return (
       (this.isSharedStyleFile(reference.imported) &&
         this.isSharedHelperStyleFile(reference.imported)) ||
       (this.isSharedStyleFile(reference.importer) &&
         this.isSharedHelperStyleFile(reference.imported))
     );
+  }
+
+  assertPreservedLocalStyleImports() {
+    if (this.hasValidatedPreservedLocalStyleImports) return;
+    this.assertNoSourceRootEscapingLocalStyleImports();
+    this.styleProcessor.assertNoLocalStyleImportCycles(this.styleFiles);
+    this.hasValidatedPreservedLocalStyleImports = true;
+  }
+
+  assertNoSourceRootEscapingLocalStyleImports() {
+    if (this.hasValidatedSourceRootLocalStyleImports) return;
+    this.styleProcessor.assertNoSourceRootEscapingLocalStyleImports([
+      ...this.styleFiles,
+      ...this.themeFiles.values(),
+    ]);
+    this.hasValidatedSourceRootLocalStyleImports = true;
   }
 
   private isSharedHelperStyleFile(file: string) {
