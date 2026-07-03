@@ -8,6 +8,7 @@ dist
 src/__tests__/.tmp/
 *.local
 .env
+.tmp
 .corepack
 Microsoft
 dev/

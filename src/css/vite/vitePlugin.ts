@@ -4,11 +4,13 @@ import type { HotUpdateOptions, ModuleNode, Plugin, ViteDevServer } from 'vite';
 import type { ModuleStyleGraphOptions } from '#auklet/css/vite/moduleGraph/types';
 import { AukletStyleHmr } from '#auklet/css/vite/hmr';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
+import { createAukletLogger } from '#auklet/logger';
 
 const WORKSPACE_FILE = 'pnpm-workspace.yaml';
 const VIRTUAL_ID_PREFIX = 'virtual:auklet-css:';
 const RESOLVED_VIRTUAL_ID_PREFIX = '\0auklet-css:';
 const BROWSER_VIRTUAL_ID_PREFIX = 'auklet-css:';
+const logger = createAukletLogger({ scope: 'css:vite' });
 
 const stripQuery = (id: string) => id.split('?')[0];
 
@@ -58,6 +60,23 @@ const resolveGraphRoot = (
   return viteRoot;
 };
 
+const createWatcherErrorPayload = (error: unknown, file: string) => {
+  const err =
+    error instanceof Error
+      ? error
+      : new Error(typeof error === 'string' ? error : String(error));
+
+  return {
+    type: 'error' as const,
+    err: {
+      message: err.message,
+      stack: err.stack ?? err.message,
+      plugin: 'auklet-css',
+      id: file,
+    },
+  };
+};
+
 const invalidateVirtualModules = (
   server: Pick<ViteDevServer, 'moduleGraph'>,
   graph: ModuleStyleGraph,
@@ -83,6 +102,7 @@ export type AukletStylePluginOptions = Partial<
 
 export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
   let graph: ModuleStyleGraph | null = null;
+  let moduleGraph: ViteDevServer['moduleGraph'] | null = null;
 
   const getGraph = () => {
     if (!graph) {
@@ -125,8 +145,12 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
       if (!parsed) return null;
 
       const result = await graph.createPackageStyleCode(parsed);
+      if (moduleGraph) {
+        hmr.pruneStaleVirtualDependencies(moduleGraph);
+      }
+      hmr.replaceVirtualStyleDependency(id, result.watchFiles);
+
       for (const file of result.watchFiles) {
-        hmr.trackVirtualStyleDependency(file, id);
         this.addWatchFile?.(file);
       }
       return result.code;
@@ -134,7 +158,15 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
     async configureServer(server: ViteDevServer) {
       const graph = getGraph();
+      moduleGraph = server.moduleGraph;
       hmr.installFullReloadGuard(server);
+
+      const close = server.close.bind(server);
+      server.close = (async () => {
+        hmr.cancelStaleVirtualDependencyPrune();
+        return close();
+      }) as ViteDevServer['close'];
+
       server.watcher.add(await graph.getWatchRoots());
 
       const invalidateStyleGraph = (file: string) => {
@@ -151,23 +183,30 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
       server.watcher.on('add', reloadStyleGraph);
       server.watcher.on('unlink', reloadStyleGraph);
-      server.watcher.on('change', (file) => {
-        if (graph.isStyleConfigFile(file)) {
-          reloadStyleGraph(file);
-        } else if (
-          graph.isStyleFile(file) &&
-          hmr.hasTrackedStyleDependency(file)
-        ) {
-          hmr.handleStyleHotUpdate({
-            file,
-            modules: [],
-            server,
-            timestamp: Date.now(),
-            type: 'update',
-            read: async () => '',
-          });
-        } else if (graph.isSourceModuleFile(file)) {
-          hmr.handleSourceModuleChange(server, file);
+      server.watcher.on('change', async (file) => {
+        try {
+          hmr.scheduleStaleVirtualDependencyPrune(server.moduleGraph);
+          if (graph.isStyleConfigFile(file)) {
+            reloadStyleGraph(file);
+          } else if (graph.isStyleFile(file)) {
+            graph.invalidateFile(file);
+            if (hmr.hasTrackedStyleDependency(file, server.moduleGraph)) {
+              await hmr.handleStyleHotUpdate({
+                file,
+                modules: [],
+                server,
+                timestamp: Date.now(),
+                type: 'update',
+                read: async () => '',
+              });
+            }
+          } else if (graph.isSourceModuleFile(file)) {
+            await hmr.handleSourceModuleChange(server, file);
+          }
+        } catch (error) {
+          logger.error('package css change watcher failed');
+          logger.error(error);
+          server.ws.send(createWatcherErrorPayload(error, file));
         }
       });
     },

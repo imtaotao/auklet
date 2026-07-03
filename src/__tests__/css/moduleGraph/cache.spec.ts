@@ -5,7 +5,6 @@ import { StyleProcessor } from '#auklet/css/core/styleProcessor';
 import { ModuleStyleImportCollector } from '#auklet/css/core/styleImports/collector';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
-import { PersistentStyleGraphCache } from '#auklet/css/vite/moduleGraph/persistentCache';
 import { ModuleStyleGraphRequestCache } from '#auklet/css/vite/moduleGraph/requestCache';
 import type {
   StylePackageInfo,
@@ -45,6 +44,20 @@ describe('ModuleStyleGraph request cache', () => {
         packages.some((item) => item.packageName === packageName),
       isSourceGraphFile: () => true,
     }) satisfies StylePackageSource;
+
+  const createDeferred = <T>() => {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((resolver, rejecter) => {
+      resolve = resolver;
+      reject = rejecter;
+    });
+    return {
+      promise,
+      resolve,
+      reject,
+    };
+  };
 
   test('reuses package contexts inside one CSS request', async () => {
     const loadAukletConfig = vi.fn(
@@ -127,6 +140,391 @@ describe('ModuleStyleGraph request cache', () => {
     expect(readStyleFile).toHaveBeenCalledTimes(1);
   });
 
+  test('keeps dependency tracking from the newest in-flight load result', async () => {
+    const graph = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        {
+          packageName: '@scope/app',
+          packageRoot: fixture.resolve(appPackageRoot),
+        },
+        {
+          packageName: '@scope/dep-old',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+        {
+          packageName: '@scope/dep-new',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+      ]),
+      root: fixture.root,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const first = createDeferred<{
+      code: string;
+      watchFiles: Array<string>;
+      dependencyPackages?: Array<string>;
+    }>();
+    const second = createDeferred<{
+      code: string;
+      watchFiles: Array<string>;
+      dependencyPackages?: Array<string>;
+    }>();
+    const firstCreate = vi.fn(() =>
+      first.promise.then((result) => ({ result })),
+    );
+    const secondCreate = vi.fn(() =>
+      second.promise.then((result) => ({ result })),
+    );
+
+    const firstLoad = graph.getLoadResult(parsed, firstCreate);
+    graph.invalidatePackage('@scope/app');
+    const secondLoad = graph.getLoadResult(parsed, secondCreate);
+
+    second.resolve({
+      code: 'new',
+      watchFiles: [],
+      dependencyPackages: ['@scope/dep-new'],
+    });
+    await expect(secondLoad).resolves.toMatchObject({ code: 'new' });
+
+    first.resolve({
+      code: 'old',
+      watchFiles: [],
+      dependencyPackages: ['@scope/dep-old'],
+    });
+    await expect(firstLoad).resolves.toMatchObject({ code: 'new' });
+
+    graph.invalidatePackage('@scope/dep-old');
+    const followUpCreate = vi.fn(async () => ({
+      result: {
+        code: 'follow-up',
+        watchFiles: [],
+      },
+    }));
+
+    await expect(
+      graph.getLoadResult(parsed, followUpCreate),
+    ).resolves.toMatchObject({ code: 'new' });
+    expect(followUpCreate).not.toHaveBeenCalled();
+  });
+
+  test('recreates a load result after a rejected request', async () => {
+    const graph = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        {
+          packageName: '@scope/app',
+          packageRoot: fixture.resolve(appPackageRoot),
+        },
+      ]),
+      root: fixture.root,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const create = vi.fn(async () => {
+      if (create.mock.calls.length === 1) {
+        throw new Error('failed to build css');
+      }
+      return {
+        result: {
+          code: 'recovered',
+          watchFiles: [],
+          dependencyPackages: ['@scope/app'],
+        },
+      };
+    });
+
+    await expect(graph.getLoadResult(parsed, create)).rejects.toThrow(
+      'failed to build css',
+    );
+    await expect(graph.getLoadResult(parsed, create)).resolves.toMatchObject({
+      code: 'recovered',
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  test('retries a rejected in-flight load after dependency invalidation', async () => {
+    const graph = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        {
+          packageName: '@scope/app',
+          packageRoot: fixture.resolve(appPackageRoot),
+        },
+        {
+          packageName: '@scope/ui',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+      ]),
+      root: fixture.root,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const first = createDeferred<{
+      code: string;
+      watchFiles: Array<string>;
+      dependencyPackages?: Array<string>;
+    }>();
+    const create = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        first.promise.then((result) => ({ result })),
+      )
+      .mockResolvedValueOnce({
+        result: {
+          code: 'fresh',
+          watchFiles: [],
+          dependencyPackages: ['@scope/ui'],
+        },
+      });
+
+    const load = graph.getLoadResult(parsed, create);
+    graph.invalidatePackage('@scope/ui');
+
+    first.reject(new Error('stale request failed'));
+
+    await expect(load).resolves.toMatchObject({ code: 'fresh' });
+    expect(create).toHaveBeenCalledTimes(2);
+    await expect(graph.getLoadResult(parsed, create)).resolves.toMatchObject({
+      code: 'fresh',
+    });
+  });
+
+  test('does not commit stale in-flight results after dependency invalidation', async () => {
+    const graph = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        {
+          packageName: '@scope/app',
+          packageRoot: fixture.resolve(appPackageRoot),
+        },
+        {
+          packageName: '@scope/ui',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+      ]),
+      root: fixture.root,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const commit = vi.fn();
+    const first = createDeferred<{
+      code: string;
+      watchFiles: Array<string>;
+      dependencyPackages?: Array<string>;
+    }>();
+    const create = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        first.promise.then((result) => ({ result, commit })),
+      )
+      .mockResolvedValueOnce({
+        result: {
+          code: 'fresh',
+          watchFiles: [],
+          dependencyPackages: ['@scope/ui'],
+        },
+      });
+
+    const load = graph.getLoadResult(parsed, create);
+    graph.invalidatePackage('@scope/ui');
+
+    first.resolve({
+      code: 'stale',
+      watchFiles: [],
+      dependencyPackages: ['@scope/ui'],
+    });
+
+    await expect(load).resolves.toMatchObject({ code: 'fresh' });
+    expect(commit).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  test('ignores late dependency writes from stale in-flight results', async () => {
+    const graph = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        {
+          packageName: '@scope/app',
+          packageRoot: fixture.resolve(appPackageRoot),
+        },
+        {
+          packageName: '@scope/dep-a',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+        {
+          packageName: '@scope/dep-b',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+      ]),
+      root: fixture.root,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const deferred = createDeferred<{
+      code: string;
+      watchFiles: Array<string>;
+      dependencyPackages?: Array<string>;
+    }>();
+    const create = vi.fn(() => deferred.promise.then((result) => ({ result })));
+
+    const load = graph.getLoadResult(parsed, create);
+    graph.invalidatePackage('@scope/app');
+    graph.invalidatePackage('@scope/dep-a');
+    const followUpCreate = vi.fn(async () => ({
+      result: {
+        code: 'fresh',
+        watchFiles: [],
+        dependencyPackages: ['@scope/dep-b'],
+      },
+    }));
+    await expect(
+      graph.getLoadResult(parsed, followUpCreate),
+    ).resolves.toMatchObject({ code: 'fresh' });
+
+    deferred.resolve({
+      code: 'stale',
+      watchFiles: [],
+      dependencyPackages: ['@scope/dep-a'],
+    });
+    await expect(load).resolves.toMatchObject({ code: 'fresh' });
+
+    graph.invalidatePackage('@scope/dep-a');
+    const afterStaleCreate = vi.fn(async () => ({
+      result: {
+        code: 'after-stale',
+        watchFiles: [],
+      },
+    }));
+
+    await expect(
+      graph.getLoadResult(parsed, afterStaleCreate),
+    ).resolves.toMatchObject({ code: 'fresh' });
+    expect(afterStaleCreate).not.toHaveBeenCalled();
+  });
+
+  test('retries an in-flight load after package invalidation before it resolves', async () => {
+    const graph = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        {
+          packageName: '@scope/app',
+          packageRoot: fixture.resolve(appPackageRoot),
+        },
+        {
+          packageName: '@scope/ui',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+      ]),
+      root: fixture.root,
+    });
+    const parsed = {
+      packageName: '@scope/ui',
+      stylePath: 'style.css',
+    };
+    const first = createDeferred<{
+      code: string;
+      watchFiles: Array<string>;
+      dependencyPackages?: Array<string>;
+    }>();
+    const create = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        first.promise.then((result) => ({ result })),
+      )
+      .mockResolvedValueOnce({
+        result: {
+          code: 'fresh',
+          watchFiles: [],
+          dependencyPackages: ['@scope/ui'],
+        },
+      });
+
+    const load = graph.getLoadResult(parsed, create);
+    graph.invalidatePackage('@scope/ui');
+
+    first.resolve({
+      code: 'stale',
+      watchFiles: [],
+      dependencyPackages: ['@scope/ui'],
+    });
+
+    await expect(load).resolves.toMatchObject({ code: 'fresh' });
+    expect(create).toHaveBeenCalledTimes(2);
+    await expect(graph.getLoadResult(parsed, create)).resolves.toMatchObject({
+      code: 'fresh',
+    });
+  });
+
+  test('retries an in-flight parent load when only a dependency package invalidates', async () => {
+    const graph = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        {
+          packageName: '@scope/app',
+          packageRoot: fixture.resolve(appPackageRoot),
+        },
+        {
+          packageName: '@scope/ui',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+      ]),
+      root: fixture.root,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'style.css',
+    };
+    const first = createDeferred<{
+      code: string;
+      watchFiles: Array<string>;
+      dependencyPackages?: Array<string>;
+    }>();
+    const create = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        first.promise.then((result) => ({ result })),
+      )
+      .mockResolvedValueOnce({
+        result: {
+          code: 'fresh',
+          watchFiles: [],
+          dependencyPackages: ['@scope/ui'],
+        },
+      });
+
+    const load = graph.getLoadResult(parsed, create);
+    graph.invalidatePackage('@scope/ui');
+
+    first.resolve({
+      code: 'stale',
+      watchFiles: [],
+      dependencyPackages: ['@scope/ui'],
+    });
+
+    await expect(load).resolves.toMatchObject({ code: 'fresh' });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
   test('invalidates package context for changed package files', async () => {
     const loadAukletConfig = vi.fn(async () => ({}));
     const graph = new ModuleStyleGraph({
@@ -188,7 +586,7 @@ describe('ModuleStyleGraph request cache', () => {
         };
       `,
     );
-    fixture.writeFile(
+    const styleFile = fixture.writeFile(
       path.join(uiPackageRoot, 'src/components/Button/index.css'),
       '.button { color: red; }',
     );
@@ -204,15 +602,17 @@ describe('ModuleStyleGraph request cache', () => {
     const firstResult = await graph.createPackageStyleCode(parsed);
     fixture.writeFile(
       path.join(uiPackageRoot, 'src/components/Button/index.css'),
-      '.button { color: blue; }',
+      '.button { color: blueviolet; }',
     );
+    const stat = fs.statSync(styleFile);
+    fs.utimesSync(styleFile, stat.atime, new Date(stat.mtimeMs + 1000));
     graph.invalidateFile(
       packagePath(fixture, uiPackageRoot, 'src/components/Button/index.css'),
     );
     const secondResult = await graph.createPackageStyleCode(parsed);
 
     expect(firstResult.code).toContain('color: red');
-    expect(secondResult.code).toContain('color: blue');
+    expect(secondResult.code).toContain('color: blueviolet');
     expect(secondResult.code).not.toContain('color: red');
   });
 
@@ -304,261 +704,6 @@ describe('ModuleStyleGraph request cache', () => {
     expect(firstResult.code).not.toContain('color: blue');
     expect(secondResult.code).toContain('color: red');
     expect(secondResult.code).toContain('color: blue');
-  });
-
-  test('reuses persistent virtual CSS load results across graphs', async () => {
-    const readStyleFile = vi.spyOn(StyleProcessor.prototype, 'readStyleFile');
-    fixture.writeFile(
-      path.join(appPackageRoot, 'src/components/Button/index.css'),
-      '.button { color: red; }',
-    );
-    const parsed = {
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    };
-
-    const firstGraph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-    const firstResult = await firstGraph.createPackageStyleCode(parsed);
-    readStyleFile.mockClear();
-    const secondGraph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-    const secondResult = await secondGraph.createPackageStyleCode(parsed);
-
-    expect(firstResult.code).toContain('color: red');
-    expect(secondResult.code).toBe(firstResult.code);
-    expect(readStyleFile).not.toHaveBeenCalled();
-    expect(fixture.exists('node_modules/.auklet/cache/vite-style/v1')).toBe(
-      true,
-    );
-  });
-
-  test('does not persist empty virtual CSS load results', async () => {
-    const graph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-
-    const result = await graph.createPackageStyleCode({
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    });
-
-    expect(result.code).toBe('');
-    expect(result.cacheInputFiles).toContain(
-      fixture.resolve(path.join(appPackageRoot, 'src')),
-    );
-    expect(fixture.exists('node_modules/.auklet/cache/vite-style/v1')).toBe(
-      false,
-    );
-  });
-
-  test('keeps persistent cache keys stable for duplicate package names', async () => {
-    fixture.writeFile(
-      path.join(appPackageRoot, 'src/components/Button/index.css'),
-      '.button { color: red; }',
-    );
-    fixture.writeJson('packages/dup-a/package.json', {
-      name: '@scope/dup',
-    });
-    fixture.writeJson('packages/dup-b/package.json', {
-      name: '@scope/dup',
-    });
-    const appPackage = {
-      packageName: '@scope/app',
-      packageRoot: fixture.resolve(appPackageRoot),
-    };
-    const duplicatePackageA = {
-      packageName: '@scope/dup',
-      packageRoot: fixture.resolve('packages/dup-a'),
-    };
-    const duplicatePackageB = {
-      packageName: '@scope/dup',
-      packageRoot: fixture.resolve('packages/dup-b'),
-    };
-    const parsed = {
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    };
-    const firstCache = new ModuleStyleGraphRequestCache({
-      config: moduleStyleBuildConfig,
-      mode: 'monorepo',
-      packageSource: createPackageSource([
-        appPackage,
-        duplicatePackageB,
-        duplicatePackageA,
-      ]),
-      root: fixture.root,
-    });
-    const firstContext = await firstCache.getContext(parsed);
-    expect(firstContext).not.toBeNull();
-    firstCache.writePersistentLoadResult(parsed, firstContext!, {
-      code: '.button { color: red; }',
-      watchFiles: [],
-    });
-    const secondCache = new ModuleStyleGraphRequestCache({
-      config: moduleStyleBuildConfig,
-      mode: 'monorepo',
-      packageSource: createPackageSource([
-        appPackage,
-        duplicatePackageA,
-        duplicatePackageB,
-      ]),
-      root: fixture.root,
-    });
-    const secondContext = await secondCache.getContext(parsed);
-    expect(secondContext).not.toBeNull();
-
-    const cached = secondCache.readPersistentLoadResult(parsed, secondContext!);
-
-    expect(cached?.code).toContain('color: red');
-  });
-
-  test('invalidates persistent virtual CSS load results when inputs change', async () => {
-    fixture.writeFile(
-      path.join(appPackageRoot, 'src/components/Button/index.css'),
-      '.button { color: red; }',
-    );
-    const parsed = {
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    };
-    const firstGraph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-    await firstGraph.createPackageStyleCode(parsed);
-    fixture.writeFile(
-      path.join(appPackageRoot, 'src/components/Button/index.css'),
-      '.button { color: blue; }',
-    );
-    const secondGraph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-
-    const result = await secondGraph.createPackageStyleCode(parsed);
-
-    expect(result.code).toContain('color: blue');
-    expect(result.code).not.toContain('color: red');
-  });
-
-  test('invalidates persistent virtual CSS load results when content changes without stat changes', async () => {
-    const styleFile = fixture.writeFile(
-      path.join(appPackageRoot, 'src/components/Button/index.css'),
-      '.button { color: red; }',
-    );
-    const parsed = {
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    };
-    const firstGraph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-    await firstGraph.createPackageStyleCode(parsed);
-    const stat = fs.statSync(styleFile);
-    fixture.writeFile(
-      path.join(appPackageRoot, 'src/components/Button/index.css'),
-      '.button { color: tan; }',
-    );
-    fs.utimesSync(styleFile, stat.atime, stat.mtime);
-    const secondGraph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-
-    const result = await secondGraph.createPackageStyleCode(parsed);
-
-    expect(result.code).toContain('color: tan');
-    expect(result.code).not.toContain('color: red');
-  });
-
-  test('invalidates persistent cache when a symlink target changes', () => {
-    fixture.writeFile('store/dep-v1/style.css', '.dep { color: red; }');
-    fixture.writeFile('store/dep-v2/style.css', '.dep { color: blue; }');
-    const linkPath = fixture.resolve('node_modules/dep');
-    fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-    fs.symlinkSync(fixture.resolve('store/dep-v1'), linkPath, 'dir');
-    const cache = new PersistentStyleGraphCache({
-      root: fixture.root,
-    });
-    const key = cache.createKey({
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    });
-
-    cache.write(
-      key,
-      {
-        code: '.dep { color: red; }',
-        watchFiles: [path.join(linkPath, 'style.css')],
-      },
-      [path.join(linkPath, 'style.css')],
-    );
-    expect(cache.read(key)?.code).toContain('color: red');
-    fs.unlinkSync(linkPath);
-    fs.symlinkSync(fixture.resolve('store/dep-v2'), linkPath, 'dir');
-
-    expect(cache.read(key)).toBeNull();
-  });
-
-  test('cleans stale persistent cache files after a write', () => {
-    const cache = new PersistentStyleGraphCache({
-      root: fixture.root,
-    });
-    const staleFile = fixture.writeFile(
-      'node_modules/.auklet/cache/vite-style/v1/stale.json',
-      '{}',
-    );
-    const staleTime = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
-    fs.utimesSync(staleFile, staleTime, staleTime);
-
-    cache.write(
-      cache.createKey({ test: 'cleanup-stale' }),
-      {
-        code: '.button { color: red; }',
-        watchFiles: [],
-      },
-      [],
-    );
-
-    expect(fs.existsSync(staleFile)).toBe(false);
-  });
-
-  test('limits persistent cache file count after a write', () => {
-    const cacheRoot = 'node_modules/.auklet/cache/vite-style/v1';
-    const cache = new PersistentStyleGraphCache({
-      root: fixture.root,
-    });
-
-    for (let index = 0; index < 5002; index += 1) {
-      const file = fixture.writeFile(
-        path.join(cacheRoot, `entry-${index}.json`),
-        '{}',
-      );
-      const time = new Date(Date.now() - (5002 - index) * 1000);
-      fs.utimesSync(file, time, time);
-    }
-
-    cache.write(
-      cache.createKey({ test: 'cleanup-count' }),
-      {
-        code: '.button { color: red; }',
-        watchFiles: [],
-      },
-      [],
-    );
-
-    expect(
-      fs
-        .readdirSync(fixture.resolve(cacheRoot), { withFileTypes: true })
-        .filter((entry) => entry.isFile() && entry.name.endsWith('.json')),
-    ).toHaveLength(5000);
   });
 
   test('invalidates persistent virtual CSS load results when missing inputs are added', async () => {
@@ -657,218 +802,6 @@ describe('ModuleStyleGraph request cache', () => {
     expect(firstResult.code).not.toContain('color: blue');
     expect(secondResult.code).toContain('color: red');
     expect(secondResult.code).toContain('color: blue');
-  });
-
-  test('tracks dependency package json as a persistent cache input', async () => {
-    fixture.writeFile(
-      path.join(appPackageRoot, 'auklet.config.js'),
-      `
-        export const config = {
-          styles: {
-            dependencies: {
-              dep: {
-                entry: '/style.css',
-              },
-            },
-          },
-        };
-      `,
-    );
-    const packageJson = fixture.writeJson(
-      path.join(appPackageRoot, 'node_modules/dep/package.json'),
-      {
-        name: 'dep',
-        exports: {
-          './style.css': './style.css',
-        },
-      },
-    );
-    fixture.writeFile(
-      path.join(appPackageRoot, 'node_modules/dep/style.css'),
-      '.dep { color: red; }',
-    );
-    const parsed = {
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    };
-    const graph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-
-    const result = await graph.createPackageStyleCode(parsed);
-
-    expect(result.code).toContain('dep/style.css');
-    expect(result.cacheInputFiles).toContain(packageJson);
-  });
-
-  test('tracks hoisted dependency package json as a persistent cache input', async () => {
-    fixture.writeFile(
-      path.join(appPackageRoot, 'auklet.config.js'),
-      `
-        export const config = {
-          styles: {
-            dependencies: {
-              dep: {
-                entry: '/style.css',
-              },
-            },
-          },
-        };
-      `,
-    );
-    const packageJson = fixture.writeJson(
-      path.join('node_modules/dep/package.json'),
-      {
-        name: 'dep',
-        exports: {
-          './style.css': './style.css',
-        },
-      },
-    );
-    fixture.writeFile(
-      path.join('node_modules/dep/style.css'),
-      '.dep { color: red; }',
-    );
-    const parsed = {
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    };
-    const graph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-
-    const result = await graph.createPackageStyleCode(parsed);
-    const cache = new PersistentStyleGraphCache({
-      root: fixture.root,
-    });
-    const key = cache.createKey({
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-      source: 'hoisted-dependency',
-    });
-    cache.write(key, result, result.cacheInputFiles ?? []);
-    fixture.writeJson(path.join('node_modules/dep/package.json'), {
-      name: 'dep',
-      exports: {
-        './style.css': './blue.css',
-      },
-    });
-
-    expect(result.code).toContain('dep/style.css');
-    expect(result.cacheInputFiles).toContain(packageJson);
-    expect(result.cacheInputFiles).not.toContain(
-      fixture.resolve(
-        path.join(appPackageRoot, 'node_modules/dep/package.json'),
-      ),
-    );
-    expect(cache.read(key)).toBeNull();
-  });
-
-  test('invalidates persistent cache when workspace package root changes', async () => {
-    const appRoot = 'apps/app-package';
-    const firstUiRoot = 'libs-v1/ui-package';
-    const secondUiRoot = 'libs-v2/ui-package';
-    fixture.writeFile(
-      'pnpm-workspace.yaml',
-      'packages:\n  - apps/*\n  - libs-v1/*\n',
-    );
-    fixture.writeJson(path.join(appRoot, 'package.json'), {
-      name: '@scope/app',
-    });
-    fixture.writeJson(path.join(firstUiRoot, 'package.json'), {
-      name: '@scope/ui',
-    });
-    fixture.writeFile(
-      path.join(appRoot, 'auklet.config.js'),
-      `
-        export const config = {
-          styles: {
-            dependencies: {
-              '@scope/ui': {
-                entry: '/style.css',
-              },
-            },
-          },
-        };
-      `,
-    );
-    fixture.writeFile(
-      path.join(firstUiRoot, 'src/components/Button/index.css'),
-      '.button { color: red; }',
-    );
-    const parsed = {
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    };
-    const firstGraph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-    const firstResult = await firstGraph.createPackageStyleCode(parsed);
-    fixture.writeFile(
-      'pnpm-workspace.yaml',
-      'packages:\n  - apps/*\n  - libs-v2/*\n',
-    );
-    fixture.writeJson(path.join(secondUiRoot, 'package.json'), {
-      name: '@scope/ui',
-    });
-    fixture.writeFile(
-      path.join(secondUiRoot, 'src/components/Button/index.css'),
-      '.button { color: blue; }',
-    );
-    const secondGraph = new ModuleStyleGraph({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-
-    const secondResult = await secondGraph.createPackageStyleCode(parsed);
-
-    expect(firstResult.code).toContain('color: red');
-    expect(firstResult.code).not.toContain('color: blue');
-    expect(secondResult.code).toContain('color: blue');
-    expect(secondResult.code).not.toContain('color: red');
-  });
-
-  test('invalidates persistent cache when package json changes', () => {
-    const packageJson = fixture.writeJson(
-      path.join(appPackageRoot, 'node_modules/dep/package.json'),
-      {
-        name: 'dep',
-        exports: {
-          './style.css': './red.css',
-        },
-      },
-    );
-    const cache = new PersistentStyleGraphCache({
-      root: fixture.root,
-    });
-    const key = cache.createKey({
-      packageName: '@scope/app',
-      stylePath: 'style.css',
-    });
-
-    cache.write(
-      key,
-      {
-        code: '@import "dep/red.css";',
-        watchFiles: [],
-      },
-      [packageJson],
-    );
-    expect(cache.read(key)?.code).toContain('red.css');
-    fixture.writeJson(
-      path.join(appPackageRoot, 'node_modules/dep/package.json'),
-      {
-        name: 'dep',
-        exports: {
-          './style.css': './blue.css',
-        },
-      },
-    );
-
-    expect(cache.read(key)).toBeNull();
   });
 
   test('reuses module import collection across source module requests', async () => {

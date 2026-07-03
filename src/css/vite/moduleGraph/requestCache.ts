@@ -21,6 +21,11 @@ import type {
 } from '#auklet/css/vite/moduleGraph/types';
 import { normalizeFileKey, toPosixPath } from '#auklet/utils';
 
+type LoadResultEntry = {
+  commit?: () => PackageStyleLoadResult;
+  result: PackageStyleLoadResult;
+};
+
 export type PackageStyleContext = {
   normalizedConfig: NormalizedAukletConfig;
   context: ResolvedModuleStyleBuildContext;
@@ -50,9 +55,15 @@ export class ModuleStyleGraphRequestCache {
     string,
     Promise<PackageStyleLoadResult>
   >();
+  private readonly settledLoadResults = new Map<
+    string,
+    PackageStyleLoadResult
+  >();
   private readonly loadResultDependencies = new Map<string, Set<string>>();
+  private readonly loadResultVersions = new Map<string, number>();
   private readonly loadAukletConfig: LoadAukletConfig;
   private readonly persistentCache: PersistentStyleGraphCache;
+  private graphVersion = 0;
 
   constructor(private readonly options: ModuleStyleGraphRequestCacheOptions) {
     this.loadAukletConfig = options.loadAukletConfig ?? loadAukletConfig;
@@ -80,24 +91,65 @@ export class ModuleStyleGraphRequestCache {
 
   getLoadResult(
     parsed: PackageStyleId,
-    create: () => Promise<PackageStyleLoadResult>,
+    create: () => Promise<LoadResultEntry>,
   ) {
     const key = this.getLoadResultKey(parsed);
     const cachedResult = this.loadResults.get(key);
     if (cachedResult) return cachedResult;
 
-    const result = create().then((value) => {
-      this.loadResultDependencies.set(
-        key,
-        new Set(value.dependencyPackages ?? []),
-      );
-      return value;
-    });
+    const version = this.bumpLoadResultVersion(key);
+    const graphVersion = this.getGraphVersion();
+    let result: Promise<PackageStyleLoadResult>;
+    result = create()
+      .then(async (entry) => {
+        if (this.getGraphVersion() !== graphVersion) {
+          const currentResult = this.loadResults.get(key);
+          if (currentResult && currentResult !== result) {
+            return currentResult;
+          }
+          this.discardLoadResult(key);
+          return this.getLoadResult(parsed, create);
+        }
+
+        if (this.loadResultVersions.get(key) === version) {
+          this.loadResultDependencies.set(
+            key,
+            new Set(entry.result.dependencyPackages ?? []),
+          );
+        }
+        try {
+          const committedResult = entry.commit?.();
+          if (committedResult) {
+            entry.result = committedResult;
+          }
+        } catch {
+          // Persistent cache writes are best-effort and must not fail dev CSS.
+        }
+        this.settledLoadResults.set(key, entry.result);
+        return entry.result;
+      })
+      .catch((error) => {
+        if (this.getGraphVersion() !== graphVersion) {
+          const currentResult = this.loadResults.get(key);
+          if (currentResult && currentResult !== result) {
+            return currentResult;
+          }
+          this.discardLoadResult(key);
+          return this.getLoadResult(parsed, create);
+        }
+
+        if (this.loadResultVersions.get(key) === version) {
+          this.discardLoadResult(key);
+        }
+        throw error;
+      });
+
     this.loadResults.set(key, result);
     return result;
   }
 
   invalidatePackage(packageName: string) {
+    this.bumpGraphVersion();
     this.contexts.delete(packageName);
     this.invalidateLoadResults(packageName);
   }
@@ -306,8 +358,34 @@ export class ModuleStyleGraphRequestCache {
           continue;
         }
       }
-      this.loadResults.delete(key);
-      this.loadResultDependencies.delete(key);
+      this.discardLoadResult(key);
     }
+  }
+
+  private discardLoadResult(key: string) {
+    this.bumpGraphVersion();
+    this.bumpLoadResultVersion(key);
+    this.loadResults.delete(key);
+    this.loadResultDependencies.delete(key);
+    this.settledLoadResults.delete(key);
+  }
+
+  peekLoadResult(parsed: PackageStyleId) {
+    return this.settledLoadResults.get(this.getLoadResultKey(parsed)) ?? null;
+  }
+
+  private getGraphVersion() {
+    return this.graphVersion;
+  }
+
+  private bumpGraphVersion() {
+    this.graphVersion += 1;
+    return this.graphVersion;
+  }
+
+  private bumpLoadResultVersion(key: string) {
+    const nextVersion = (this.loadResultVersions.get(key) ?? 0) + 1;
+    this.loadResultVersions.set(key, nextVersion);
+    return nextVersion;
   }
 }

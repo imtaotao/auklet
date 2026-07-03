@@ -40,28 +40,41 @@ export class StyleCodeFactory {
     parsed: PackageStyleId,
     cache: ModuleStyleGraphRequestCache,
   ) {
-    return cache.getLoadResult(parsed, async () =>
-      this.normalizeTopLevelImports(
-        await this.createUncachedPackageStyleCode(parsed, cache),
-      ),
-    );
+    return cache.getLoadResult(parsed, async () => {
+      const context = await cache.getContext(parsed);
+      if (!context) {
+        return {
+          result: {
+            code: '',
+            watchFiles: [],
+          },
+        };
+      }
+
+      const cachedResult = cache.readPersistentLoadResult(parsed, context);
+
+      if (cachedResult) {
+        return {
+          result: cachedResult,
+        };
+      }
+
+      const result = this.normalizeTopLevelImports(
+        await this.createUncachedPackageStyleCode(parsed, cache, context),
+      );
+
+      return {
+        result,
+        commit: () => cache.writePersistentLoadResult(parsed, context, result),
+      };
+    });
   }
 
   private async createUncachedPackageStyleCode(
     parsed: PackageStyleId,
     cache: ModuleStyleGraphRequestCache,
+    context: PackageStyleContext,
   ) {
-    const context = await cache.getContext(parsed);
-    if (!context) {
-      return {
-        code: '',
-        watchFiles: [],
-      };
-    }
-
-    const cachedResult = cache.readPersistentLoadResult(parsed, context);
-    if (cachedResult) return cachedResult;
-
     let result: PackageStyleLoadResult;
     if (parsed.stylePath === STYLE_ENTRY) {
       result = await this.createStyleCode(context, cache);
@@ -82,11 +95,7 @@ export class StyleCodeFactory {
         parsed.stylePath,
       );
     }
-    return cache.writePersistentLoadResult(
-      parsed,
-      context,
-      this.normalizeTopLevelImports(result),
-    );
+    return result;
   }
 
   private async createStyleCode(

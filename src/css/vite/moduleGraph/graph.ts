@@ -80,6 +80,10 @@ export class ModuleStyleGraph {
     );
   }
 
+  peekPackageStyleCode(parsed: PackageStyleId) {
+    return this.requestCache.peekLoadResult(parsed);
+  }
+
   invalidatePackage(packageName: string) {
     this.requestCache.invalidatePackage(packageName);
   }

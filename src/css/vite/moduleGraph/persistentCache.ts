@@ -35,10 +35,12 @@ type CachedStyleLoadResult = {
 
 export type PersistentStyleGraphCacheOptions = {
   root: string;
+  maxCacheFiles?: number;
 };
 
 const cacheVersion = 'v1';
 const maxCacheFiles = 5000;
+const cleanupIntervalMs = 5 * 60 * 1000;
 const staleCacheAgeMs = 7 * 24 * 60 * 60 * 1000;
 
 const stableStringify = (value: unknown): string => {
@@ -110,8 +112,9 @@ const statCachedFile = (file: string) => {
 };
 
 export class PersistentStyleGraphCache {
-  private static readonly cleanedRoots = new Set<string>();
+  private static readonly lastCleanupTimes = new Map<string, number>();
   private readonly cacheRoot: string;
+  private readonly maxCacheFiles: number;
 
   constructor(options: PersistentStyleGraphCacheOptions) {
     this.cacheRoot = path.join(
@@ -122,6 +125,7 @@ export class PersistentStyleGraphCache {
       'vite-style',
       cacheVersion,
     );
+    this.maxCacheFiles = options.maxCacheFiles ?? maxCacheFiles;
   }
 
   createKey(value: unknown) {
@@ -152,15 +156,15 @@ export class PersistentStyleGraphCache {
     result: PackageStyleLoadResult,
     inputFiles: Array<string>,
   ) {
-    const files = Array.from(
-      new Map(
-        inputFiles
-          .map((file) => statCachedFile(file))
-          .map((file) => [file.file, file]),
-      ).values(),
-    );
-
     try {
+      const files = Array.from(
+        new Map(
+          inputFiles
+            .map((file) => statCachedFile(file))
+            .map((file) => [file.file, file]),
+        ).values(),
+      );
+
       fs.mkdirSync(this.cacheRoot, { recursive: true });
       fs.writeFileSync(
         this.getCacheFile(key),
@@ -183,11 +187,14 @@ export class PersistentStyleGraphCache {
   }
 
   private cleanupStaleEntries() {
-    if (PersistentStyleGraphCache.cleanedRoots.has(this.cacheRoot)) return;
-    PersistentStyleGraphCache.cleanedRoots.add(this.cacheRoot);
+    const now = Date.now();
+    const lastCleanupTime =
+      PersistentStyleGraphCache.lastCleanupTimes.get(this.cacheRoot) ?? 0;
+
+    if (now - lastCleanupTime < cleanupIntervalMs) return;
+    PersistentStyleGraphCache.lastCleanupTimes.set(this.cacheRoot, now);
 
     try {
-      const now = Date.now();
       const entries = fs
         .readdirSync(this.cacheRoot, { withFileTypes: true })
         .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
@@ -208,7 +215,7 @@ export class PersistentStyleGraphCache {
         freshEntries.push(entry);
       }
 
-      const overflowCount = freshEntries.length - maxCacheFiles;
+      const overflowCount = freshEntries.length - this.maxCacheFiles;
       if (overflowCount <= 0) return;
 
       for (const entry of freshEntries
