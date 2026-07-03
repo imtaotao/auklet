@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { createServer as createViteServer } from 'vite';
 import { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
 import {
   createVirtualProject,
@@ -54,25 +55,6 @@ describe('aukletStylePlugin Vite server integration', () => {
 
   afterEach(() => {
     fixture.cleanup();
-  });
-
-  test('resolves browser virtual CSS imports for known package style ids', () => {
-    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
-    fixture.writeJson(path.join('packages/app/package.json'), {
-      name: '@scope/app',
-    });
-    fixture.writeJson(path.join('packages/ui/package.json'), {
-      name: '@scope/ui',
-    });
-
-    const plugin = aukletStylePlugin({
-      root: fixture.root,
-      mode: 'monorepo',
-    });
-
-    expect(
-      plugin.resolveId?.('auklet-css:@scope/ui/components/Button.css'),
-    ).toBe('\0auklet-css:@scope/ui/components/Button.css');
   });
 
   test('does not send full reload for source module changes', async () => {
@@ -207,7 +189,7 @@ describe('aukletStylePlugin Vite server integration', () => {
     });
   });
 
-  test('keeps HMR tracking for preserved workspace package CSS imports', async () => {
+  test('keeps HMR tracking for recursive workspace package CSS dependencies', async () => {
     fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
     fixture.writeJson(path.join('packages/app/package.json'), {
       name: '@scope/app',
@@ -283,9 +265,8 @@ describe('aukletStylePlugin Vite server integration', () => {
 
     context.handlers.get('change')?.(styleFile);
 
-    expect(appCode).toContain(
-      '@import "auklet-css:@scope/ui/components/Button.css";',
-    );
+    expect(appCode).toContain('.button { color: blue; }');
+    expect(appCode).not.toContain('auklet-css:@scope/ui/components/Button.css');
     expect(addWatchFile).toHaveBeenCalledWith(styleFile);
     expect(context.invalidateModule).toHaveBeenCalledWith({ id: appVirtualId });
     expect(context.invalidateModule).toHaveBeenCalledWith({ id: uiVirtualId });
@@ -302,6 +283,86 @@ describe('aukletStylePlugin Vite server integration', () => {
         }),
       ]),
     });
+  });
+
+  test('lets Vite 8 transform recursive workspace package CSS dependencies', async () => {
+    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    fixture.writeJson(path.join('packages/app/package.json'), {
+      name: '@scope/app',
+    });
+    fixture.writeJson(path.join('packages/ui/package.json'), {
+      name: '@scope/ui',
+    });
+    fixture.writeFile(
+      path.join('packages/app/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+          styles: {
+            dependencies: {
+              '@scope/ui': {
+                components: ['/components/**.css'],
+              },
+            },
+          },
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/ui/auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.tsx'),
+      `
+        import { Button } from '@scope/ui';
+        export function App() { return Button; }
+      `,
+    );
+    fixture.writeFile(
+      path.join('packages/app/src/components/App/index.css'),
+      '.app { color: red; }',
+    );
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.tsx'),
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.css'),
+      '.button { color: blue; }',
+    );
+    fixture.writeFile(
+      path.join('packages/app/node_modules/@scope/ui/components/Button.css'),
+      '',
+    );
+
+    const server = await createViteServer({
+      configFile: false,
+      logLevel: 'silent',
+      root: fixture.root,
+      plugins: [
+        aukletStylePlugin({
+          root: fixture.root,
+          mode: 'monorepo',
+        }),
+      ],
+    });
+
+    try {
+      const result = await server.transformRequest(
+        '@scope/app/components/App.css',
+      );
+
+      expect(result?.code).toContain('.button { color: blue; }');
+      expect(result?.code).toContain('.app { color: red; }');
+      expect(result?.code).not.toContain('auklet-css:@scope/ui');
+    } finally {
+      await server.close();
+    }
   });
 
   test('does not intercept untracked css file changes', async () => {

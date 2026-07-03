@@ -46,10 +46,6 @@ const collectLateStyleImports = (code: string) => {
   return imports;
 };
 
-const virtualStyleSpecifier = (specifier: string) => {
-  return `auklet-css:${specifier}`;
-};
-
 describe('ModuleStyleGraph entries', () => {
   let fixture: VirtualProject;
 
@@ -391,9 +387,10 @@ describe('ModuleStyleGraph entries', () => {
       graph.parsePackageStyleId('@scope/app/pages/BlogArticlePage.css')!,
     );
 
-    expect(collectStyleImports(result.code)).toEqual([
-      virtualStyleSpecifier('@scope/ui/components/Renderer.css'),
-    ]);
+    expect(collectStyleImports(result.code)).toEqual([]);
+    expect(result.code).toContain(
+      '.markdown-prose { color: var(--markdown-text); }',
+    );
     expect(result.code).toContain('.article { color: var(--blog-text); }');
     expect(result.dependencyPackages).toContain('@scope/ui');
     expectWatchFile(
@@ -474,10 +471,12 @@ describe('ModuleStyleGraph entries', () => {
 
     expect(collectLateStyleImports(result.code)).toEqual([]);
     expect(collectStyleImports(result.code)).toEqual([
-      virtualStyleSpecifier('@scope/app/components/ThemeToggle.css'),
-      toFsSpecifier(buttonImport),
       toFsSpecifier(iconButtonImport),
+      toFsSpecifier(buttonImport),
     ]);
+    expect(result.code).toContain(
+      '.theme-toggle { color: var(--toggle-text); }',
+    );
     expect(result.code).toContain('.article { color: var(--article-text); }');
   });
 
@@ -533,9 +532,11 @@ describe('ModuleStyleGraph entries', () => {
       graph.parsePackageStyleId('@scope/app/components/Table.css')!,
     );
 
-    expect(collectStyleImports(result.code)).toEqual([
-      virtualStyleSpecifier('@scope/app/components/Table/TableView.css'),
-    ]);
+    expect(collectStyleImports(result.code)).toEqual([]);
+    expect(result.code).toContain('.empty-state { padding: 16px; }');
+    expect(result.code).toContain(
+      '.spinner { animation: spin 1s linear infinite; }',
+    );
     expect(result.code).toContain('.table { display: grid; }');
     expectWatchFile(
       result.watchFiles,
