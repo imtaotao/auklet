@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import postcss, { type AtRule, type ChildNode } from 'postcss';
 import type { ModuleStyleBuildConfig } from '#auklet/types';
@@ -11,6 +12,7 @@ import { toDevDependencyImportSpecifier } from '#auklet/css/vite/moduleGraph/dev
 import type {
   PackageStyleId,
   PackageStyleLoadResult,
+  PackageStyleWatchFile,
 } from '#auklet/css/vite/moduleGraph/types';
 import {
   EXTERNAL_ENTRY,
@@ -281,7 +283,7 @@ export class StyleCodeFactory {
     context.packageContext.assertPreservedLocalStyleImports();
 
     const sourceModuleDir = removeStyleExtension(stylePath);
-    const { styleFiles, sourceFiles } = context.packageContext;
+    const { sourceFiles } = context.packageContext;
     const entry = createModuleStyleEntryPlan(
       context.packageContext,
       sourceModuleDir,
@@ -328,6 +330,10 @@ export class StyleCodeFactory {
       context,
       entry.ownStyleFiles,
     );
+    const sourceWatchFiles = this.collectSourceStyleWatchFiles(
+      context,
+      entry.ownStyleFiles,
+    );
 
     return mergeLoadResults(...moduleStyleResults, {
       code: [createImportCode(moduleStyleSpecifiers), ownStyleCode]
@@ -335,9 +341,23 @@ export class StyleCodeFactory {
         .join('\n'),
       watchFiles: [
         ...context.configPaths,
-        ...styleFiles,
+        ...sourceWatchFiles.map((item) => item.file),
         ...moduleStyleWatchFiles,
         ...sourceFiles.filter((file) => /\.(ts|tsx)$/.test(file)),
+      ],
+      watchFileKinds: [
+        ...context.configPaths.map((file) => ({
+          file,
+          kind: 'dependency' as const,
+        })),
+        ...sourceWatchFiles,
+        ...moduleStyleWatchFiles.map((file) => ({
+          file,
+          kind: 'dependency' as const,
+        })),
+        ...sourceFiles
+          .filter((file) => /\.(ts|tsx)$/.test(file))
+          .map((file) => ({ file, kind: 'dependency' as const })),
       ],
       cacheInputFiles: moduleStyleCacheInputFiles,
     });
@@ -369,6 +389,58 @@ export class StyleCodeFactory {
     }
 
     return root.nodes?.length ? context.styleProcessor.stringify(root) : '';
+  }
+
+  private collectSourceStyleWatchFiles(
+    context: PackageStyleContext,
+    styleFiles: Array<string>,
+  ) {
+    const watchFiles = new Map<string, PackageStyleWatchFile['kind']>();
+    const pending: Array<PackageStyleWatchFile> = styleFiles.map((file) => ({
+      file,
+      kind: 'entry',
+    }));
+    const visited = new Set<string>();
+
+    while (pending.length) {
+      const current = pending.pop();
+      if (!current) continue;
+      const styleFile = current.file;
+
+      const normalized = path.resolve(styleFile);
+      if (visited.has(normalized)) continue;
+      visited.add(normalized);
+      const previousKind = watchFiles.get(normalized);
+      watchFiles.set(
+        normalized,
+        previousKind === 'entry' || current.kind === 'entry'
+          ? 'entry'
+          : 'dependency',
+      );
+
+      for (const reference of context.styleProcessor.collectStyleImportReferences(
+        [normalized],
+      )) {
+        if (
+          !context.resolver.isStyleFile(reference.imported) ||
+          !fs.existsSync(reference.imported)
+        ) {
+          continue;
+        }
+        pending.push({
+          file: reference.imported,
+          kind: 'dependency',
+        });
+      }
+    }
+
+    return Array.from(
+      watchFiles,
+      ([file, kind]): PackageStyleWatchFile => ({
+        file,
+        kind,
+      }),
+    );
   }
 
   private toDevModuleImportSpecifier(

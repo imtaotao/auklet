@@ -148,7 +148,11 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
       if (moduleGraph) {
         hmr.pruneStaleVirtualDependencies(moduleGraph);
       }
-      hmr.replaceVirtualStyleDependency(id, result.watchFiles);
+      hmr.replaceVirtualStyleDependency(
+        id,
+        result.watchFiles,
+        result.watchFileKinds,
+      );
 
       for (const file of result.watchFiles) {
         this.addWatchFile?.(file);
@@ -189,8 +193,7 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
           if (graph.isStyleConfigFile(file)) {
             reloadStyleGraph(file);
           } else if (graph.isStyleFile(file)) {
-            graph.invalidateFile(file);
-            if (hmr.hasTrackedStyleDependency(file, server.moduleGraph)) {
+            if (hmr.hasTrackedStyleDependency(file)) {
               await hmr.handleStyleHotUpdate({
                 file,
                 modules: [],
@@ -199,6 +202,8 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
                 type: 'update',
                 read: async () => '',
               });
+            } else {
+              graph.invalidateFile(file);
             }
           } else if (graph.isSourceModuleFile(file)) {
             await hmr.handleSourceModuleChange(server, file);

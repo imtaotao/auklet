@@ -190,6 +190,55 @@ describe('AukletStyleHmr', () => {
     expectJsUpdates(context, [trackedDependency.id]);
   });
 
+  test('sends js updates for tracked virtual css dependencies even when output does not change', async () => {
+    const stableResult = {
+      code: 'style-v1',
+      watchFiles: [fixture.styleFile],
+    };
+    const graph = {
+      createPackageStyleCode: vi.fn(async () => stableResult),
+      peekPackageStyleCode: vi.fn(() => stableResult),
+      getPackageNames: vi.fn(() => [fixture.packageName]),
+      invalidateFile: vi.fn(() => fixture.packageName),
+      parsePackageStyleId: vi.fn((stylePath: string) => {
+        return {
+          packageName: fixture.packageName,
+          stylePath,
+        };
+      }),
+      isSourceGraphFile: vi.fn((file: string) =>
+        file.startsWith(`${fixture.workspaceRoot}/packages/`),
+      ),
+      isSourceModuleFile: vi.fn((file: string) => file.endsWith('.tsx')),
+      isStyleFile: vi.fn((file: string) => file.endsWith('.css')),
+    } as unknown as ModuleStyleGraph;
+    const context = createHmrTestContext(graph);
+    trackVirtualStyleDependency(context);
+
+    const result = await handleStyleUpdate(context);
+
+    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
+    expect(context.invalidateModule).toHaveBeenCalledWith({
+      id: componentVirtualId(fixture.componentName),
+    });
+    expect(context.send).toHaveBeenCalledWith({
+      type: 'update',
+      updates: [
+        {
+          type: 'js-update',
+          path: browserVirtualPath(componentVirtualId(fixture.componentName)),
+          acceptedPath: browserVirtualPath(
+            componentVirtualId(fixture.componentName),
+          ),
+          timestamp: fixture.currentTime,
+          explicitImportRequired: false,
+          isWithinCircularImport: false,
+        },
+      ],
+    });
+    expect(result).toEqual([]);
+  });
+
   test('replaces stale tracked virtual dependencies for the same virtual module', () => {
     const context = createHmrTestContext(graph);
     const trackedDependency = trackVirtualStyleDependency(context);
@@ -537,7 +586,7 @@ describe('AukletStyleHmr', () => {
 
     const result = await handleStyleUpdate(context);
 
-    expect(result).toEqual([]);
+    expect(result).toBeUndefined();
     expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
     expect(context.invalidateModule).not.toHaveBeenCalled();
     expect(context.send).not.toHaveBeenCalled();
@@ -545,16 +594,23 @@ describe('AukletStyleHmr', () => {
 
   test('suppresses full reload during the package CSS HMR window', async () => {
     const context = createHmrTestContext(graph);
+    const sentPayloads: Array<unknown> = [];
 
+    context.server.ws.send = ((payload: unknown) => {
+      sentPayloads.push(payload);
+    }) as ViteDevServer['ws']['send'];
     context.hmr.installFullReloadGuard(context.server);
-    await handleStyleUpdate(context);
-    context.send.mockClear();
+    (
+      context.hmr as unknown as { suppressFullReloadUntil: number }
+    ).suppressFullReloadUntil = Date.now() + 100;
+    sentPayloads.length = 0;
 
     context.server.ws.send({ type: 'full-reload' });
-    expect(context.send).not.toHaveBeenCalled();
+    expect(sentPayloads).toHaveLength(0);
 
     vi.setSystemTime(fixture.currentTime + 200);
     context.server.ws.send({ type: 'full-reload' });
-    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+    expect(sentPayloads).toHaveLength(1);
+    expect(sentPayloads[0]).toEqual({ type: 'full-reload' });
   });
 });

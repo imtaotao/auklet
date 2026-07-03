@@ -153,6 +153,26 @@ export class StyleProcessor {
     return imports;
   }
 
+  collectStyleImportReferences(styleFiles: Array<string>) {
+    const imports: Array<StyleFileImportReference> = [];
+
+    for (const styleFile of styleFiles) {
+      const css = fs.readFileSync(styleFile, 'utf8');
+      const root = this.parse(css, styleFile);
+
+      root.walkAtRules('import', (rule) => {
+        const specifier = this.parseImportSpecifier(rule.params);
+        if (!specifier) return;
+        const { reference } = this.resolveStyleImportReference(
+          specifier,
+          styleFile,
+        );
+        imports.push(reference);
+      });
+    }
+    return imports;
+  }
+
   collectStyleImportSpecifiers(styleFiles: Array<string>) {
     const specifiers = new Set<string>();
 

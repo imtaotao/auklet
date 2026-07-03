@@ -14,7 +14,13 @@ import { createAukletLogger } from '#auklet/logger';
 //   这个插件接管 HMR 时，需要在一个很短的窗口内吞掉这次 reload。
 
 type VirtualIdsByDependency = Map<string, Set<string>>;
-type FilesByVirtualId = Map<string, Set<string>>;
+type TrackedVirtualStyleFileKind = 'entry' | 'dependency';
+type FilesByVirtualId = Map<string, Map<string, TrackedVirtualStyleFileKind>>;
+type TrackedVirtualStyleFileEntry = {
+  id: string;
+  parsed: Parameters<ModuleStyleGraph['createPackageStyleCode']>[0];
+  kind: TrackedVirtualStyleFileKind;
+};
 
 export type AukletStyleHmrOptions = {
   pruneDelayMs?: number;
@@ -38,6 +44,7 @@ const addVirtualStyleDependency = (
   filesByVirtualId: FilesByVirtualId,
   file: string,
   virtualId: string,
+  kind: TrackedVirtualStyleFileKind,
 ) => {
   const normalizedFile = normalizeFileKey(file);
   const values =
@@ -45,8 +52,14 @@ const addVirtualStyleDependency = (
   values.add(virtualId);
   virtualIdsByDependency.set(normalizedFile, values);
 
-  const files = filesByVirtualId.get(virtualId) ?? new Set<string>();
-  files.add(normalizedFile);
+  const files =
+    filesByVirtualId.get(virtualId) ??
+    new Map<string, TrackedVirtualStyleFileKind>();
+  const previousKind = files.get(normalizedFile);
+  files.set(
+    normalizedFile,
+    previousKind === 'entry' || kind === 'entry' ? 'entry' : kind,
+  );
   filesByVirtualId.set(virtualId, files);
 };
 
@@ -115,22 +128,39 @@ export class AukletStyleHmr {
     );
   }
 
-  trackVirtualStyleDependency(file: string, virtualId: string) {
+  trackVirtualStyleDependency(
+    file: string,
+    virtualId: string,
+    kind: TrackedVirtualStyleFileKind = 'dependency',
+  ) {
     addVirtualStyleDependency(
       this.virtualIdsByDependency,
       this.filesByVirtualId,
       file,
       virtualId,
+      kind,
     );
   }
 
-  replaceVirtualStyleDependency(virtualId: string, files: Array<string>) {
+  replaceVirtualStyleDependency(
+    virtualId: string,
+    files: Array<string>,
+    fileKinds: Array<{
+      file: string;
+      kind: TrackedVirtualStyleFileKind;
+    }> = [],
+  ) {
     const normalizedFiles = new Set(
       files.map((file) => normalizeFileKey(file)),
     );
-    const previousFiles = this.filesByVirtualId.get(virtualId) ?? new Set();
+    const previousFiles = this.filesByVirtualId.get(virtualId) ?? new Map();
+    const nextKinds = new Map(
+      fileKinds.map(
+        (item) => [normalizeFileKey(item.file), item.kind] as const,
+      ),
+    );
 
-    for (const file of previousFiles) {
+    for (const file of previousFiles.keys()) {
       if (normalizedFiles.has(file)) continue;
       removeVirtualStyleDependency(
         this.virtualIdsByDependency,
@@ -146,6 +176,7 @@ export class AukletStyleHmr {
         this.filesByVirtualId,
         file,
         virtualId,
+        nextKinds.get(file) ?? 'dependency',
       );
     }
   }
@@ -204,27 +235,72 @@ export class AukletStyleHmr {
 
   async handleStyleHotUpdate(context: HotUpdateOptions) {
     const graph = this.graph();
-    if (
-      !graph.isSourceGraphFile(context.file) ||
-      !graph.isStyleFile(context.file)
-    ) {
-      return;
+    if (!graph.isStyleFile(context.file)) {
+      return undefined;
     }
-    this.suppressFullReload();
-    graph.invalidateFile(context.file);
+
+    const isSourceGraphFile = graph.isSourceGraphFile(context.file);
+    const trackedEntries = this.getTrackedStyleFileEntries(
+      context.file,
+      context.server.moduleGraph,
+    );
+    if (!trackedEntries.length) {
+      if (isSourceGraphFile) {
+        graph.invalidateFile(context.file);
+      }
+      return undefined;
+    }
+
+    const entryEntries = isSourceGraphFile
+      ? trackedEntries.filter((item) => item.kind === 'entry')
+      : [];
+    const dependencyEntries = isSourceGraphFile
+      ? trackedEntries.filter((item) => item.kind === 'dependency')
+      : trackedEntries;
+
+    const previousResults = entryEntries.length
+      ? this.createTrackedVirtualStyleResults(graph, entryEntries)
+      : null;
+
+    if (isSourceGraphFile) {
+      graph.invalidateFile(context.file);
+    } else {
+      this.invalidateTrackedVirtualPackages(graph, dependencyEntries);
+    }
+
     if (this.isDuplicateUpdate(context.file)) {
       return [];
     }
-    const updates = this.sendVirtualStyleUpdates(
-      context.file,
-      context.server,
-      context.timestamp,
-    );
-    if (!updates.sent) {
-      return [];
+
+    const updates = [
+      ...(dependencyEntries.length
+        ? this.createTrackedVirtualStyleUpdates(
+            context.server,
+            dependencyEntries,
+            context.timestamp,
+          )
+        : []),
+      ...(entryEntries.length
+        ? await this.refreshTrackedVirtualStyleUpdates(
+            context.server,
+            entryEntries,
+            previousResults!,
+            context.timestamp,
+          )
+        : []),
+    ];
+
+    if (!updates.length) {
+      return undefined;
     }
+
+    this.suppressFullReload();
+    context.server.ws.send({
+      type: 'update',
+      updates,
+    });
     logger.info(
-      `package css hmr ${getRelativeFile(context.file)} tracked=${updates.tracked} updates=${updates.sent}`,
+      `package css hmr ${getRelativeFile(context.file)} tracked=${trackedEntries.length} updates=${updates.length}`,
     );
     return [];
   }
@@ -255,43 +331,24 @@ export class AukletStyleHmr {
     );
     graph.invalidateFile(file);
 
-    const updates = await this.refreshSourceModuleUpdates(
+    const updates = await this.refreshTrackedVirtualStyleUpdates(
       server,
       parsedVirtualIds,
       previousResults,
+      Date.now(),
     );
-    if (!updates.sent) {
+    if (!updates.length) {
       return false;
     }
+    this.suppressFullReload();
+    server.ws.send({
+      type: 'update',
+      updates,
+    });
     logger.info(
-      `package css source hmr ${getRelativeFile(file)} tracked=${updates.tracked} updates=${updates.sent}`,
+      `package css source hmr ${getRelativeFile(file)} tracked=${parsedVirtualIds.length} updates=${updates.length}`,
     );
-    return updates.sent > 0;
-  }
-
-  private sendVirtualStyleUpdates(
-    file: string,
-    server: Pick<ViteDevServer, 'moduleGraph' | 'ws'>,
-    timestamp: number,
-  ) {
-    const virtualIds = this.getDependencyVirtualIds(file, server.moduleGraph);
-    for (const id of virtualIds) {
-      const module = server.moduleGraph.getModuleById(id);
-      if (module) {
-        server.moduleGraph.invalidateModule(module);
-      }
-    }
-    const updates = createJsUpdates(virtualIds, timestamp);
-    if (updates.length) {
-      server.ws.send({
-        type: 'update',
-        updates,
-      });
-    }
-    return {
-      sent: updates.length,
-      tracked: virtualIds.length,
-    };
+    return true;
   }
 
   private parseTrackedVirtualIds(
@@ -300,14 +357,36 @@ export class AukletStyleHmr {
   ) {
     return virtualIds
       .map((id) => this.parseTrackedVirtualId(graph, id))
-      .filter(
-        (
-          item,
-        ): item is {
-          id: string;
-          parsed: Parameters<ModuleStyleGraph['createPackageStyleCode']>[0];
-        } => Boolean(item),
-      );
+      .filter((item): item is TrackedVirtualStyleFileEntry => item !== null);
+  }
+
+  private createTrackedVirtualStyleUpdates(
+    server: Pick<ViteDevServer, 'moduleGraph' | 'ws'>,
+    parsedVirtualIds: Array<TrackedVirtualStyleFileEntry>,
+    timestamp: number,
+  ) {
+    const changedVirtualIds: Array<string> = [];
+    for (const item of parsedVirtualIds) {
+      changedVirtualIds.push(item.id);
+      const module = server.moduleGraph.getModuleById(item.id);
+      if (module) {
+        server.moduleGraph.invalidateModule(module);
+      }
+    }
+
+    return createJsUpdates(changedVirtualIds, timestamp);
+  }
+
+  private invalidateTrackedVirtualPackages(
+    graph: ModuleStyleGraph,
+    parsedVirtualIds: Array<TrackedVirtualStyleFileEntry>,
+  ) {
+    const packageNames = new Set(
+      parsedVirtualIds.map((item) => item.parsed.packageName),
+    );
+    for (const packageName of packageNames) {
+      graph.invalidatePackage(packageName);
+    }
   }
 
   private getDependencyVirtualIds(
@@ -339,26 +418,40 @@ export class AukletStyleHmr {
     return liveVirtualIds;
   }
 
-  private parseTrackedVirtualId(graph: ModuleStyleGraph, id: string) {
-    const parsedId = id.startsWith(RESOLVED_VIRTUAL_ID_PREFIX)
-      ? id.slice(RESOLVED_VIRTUAL_ID_PREFIX.length)
-      : id;
-    const parsed = graph.parsePackageStyleId(parsedId);
-    if (!parsed || !graph.getPackageNames().includes(parsed.packageName)) {
-      return null;
+  private getTrackedStyleFileEntries(
+    file: string,
+    moduleGraph?: Pick<ViteDevServer['moduleGraph'], 'getModuleById'>,
+  ) {
+    const normalizedFile = normalizeFileKey(file);
+    const virtualIds = Array.from(
+      this.virtualIdsByDependency.get(normalizedFile) ?? [],
+    );
+    const entries = virtualIds
+      .map((id) =>
+        this.parseTrackedVirtualIdWithKind(id, normalizedFile, moduleGraph),
+      )
+      .filter((item): item is TrackedVirtualStyleFileEntry => Boolean(item));
+    if (!moduleGraph) {
+      return entries;
     }
-    return {
-      id,
-      parsed,
-    };
+    if (entries.length !== virtualIds.length) {
+      const liveSet = new Set(entries.map((item) => item.id));
+      for (const virtualId of virtualIds) {
+        if (liveSet.has(virtualId)) continue;
+        removeVirtualStyleDependency(
+          this.virtualIdsByDependency,
+          this.filesByVirtualId,
+          normalizedFile,
+          virtualId,
+        );
+      }
+    }
+    return entries;
   }
 
   private createTrackedVirtualStyleResults(
     graph: ModuleStyleGraph,
-    parsedVirtualIds: Array<{
-      id: string;
-      parsed: Parameters<ModuleStyleGraph['createPackageStyleCode']>[0];
-    }>,
+    parsedVirtualIds: Array<TrackedVirtualStyleFileEntry>,
   ) {
     const previousResults = new Map<
       string,
@@ -372,16 +465,52 @@ export class AukletStyleHmr {
     return previousResults;
   }
 
-  private async refreshSourceModuleUpdates(
+  private parseTrackedVirtualId(
+    graph: ModuleStyleGraph,
+    id: string,
+  ): TrackedVirtualStyleFileEntry | null {
+    const parsedId = id.startsWith(RESOLVED_VIRTUAL_ID_PREFIX)
+      ? id.slice(RESOLVED_VIRTUAL_ID_PREFIX.length)
+      : id;
+    const parsed = graph.parsePackageStyleId(parsedId);
+    if (!parsed || !graph.getPackageNames().includes(parsed.packageName)) {
+      return null;
+    }
+    return {
+      id,
+      parsed,
+      kind: 'dependency' as const,
+    };
+  }
+
+  private parseTrackedVirtualIdWithKind(
+    id: string,
+    normalizedFile: string,
+    moduleGraph?: Pick<ViteDevServer['moduleGraph'], 'getModuleById'>,
+  ) {
+    if (moduleGraph && !moduleGraph.getModuleById(id)) {
+      return null;
+    }
+
+    const parsed = this.parseTrackedVirtualId(this.graph(), id);
+    if (!parsed) return null;
+
+    const kind =
+      this.filesByVirtualId.get(id)?.get(normalizedFile) ?? 'dependency';
+    return {
+      ...parsed,
+      kind,
+    };
+  }
+
+  private async refreshTrackedVirtualStyleUpdates(
     server: Pick<ViteDevServer, 'moduleGraph' | 'ws'>,
-    parsedVirtualIds: Array<{
-      id: string;
-      parsed: Parameters<ModuleStyleGraph['createPackageStyleCode']>[0];
-    }>,
+    parsedVirtualIds: Array<TrackedVirtualStyleFileEntry>,
     previousResults: Map<
       string,
       Awaited<ReturnType<ModuleStyleGraph['createPackageStyleCode']>> | null
     >,
+    timestamp: number,
   ) {
     const graph = this.graph();
     const changedVirtualIds: Array<string> = [];
@@ -390,8 +519,7 @@ export class AukletStyleHmr {
       const previousResult = previousResults.get(item.id);
       if (
         !previousResult ||
-        previousResult.code !== nextResult.code ||
-        !sameStringSets(previousResult.watchFiles, nextResult.watchFiles)
+        !this.sameStyleLoadResult(previousResult, nextResult)
       ) {
         changedVirtualIds.push(item.id);
         const module = server.moduleGraph.getModuleById(item.id);
@@ -401,17 +529,21 @@ export class AukletStyleHmr {
       }
     }
 
-    const updates = createJsUpdates(changedVirtualIds, Date.now());
-    if (updates.length) {
-      server.ws.send({
-        type: 'update',
-        updates,
-      });
-    }
-    return {
-      sent: updates.length,
-      tracked: parsedVirtualIds.length,
-    };
+    return createJsUpdates(changedVirtualIds, timestamp);
+  }
+
+  private sameStyleLoadResult(
+    left: Awaited<ReturnType<ModuleStyleGraph['createPackageStyleCode']>>,
+    right: Awaited<ReturnType<ModuleStyleGraph['createPackageStyleCode']>>,
+  ) {
+    return (
+      left.code === right.code &&
+      sameStringSets(left.watchFiles, right.watchFiles) &&
+      sameStringSets(
+        left.dependencyPackages ?? [],
+        right.dependencyPackages ?? [],
+      )
+    );
   }
 
   private suppressFullReload() {

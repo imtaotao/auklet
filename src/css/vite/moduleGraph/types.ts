@@ -13,10 +13,18 @@ export type PackageStyleId = {
   stylePath: string;
 };
 
+export type PackageStyleWatchFileKind = 'entry' | 'dependency';
+
+export type PackageStyleWatchFile = {
+  file: string;
+  kind: PackageStyleWatchFileKind;
+};
+
 export type PackageStyleLoadResult = {
   code: string;
   cacheInputFiles?: Array<string>;
   watchFiles: Array<string>;
+  watchFileKinds?: Array<PackageStyleWatchFile>;
   dependencyPackages?: Array<string>;
 };
 

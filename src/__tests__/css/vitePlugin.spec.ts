@@ -201,6 +201,144 @@ describe('aukletStylePlugin Vite server integration', () => {
     });
   });
 
+  test('does not send css updates for unrelated css files in the same package', async () => {
+    const appVirtualId = '\0auklet-css:@scope/app/components/App.css';
+    const context = createServer([appVirtualId]);
+    const plugin = aukletStylePlugin({
+      root: packageRoot,
+    });
+    const unrelatedFile = path.join(
+      packageRoot,
+      'src/components/Button/index.css',
+    );
+    const addWatchFile = vi.fn();
+
+    fixture.writeFile(
+      'src/components/App/index.tsx',
+      'export function App() { return null; }',
+    );
+    fixture.writeFile('src/components/App/index.css', '.app { color: red; }');
+    fixture.writeFile(
+      'src/components/Button/index.tsx',
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      'src/components/Button/index.css',
+      '.button { color: blue; }',
+    );
+
+    await plugin.configureServer?.(context.server);
+    await plugin.load?.call({ addWatchFile }, appVirtualId);
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    await runChange(context.handlers.get('change'), unrelatedFile);
+
+    expect(context.invalidateModule).not.toHaveBeenCalled();
+    expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('does not intercept hotUpdate for css files outside the auklet graph', async () => {
+    const context = createServer();
+    const plugin = aukletStylePlugin({
+      root: packageRoot,
+    });
+    const styleFile = path.join('/private/tmp', 'foreign.css');
+
+    await plugin.configureServer?.(context.server);
+    const result = await plugin.hotUpdate?.handler?.({
+      file: styleFile,
+      modules: [],
+      server: context.server,
+      timestamp: Date.now(),
+      type: 'update',
+      read: vi.fn(),
+    } as never);
+
+    expect(result).toBeUndefined();
+    expect(context.invalidateModule).not.toHaveBeenCalled();
+    expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('updates source css when handwritten external css imports change', async () => {
+    const appVirtualId = '\0auklet-css:@scope/app/components/Renderer.css';
+    const context = createServer([appVirtualId]);
+    const plugin = aukletStylePlugin({
+      root: packageRoot,
+    });
+    const externalStyleFile = path.join(
+      packageRoot,
+      'node_modules/@scope/ui/components/Skeleton.css',
+    );
+    const addWatchFile = vi.fn();
+
+    fixture.writeFile(
+      'src/components/Renderer/index.tsx',
+      'export function Renderer() { return null; }',
+    );
+    fixture.writeFile(
+      'src/components/Renderer/index.css',
+      '@import "@scope/ui/components/Skeleton.css";\n.renderer { color: red; }',
+    );
+    fixture.writeFile(
+      'node_modules/@scope/ui/components/Skeleton.css',
+      '.skeleton { color: blue; }',
+    );
+
+    await plugin.configureServer?.(context.server);
+    const loaded = await plugin.load?.call({ addWatchFile }, appVirtualId);
+    expect(loaded).toContain('@scope/ui/components/Skeleton.css');
+    expect(addWatchFile).toHaveBeenCalledWith(externalStyleFile);
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    fixture.writeFile(
+      'node_modules/@scope/ui/components/Skeleton.css',
+      '.skeleton { color: green; }',
+    );
+
+    await runChange(context.handlers.get('change'), externalStyleFile);
+
+    expect(context.invalidateModule).toHaveBeenCalledWith({
+      id: appVirtualId,
+    });
+    expect(context.send).toHaveBeenCalledWith({
+      type: 'update',
+      updates: [
+        expect.objectContaining({
+          path: '/@id/__x00__auklet-css:@scope/app/components/Renderer.css',
+          type: 'js-update',
+        }),
+      ],
+    });
+  });
+
+  test('keeps source css load working when external imports are not present locally', async () => {
+    const appVirtualId = '\0auklet-css:@scope/app/components/Renderer.css';
+    const context = createServer([appVirtualId]);
+    const plugin = aukletStylePlugin({
+      root: packageRoot,
+    });
+    const addWatchFile = vi.fn();
+
+    fixture.writeFile(
+      'src/components/Renderer/index.tsx',
+      'export function Renderer() { return null; }',
+    );
+    fixture.writeFile(
+      'src/components/Renderer/index.css',
+      '@import "@scope/ui/components/Skeleton.css";\n.renderer { color: red; }',
+    );
+
+    await plugin.configureServer?.(context.server);
+    const loaded = await plugin.load?.call({ addWatchFile }, appVirtualId);
+
+    expect(loaded).toContain('@scope/ui/components/Skeleton.css');
+    expect(addWatchFile).not.toHaveBeenCalledWith(
+      path.join(packageRoot, 'node_modules/@scope/ui/components/Skeleton.css'),
+    );
+  });
+
   test('sends a browser error when source module css generation fails during watcher refresh', async () => {
     const appVirtualId = '\0auklet-css:@scope/app/pages/Article.css';
     const context = createServer([appVirtualId]);
@@ -348,6 +486,10 @@ describe('aukletStylePlugin Vite server integration', () => {
     context.send.mockClear();
     context.invalidateModule.mockClear();
 
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.css'),
+      '.button { color: green; }',
+    );
     await runChange(context.handlers.get('change'), styleFile);
 
     expect(context.server.moduleGraph.getModuleById).toHaveBeenCalledWith(
@@ -483,6 +625,10 @@ describe('aukletStylePlugin Vite server integration', () => {
     context.send.mockClear();
     context.invalidateModule.mockClear();
 
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.css'),
+      '.button { color: green; }',
+    );
     await runChange(context.handlers.get('change'), styleFile);
 
     expect(appCode).toContain('.button { color: blue; }');
@@ -696,6 +842,10 @@ describe('aukletStylePlugin Vite server integration', () => {
     context.send.mockClear();
     context.invalidateModule.mockClear();
 
+    fixture.writeFile(
+      path.join('packages/ui/src/components/Button/index.css'),
+      '.button { color: green; }',
+    );
     await runChange(context.handlers.get('change'), styleFile);
     await plugin.hotUpdate?.handler?.({
       file: styleFile,
