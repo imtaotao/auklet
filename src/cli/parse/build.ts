@@ -131,6 +131,16 @@ export function parseBuildOverrideArgs(
       continue;
     }
 
+    if (name === '--debug') {
+      const value = readOptionalFlagValue(args, index, inlineValue);
+      config.debug =
+        value === undefined
+          ? true
+          : resolveCliBoolean(value, { label: name, context: envContext });
+      if (inlineValue === undefined && value !== undefined) index += 1;
+      continue;
+    }
+
     if (name === '--output') {
       config.output = getResolvedFlagValue(
         args,

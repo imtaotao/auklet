@@ -97,6 +97,7 @@ const createGraph = () => {
       return resultCache.get(parsed.stylePath) ?? null;
     }),
     getPackageNames: vi.fn(() => [fixture.packageName]),
+    isDebugEnabled: vi.fn(async () => false),
     invalidateFile: vi.fn(() => {
       version += 1;
       resultCache.clear();
@@ -199,6 +200,7 @@ describe('AukletStyleHmr', () => {
       createPackageStyleCode: vi.fn(async () => stableResult),
       peekPackageStyleCode: vi.fn(() => stableResult),
       getPackageNames: vi.fn(() => [fixture.packageName]),
+      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => fixture.packageName),
       parsePackageStyleId: vi.fn((stylePath: string) => {
         return {
@@ -376,6 +378,7 @@ describe('AukletStyleHmr', () => {
       })),
       peekPackageStyleCode: vi.fn(() => null),
       getPackageNames: vi.fn(() => [fixture.packageName]),
+      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => fixture.packageName),
       parsePackageStyleId: vi.fn((stylePath: string) => {
         return {
@@ -421,6 +424,7 @@ describe('AukletStyleHmr', () => {
       })),
       peekPackageStyleCode: vi.fn(() => null),
       getPackageNames: vi.fn(() => [fixture.packageName]),
+      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => {
         version += 1;
         return fixture.packageName;
@@ -493,6 +497,7 @@ describe('AukletStyleHmr', () => {
         return resultCache.get(parsed.stylePath) ?? null;
       }),
       getPackageNames: vi.fn(() => [fixture.packageName]),
+      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => {
         resultCache.clear();
         return fixture.packageName;
@@ -538,6 +543,7 @@ describe('AukletStyleHmr', () => {
         }),
       peekPackageStyleCode: vi.fn(() => null),
       getPackageNames: vi.fn(() => [fixture.packageName]),
+      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => fixture.packageName),
       parsePackageStyleId: vi.fn((stylePath: string) => {
         if (

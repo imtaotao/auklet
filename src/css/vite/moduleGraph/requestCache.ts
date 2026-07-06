@@ -164,6 +164,11 @@ export class ModuleStyleGraphRequestCache {
     return this.persistentCache.read(this.createPersistentKey(parsed, context));
   }
 
+  async isDebugEnabled(parsed: PackageStyleId) {
+    const context = await this.getContext(parsed);
+    return context?.normalizedConfig.debug ?? false;
+  }
+
   writePersistentLoadResult(
     parsed: PackageStyleId,
     context: PackageStyleContext,

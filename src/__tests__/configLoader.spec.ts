@@ -44,6 +44,7 @@ describe('loadAukletConfig', () => {
       `
         import { dependency } from './dependency.mjs';
         export const config = {
+          debug: true,
           source: 'source',
           output: 'output',
           build: {
@@ -61,6 +62,7 @@ describe('loadAukletConfig', () => {
     await expect(
       loadAukletConfig(project.root, { cacheBust: true }),
     ).resolves.toEqual({
+      debug: true,
       source: 'source',
       output: 'output',
       build: {
@@ -167,6 +169,7 @@ describe('normalizeAukletConfig', () => {
   test('normalizes the grouped config shape', () => {
     expect(
       normalizeAukletConfig({
+        debug: true,
         source: 'source',
         output: 'output',
         modules: true,
@@ -184,6 +187,7 @@ describe('normalizeAukletConfig', () => {
         },
       }),
     ).toMatchObject({
+      debug: true,
       source: 'source',
       output: 'output',
       modules: true,
@@ -214,6 +218,7 @@ describe('normalizeAukletConfig', () => {
         output: 'output',
       }),
     ).toMatchObject({
+      debug: false,
       source: 'source',
       output: 'output',
       modules: false,

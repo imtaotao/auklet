@@ -16,7 +16,8 @@ import type {
   ModuleStyleBuildContext,
 } from '#auklet/types';
 
-type ModuleStyleWatcherLogger = Pick<AukletLogger, 'error'>;
+type ModuleStyleWatcherLogger = Pick<AukletLogger, 'error'> &
+  Partial<Pick<AukletLogger, 'info'>>;
 
 const errorLogInterval = 2_000;
 
@@ -56,10 +57,12 @@ export class ModuleStyleWatcher {
       return;
     }
     this.isBuilding = true;
+    const startedAt = Date.now();
     try {
       try {
         const builder = new ModuleStyleBuilder(this.context, this.config);
         await builder.build();
+        this.logDebug(`CSS build finished in ${Date.now() - startedAt}ms`);
       } catch (error) {
         this.logError('build', 'CSS build failed; waiting for changes.', error);
       }
@@ -82,6 +85,11 @@ export class ModuleStyleWatcher {
         this.scheduleBuild();
       }
     }
+  }
+
+  private logDebug(message: string) {
+    if (this.context.aukletConfig?.debug !== true) return;
+    this.logger.info?.(message);
   }
 
   private async refreshWatcher() {

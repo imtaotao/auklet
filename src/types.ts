@@ -28,6 +28,7 @@ export type NormalizedStyleDependencyGroup = {
 };
 
 export interface NormalizedAukletConfig {
+  debug: boolean;
   source: string;
   output: string;
   modules: boolean;
@@ -85,6 +86,8 @@ export type PackageBuildOptions = {
 };
 
 export interface AukletConfig {
+  // 是否开启 debug 日志，用于输出 CSS HMR 的阶段耗时和调试信息。
+  debug?: boolean;
   // 源码目录，相对于当前包根目录。
   source?: string;
   // 构建产物目录，相对于当前包根目录。

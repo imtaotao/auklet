@@ -93,7 +93,9 @@ describe('runDev', () => {
   });
 
   test('passes build overrides to JavaScript watch env and CSS watcher config', async () => {
-    await runDev(parseTestDevCommand(['--source', 'source', '--modules']));
+    await runDev(
+      parseTestDevCommand(['--debug', '--source', 'source', '--modules']),
+    );
 
     const [, , options] = mocks.execa.mock.calls[0] as unknown as [
       string,
@@ -103,11 +105,13 @@ describe('runDev', () => {
     expect(
       JSON.parse(options.env?.[aukletCliConfigOverridesEnv] ?? '{}'),
     ).toEqual({
+      debug: true,
       modules: true,
       source: 'source',
     });
     expect(mocks.cssWatcherContexts[0]).toEqual({
       aukletConfig: {
+        debug: true,
         modules: true,
         output: 'dist',
         source: 'source',

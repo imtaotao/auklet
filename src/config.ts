@@ -14,6 +14,7 @@ export function isAukletConfigFile(file: string) {
 }
 
 export const aukletDefaultOptions = {
+  debug: false,
   source: 'src',
   output: 'dist',
   modules: false,
@@ -28,7 +29,10 @@ export const aukletDefaultOptions = {
     dependencies: {},
   },
 } satisfies Required<
-  Pick<AukletConfig, 'source' | 'output' | 'modules' | 'build' | 'styles'>
+  Pick<
+    AukletConfig,
+    'debug' | 'source' | 'output' | 'modules' | 'build' | 'styles'
+  >
 >;
 
 const normalizeStyleDependency = (dependency: StyleDependencyGroup) => ({
@@ -61,6 +65,8 @@ export function normalizeAukletConfig(config: AukletConfig = {}) {
     config.styles?.dependencies ?? aukletDefaultOptions.styles.dependencies;
 
   return {
+    debug: config.debug ?? aukletDefaultOptions.debug,
+
     source: config.source ?? aukletDefaultOptions.source,
 
     output: config.output ?? aukletDefaultOptions.output,

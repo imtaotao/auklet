@@ -4,6 +4,10 @@ import type { CAC, Command } from 'cac';
 type HelpOption = readonly [flags: string, description: string];
 
 export const buildOverrideOptions = [
+  [
+    '--debug [value]',
+    'Enable debug logging for package CSS build, watch, and HMR flows',
+  ],
   ['--source <dir>', 'Source directory'],
   ['--output <dir>', 'Output directory'],
   ['--modules [value]', 'Enable unbundled module output'],

@@ -84,6 +84,10 @@ export class ModuleStyleGraph {
     return this.requestCache.peekLoadResult(parsed);
   }
 
+  isDebugEnabled(parsed: PackageStyleId) {
+    return this.requestCache.isDebugEnabled(parsed);
+  }
+
   invalidatePackage(packageName: string) {
     this.requestCache.invalidatePackage(packageName);
   }

@@ -44,6 +44,7 @@ describe('parseBuildOverrideArgs', () => {
   test('extracts auklet config overrides and keeps non-auklet args', () => {
     expect(
       parseBuildOverrides([
+        '--debug',
         '--source',
         'source',
         '--output=build',
@@ -60,6 +61,7 @@ describe('parseBuildOverrideArgs', () => {
     ).toEqual({
       args: ['--watch'],
       config: {
+        debug: true,
         source: 'source',
         output: 'build',
         modules: true,
@@ -136,6 +138,27 @@ describe('parseBuildOverrideArgs', () => {
         delete process.env.AUKLET_TEST_MODULES;
       } else {
         process.env.AUKLET_TEST_MODULES = originalModules;
+      }
+    }
+  });
+
+  test('resolves env values for debug config overrides', () => {
+    const originalDebug = process.env.AUKLET_TEST_DEBUG;
+
+    try {
+      process.env.AUKLET_TEST_DEBUG = 'true';
+
+      expect(parseBuildOverrides(['--debug=env:AUKLET_TEST_DEBUG'])).toEqual({
+        args: [],
+        config: {
+          debug: true,
+        },
+      });
+    } finally {
+      if (originalDebug === undefined) {
+        delete process.env.AUKLET_TEST_DEBUG;
+      } else {
+        process.env.AUKLET_TEST_DEBUG = originalDebug;
       }
     }
   });

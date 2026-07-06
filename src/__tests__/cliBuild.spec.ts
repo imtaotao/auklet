@@ -86,6 +86,7 @@ describe('runBuild', () => {
     await expect(
       runBuild(
         parseTestBuildCommand([
+          '--debug',
           '--source',
           'source',
           '--modules',
@@ -99,6 +100,7 @@ describe('runBuild', () => {
     expect(mocks.cleanAukletOutputByConfig).toHaveBeenCalledWith(
       process.cwd(),
       {
+        debug: true,
         output: 'lib',
         source: 'source',
         modules: true,
@@ -111,6 +113,7 @@ describe('runBuild', () => {
       cwd: process.cwd(),
       env: {
         [aukletCliConfigOverridesEnv]: JSON.stringify({
+          debug: true,
           source: 'source',
           modules: true,
           build: {
@@ -125,6 +128,7 @@ describe('runBuild', () => {
       overrides: {},
       watch: false,
       aukletConfig: {
+        debug: true,
         output: 'lib',
         source: 'source',
         modules: true,
