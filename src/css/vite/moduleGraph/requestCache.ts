@@ -59,7 +59,9 @@ export class ModuleStyleGraphRequestCache {
     string,
     PackageStyleLoadResult
   >();
+  private readonly loadResultsByPackage = new Map<string, Set<string>>();
   private readonly loadResultDependencies = new Map<string, Set<string>>();
+  private readonly loadResultDependents = new Map<string, Set<string>>();
   private readonly loadResultVersions = new Map<string, number>();
   private readonly loadAukletConfig: LoadAukletConfig;
   private readonly persistentCache: PersistentStyleGraphCache;
@@ -98,6 +100,7 @@ export class ModuleStyleGraphRequestCache {
     if (cachedResult) return cachedResult;
 
     const version = this.bumpLoadResultVersion(key);
+    this.addLoadResultKey(this.loadResultsByPackage, parsed.packageName, key);
     const graphVersion = this.getGraphVersion();
     let result: Promise<PackageStyleLoadResult>;
     result = create()
@@ -112,9 +115,9 @@ export class ModuleStyleGraphRequestCache {
         }
 
         if (this.loadResultVersions.get(key) === version) {
-          this.loadResultDependencies.set(
+          this.replaceLoadResultDependencies(
             key,
-            new Set(entry.result.dependencyPackages ?? []),
+            entry.result.dependencyPackages ?? [],
           );
         }
         try {
@@ -325,49 +328,59 @@ export class ModuleStyleGraphRequestCache {
   }
 
   private invalidateLoadResults(packageName: string) {
-    const invalidPackageNames = new Set([packageName]);
-    let changed = true;
+    const pendingKeys = [
+      ...(this.loadResultsByPackage.get(packageName) ?? []),
+      ...(this.loadResultDependents.get(packageName) ?? []),
+    ];
+    const processedKeys = new Set<string>();
 
-    while (changed) {
-      changed = false;
-      for (const [key, dependencyPackages] of this.loadResultDependencies) {
-        const resultPackageName = this.getLoadResultPackageName(key);
-        const shouldInvalidate =
-          invalidPackageNames.has(resultPackageName) ||
-          Array.from(dependencyPackages).some((dependencyPackage) =>
-            invalidPackageNames.has(dependencyPackage),
-          );
+    while (pendingKeys.length) {
+      const key = pendingKeys.pop();
+      if (!key || processedKeys.has(key)) continue;
+      processedKeys.add(key);
 
-        if (!shouldInvalidate) continue;
-        if (!invalidPackageNames.has(resultPackageName)) {
-          invalidPackageNames.add(resultPackageName);
-          changed = true;
-        }
+      const dependentPackageName = this.discardLoadResult(key);
+      if (!dependentPackageName) continue;
+
+      for (const dependentKey of Array.from(
+        this.loadResultDependents.get(dependentPackageName) ?? [],
+      )) {
+        if (processedKeys.has(dependentKey)) continue;
+        pendingKeys.push(dependentKey);
       }
-    }
-
-    for (const key of this.loadResults.keys()) {
-      if (!invalidPackageNames.has(this.getLoadResultPackageName(key))) {
-        const dependencyPackages = this.loadResultDependencies.get(key);
-        if (
-          !dependencyPackages ||
-          !Array.from(dependencyPackages).some((dependencyPackage) =>
-            invalidPackageNames.has(dependencyPackage),
-          )
-        ) {
-          continue;
-        }
-      }
-      this.discardLoadResult(key);
     }
   }
 
   private discardLoadResult(key: string) {
+    const packageName = this.getLoadResultPackageName(key);
+    const dependencyPackages = this.loadResultDependencies.get(key);
+    const settledResult = this.loadResults.get(key) ?? null;
+    if (
+      !settledResult &&
+      !dependencyPackages &&
+      !this.settledLoadResults.has(key)
+    ) {
+      return null;
+    }
+
     this.bumpGraphVersion();
     this.bumpLoadResultVersion(key);
     this.loadResults.delete(key);
-    this.loadResultDependencies.delete(key);
     this.settledLoadResults.delete(key);
+
+    this.deleteLoadResultKey(this.loadResultsByPackage, packageName, key);
+
+    const previousDependencies = dependencyPackages ?? new Set<string>();
+    for (const dependencyPackage of previousDependencies) {
+      this.deleteLoadResultKey(
+        this.loadResultDependents,
+        dependencyPackage,
+        key,
+      );
+    }
+
+    this.loadResultDependencies.delete(key);
+    return packageName;
   }
 
   peekLoadResult(parsed: PackageStyleId) {
@@ -387,5 +400,52 @@ export class ModuleStyleGraphRequestCache {
     const nextVersion = (this.loadResultVersions.get(key) ?? 0) + 1;
     this.loadResultVersions.set(key, nextVersion);
     return nextVersion;
+  }
+
+  private addLoadResultKey(
+    map: Map<string, Set<string>>,
+    key: string,
+    value: string,
+  ) {
+    const values = map.get(key) ?? new Set<string>();
+    values.add(value);
+    map.set(key, values);
+  }
+
+  private deleteLoadResultKey(
+    map: Map<string, Set<string>>,
+    key: string,
+    value: string,
+  ) {
+    const values = map.get(key);
+    if (!values) return;
+    values.delete(value);
+    if (!values.size) {
+      map.delete(key);
+    }
+  }
+
+  private replaceLoadResultDependencies(
+    key: string,
+    dependencyPackages: Array<string>,
+  ) {
+    const nextDependencies = new Set(dependencyPackages);
+    const previousDependencies = this.loadResultDependencies.get(key);
+
+    if (previousDependencies) {
+      for (const dependencyPackage of previousDependencies) {
+        if (nextDependencies.has(dependencyPackage)) continue;
+        this.deleteLoadResultKey(
+          this.loadResultDependents,
+          dependencyPackage,
+          key,
+        );
+      }
+    }
+
+    this.loadResultDependencies.set(key, nextDependencies);
+    for (const dependencyPackage of nextDependencies) {
+      this.addLoadResultKey(this.loadResultDependents, dependencyPackage, key);
+    }
   }
 }

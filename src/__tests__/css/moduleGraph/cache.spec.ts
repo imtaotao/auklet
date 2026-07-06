@@ -525,6 +525,72 @@ describe('ModuleStyleGraph request cache', () => {
     expect(create).toHaveBeenCalledTimes(2);
   });
 
+  test('does not invalidate unrelated load results from the same package when a dependency package changes', async () => {
+    const graph = new ModuleStyleGraphRequestCache({
+      config: moduleStyleBuildConfig,
+      mode: 'monorepo',
+      packageSource: createPackageSource([
+        {
+          packageName: '@scope/app',
+          packageRoot: fixture.resolve(appPackageRoot),
+        },
+        {
+          packageName: '@scope/ui',
+          packageRoot: fixture.resolve(uiPackageRoot),
+        },
+      ]),
+      root: fixture.root,
+    });
+    const buttonParsed = {
+      packageName: '@scope/app',
+      stylePath: 'components/Button.css',
+    };
+    const cardParsed = {
+      packageName: '@scope/app',
+      stylePath: 'components/Card.css',
+    };
+    const buttonCreate = vi.fn(async () => ({
+      result: {
+        code: 'button',
+        watchFiles: [],
+        dependencyPackages: ['@scope/ui'],
+      },
+    }));
+    const cardCreate = vi.fn(async () => ({
+      result: {
+        code: 'card',
+        watchFiles: [],
+      },
+    }));
+
+    await expect(
+      graph.getLoadResult(buttonParsed, buttonCreate),
+    ).resolves.toMatchObject({
+      code: 'button',
+    });
+    await expect(
+      graph.getLoadResult(cardParsed, cardCreate),
+    ).resolves.toMatchObject({
+      code: 'card',
+    });
+
+    graph.invalidatePackage('@scope/ui');
+
+    await expect(
+      graph.getLoadResult(buttonParsed, buttonCreate),
+    ).resolves.toMatchObject({
+      code: 'button',
+    });
+    await expect(
+      graph.getLoadResult(cardParsed, cardCreate),
+    ).resolves.toMatchObject({
+      code: 'card',
+    });
+
+    expect(buttonCreate).toHaveBeenCalledTimes(2);
+    expect(cardCreate).toHaveBeenCalledTimes(1);
+  });
+
   test('invalidates package context for changed package files', async () => {
     const loadAukletConfig = vi.fn(async () => ({}));
     const graph = new ModuleStyleGraph({
