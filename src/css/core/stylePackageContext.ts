@@ -101,6 +101,17 @@ export class StylePackageContext {
     return this.moduleStyleImports;
   }
 
+  invalidateModuleStyleImports() {
+    this.moduleStyleImports = undefined;
+    this.moduleStyleEntryPlanner = undefined;
+  }
+
+  invalidateStyleContentCaches() {
+    this.moduleStyleEntryPlanner = undefined;
+    this.hasValidatedSourceRootLocalStyleImports = false;
+    this.hasValidatedPreservedLocalStyleImports = false;
+  }
+
   getModuleStyleEntryPlanner() {
     this.moduleStyleEntryPlanner ??= new StyleModuleEntryPlanner(this);
     return this.moduleStyleEntryPlanner;

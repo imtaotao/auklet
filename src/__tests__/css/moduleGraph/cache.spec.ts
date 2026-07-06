@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { StyleProcessor } from '#auklet/css/core/styleProcessor';
+import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import { ModuleStyleImportCollector } from '#auklet/css/core/styleImports/collector';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
@@ -612,6 +613,86 @@ describe('ModuleStyleGraph request cache', () => {
     await graph.createPackageStyleCode(parsed);
 
     expect(loadAukletConfig).toHaveBeenCalledTimes(2);
+  });
+
+  test('invalidates cached style entry planner for css-only changes', async () => {
+    const loadAukletConfig = vi.fn(async () => ({}));
+    const collect = vi.spyOn(ModuleStyleImportCollector.prototype, 'collect');
+    const invalidateStyleContent = vi.spyOn(
+      StylePackageContext.prototype,
+      'invalidateStyleContentCaches',
+    );
+    const assertPreserved = vi.spyOn(
+      StylePackageContext.prototype,
+      'assertPreservedLocalStyleImports',
+    );
+    const entryFile = fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '.button { color: red; }',
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/base.css'),
+      '.base { color: blue; }',
+    );
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+      loadAukletConfig,
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'components/Button.css',
+    };
+
+    const firstResult = await graph.createPackageStyleCode(parsed);
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '@import "./base.css";\n.button { color: green; }',
+    );
+    graph.invalidateFileLoadResults(entryFile);
+    const secondResult = await graph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).not.toContain('@import');
+    expect(secondResult.code).toContain('@import');
+    expect(secondResult.code).toContain('base.css');
+    expect(secondResult.code).toContain('.button { color: green; }');
+    expect(loadAukletConfig).toHaveBeenCalledTimes(1);
+    expect(collect).toHaveBeenCalledTimes(1);
+    expect(invalidateStyleContent).toHaveBeenCalledTimes(1);
+    expect(assertPreserved).toHaveBeenCalledTimes(2);
+  });
+
+  test('reruns preserved local CSS validation after css-only changes', async () => {
+    const indexFile = fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.css'),
+      '@import "./base.css";\n.button { color: red; }',
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/base.css'),
+      '.base { color: blue; }',
+    );
+    const graph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'components/Button.css',
+    };
+
+    await expect(graph.createPackageStyleCode(parsed)).resolves.toMatchObject({
+      code: expect.stringContaining('.button { color: red; }'),
+    });
+
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/base.css'),
+      '@import "./index.css";\n.base { color: blue; }',
+    );
+    graph.invalidateFileLoadResults(indexFile);
+
+    await expect(graph.createPackageStyleCode(parsed)).rejects.toThrow(
+      'circular CSS import detected',
+    );
   });
 
   test('invalidates package context for config changes', async () => {

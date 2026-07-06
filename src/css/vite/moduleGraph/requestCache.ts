@@ -51,6 +51,7 @@ export class ModuleStyleGraphRequestCache {
     string,
     Promise<PackageStyleContext | null>
   >();
+  private readonly settledContexts = new Map<string, PackageStyleContext>();
   private readonly loadResults = new Map<
     string,
     Promise<PackageStyleLoadResult>
@@ -88,6 +89,20 @@ export class ModuleStyleGraphRequestCache {
 
     const context = this.createContext(parsed);
     this.contexts.set(parsed.packageName, context);
+    context.then(
+      (resolvedContext) => {
+        if (this.contexts.get(parsed.packageName) !== context) return;
+        if (resolvedContext) {
+          this.settledContexts.set(parsed.packageName, resolvedContext);
+        } else {
+          this.settledContexts.delete(parsed.packageName);
+        }
+      },
+      () => {
+        if (this.contexts.get(parsed.packageName) !== context) return;
+        this.settledContexts.delete(parsed.packageName);
+      },
+    );
     return context;
   }
 
@@ -154,6 +169,15 @@ export class ModuleStyleGraphRequestCache {
   invalidatePackage(packageName: string) {
     this.bumpGraphVersion();
     this.contexts.delete(packageName);
+    this.settledContexts.delete(packageName);
+    this.invalidateLoadResults(packageName);
+  }
+
+  invalidatePackageLoadResults(packageName: string) {
+    this.bumpGraphVersion();
+    this.settledContexts
+      .get(packageName)
+      ?.packageContext.invalidateStyleContentCaches();
     this.invalidateLoadResults(packageName);
   }
 
@@ -162,11 +186,6 @@ export class ModuleStyleGraphRequestCache {
     context: PackageStyleContext,
   ) {
     return this.persistentCache.read(this.createPersistentKey(parsed, context));
-  }
-
-  async isDebugEnabled(parsed: PackageStyleId) {
-    const context = await this.getContext(parsed);
-    return context?.normalizedConfig.debug ?? false;
   }
 
   writePersistentLoadResult(

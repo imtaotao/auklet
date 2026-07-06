@@ -84,15 +84,31 @@ export class ModuleStyleGraph {
     return this.requestCache.peekLoadResult(parsed);
   }
 
-  isDebugEnabled(parsed: PackageStyleId) {
-    return this.requestCache.isDebugEnabled(parsed);
-  }
-
   invalidatePackage(packageName: string) {
     this.requestCache.invalidatePackage(packageName);
   }
 
+  invalidateFileLoadResults(file: string) {
+    const packageName = this.getFilePackageName(file);
+    if (!packageName) return null;
+
+    this.requestCache.invalidatePackageLoadResults(packageName);
+    return packageName;
+  }
+
   invalidateFile(file: string) {
+    const packageName = this.getFilePackageName(file);
+    if (!packageName) return null;
+
+    this.invalidatePackage(packageName);
+    return packageName;
+  }
+
+  isSourceModuleFile(file: string) {
+    return SOURCE_MODULE_RE.test(normalizeFileKey(file));
+  }
+
+  private getFilePackageName(file: string) {
     if (!this.isSourceGraphFile(file)) return null;
 
     const normalizedFile = normalizeFileKey(file);
@@ -100,14 +116,7 @@ export class ModuleStyleGraph {
       .getPackages()
       .find((item) => this.isPackageFile(item.packageRoot, normalizedFile));
 
-    if (!stylePackage) return null;
-
-    this.invalidatePackage(stylePackage.packageName);
-    return stylePackage.packageName;
-  }
-
-  isSourceModuleFile(file: string) {
-    return SOURCE_MODULE_RE.test(normalizeFileKey(file));
+    return stylePackage?.packageName ?? null;
   }
 
   private isPackageFile(packageRoot: string, file: string) {

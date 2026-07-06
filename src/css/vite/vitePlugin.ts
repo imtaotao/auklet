@@ -193,7 +193,8 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
           if (graph.isStyleConfigFile(file)) {
             reloadStyleGraph(file);
           } else if (graph.isStyleFile(file)) {
-            if (hmr.hasTrackedStyleDependency(file)) {
+            const tracked = hmr.hasTrackedStyleDependency(file);
+            if (tracked) {
               await hmr.handleStyleHotUpdate({
                 file,
                 modules: [],
@@ -203,7 +204,7 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
                 read: async () => '',
               });
             } else {
-              graph.invalidateFile(file);
+              graph.invalidateFileLoadResults(file);
             }
           } else if (graph.isSourceModuleFile(file)) {
             await hmr.handleSourceModuleChange(server, file);

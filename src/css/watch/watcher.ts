@@ -10,14 +10,14 @@ import {
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { ModuleStyleBuilder } from '#auklet/css/production/builder';
+import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import { createAukletLogger, type AukletLogger } from '#auklet/logger';
 import type {
   ModuleStyleBuildConfig,
   ModuleStyleBuildContext,
 } from '#auklet/types';
 
-type ModuleStyleWatcherLogger = Pick<AukletLogger, 'error'> &
-  Partial<Pick<AukletLogger, 'info'>>;
+type ModuleStyleWatcherLogger = Pick<AukletLogger, 'error'>;
 
 const errorLogInterval = 2_000;
 
@@ -31,6 +31,7 @@ export class ModuleStyleWatcher {
   private shouldRebuild = false;
   private watcher: FSWatcher | null = null;
   private readonly lastErrorLogTimes = new Map<string, number>();
+  private packageContext: StylePackageContext | null = null;
 
   constructor(
     context: ModuleStyleBuildContext = {},
@@ -57,12 +58,16 @@ export class ModuleStyleWatcher {
       return;
     }
     this.isBuilding = true;
-    const startedAt = Date.now();
     try {
       try {
         const builder = new ModuleStyleBuilder(this.context, this.config);
-        await builder.build();
-        this.logDebug(`CSS build finished in ${Date.now() - startedAt}ms`);
+        this.packageContext ??= builder.createPackageContext({
+          aukletConfig: this.context.aukletConfig,
+        });
+        await builder.build({
+          aukletConfig: this.context.aukletConfig,
+          packageContext: this.packageContext,
+        });
       } catch (error) {
         this.logError('build', 'CSS build failed; waiting for changes.', error);
       }
@@ -85,11 +90,6 @@ export class ModuleStyleWatcher {
         this.scheduleBuild();
       }
     }
-  }
-
-  private logDebug(message: string) {
-    if (this.context.aukletConfig?.debug !== true) return;
-    this.logger.info?.(message);
   }
 
   private async refreshWatcher() {
@@ -116,12 +116,8 @@ export class ModuleStyleWatcher {
       interval: 300,
       usePolling: true,
     });
-    this.watcher.on('all', (_event, file) => {
-      if (this.closed) return;
-      if (isString(file) && !this.shouldRebuildForFile(file)) {
-        return;
-      }
-      this.scheduleBuild();
+    this.watcher.on('all', (event, file) => {
+      this.handleFileEvent(event, file);
     });
     this.watcher.on('error', (error) => {
       if (this.closed) return;
@@ -157,6 +153,39 @@ export class ModuleStyleWatcher {
     if (isAukletConfigFile(path.basename(file))) return true;
     if (SOURCE_MODULE_RE.test(file)) return true;
     return this.config.styleExtensions.includes(path.extname(file));
+  }
+
+  private handleFileEvent(event: string, file: unknown) {
+    if (this.closed || !isString(file)) return;
+    if (!this.shouldRebuildForFile(file)) return;
+    this.invalidateBuildCache(event, file);
+    this.scheduleBuild();
+  }
+
+  private invalidateBuildCache(event: string, file: string) {
+    if (isAukletConfigFile(path.basename(file))) {
+      this.packageContext = null;
+      return;
+    }
+
+    if (
+      event === 'add' ||
+      event === 'unlink' ||
+      event === 'addDir' ||
+      event === 'unlinkDir'
+    ) {
+      this.packageContext = null;
+      return;
+    }
+
+    if (SOURCE_MODULE_RE.test(file)) {
+      this.packageContext?.invalidateModuleStyleImports();
+      return;
+    }
+
+    if (this.config.styleExtensions.includes(path.extname(file))) {
+      this.packageContext?.invalidateStyleContentCaches();
+    }
   }
 
   async close() {

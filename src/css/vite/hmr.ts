@@ -239,27 +239,15 @@ export class AukletStyleHmr {
       return undefined;
     }
 
-    const totalStartedAt = Date.now();
     const isSourceGraphFile = graph.isSourceGraphFile(context.file);
     const trackedEntries = this.getTrackedStyleFileEntries(
       context.file,
       context.server.moduleGraph,
     );
-    const debug = trackedEntries.length
-      ? await graph.isDebugEnabled(trackedEntries[0]!.parsed)
-      : false;
-    this.logDebug(
-      debug,
-      `package css hmr start ${getRelativeFile(context.file)} tracked=${trackedEntries.length}`,
-    );
     if (!trackedEntries.length) {
       if (isSourceGraphFile) {
         graph.invalidateFile(context.file);
       }
-      this.logDebug(
-        debug,
-        `package css hmr skip ${getRelativeFile(context.file)} total=${Date.now() - totalStartedAt}ms`,
-      );
       return undefined;
     }
 
@@ -275,7 +263,7 @@ export class AukletStyleHmr {
       : null;
 
     if (isSourceGraphFile) {
-      graph.invalidateFile(context.file);
+      graph.invalidateFileLoadResults(context.file);
     } else {
       this.invalidateTrackedVirtualPackages(graph, dependencyEntries);
     }
@@ -284,30 +272,24 @@ export class AukletStyleHmr {
       return [];
     }
 
-    const updates = [
-      ...(dependencyEntries.length
-        ? this.createTrackedVirtualStyleUpdates(
-            context.server,
-            dependencyEntries,
-            context.timestamp,
-          )
-        : []),
-      ...(entryEntries.length
-        ? await this.refreshTrackedVirtualStyleUpdates(
-            context.server,
-            entryEntries,
-            previousResults!,
-            context.timestamp,
-            debug,
-          )
-        : []),
-    ];
+    const dependencyUpdates = dependencyEntries.length
+      ? this.createTrackedVirtualStyleUpdates(
+          context.server,
+          dependencyEntries,
+          context.timestamp,
+        )
+      : [];
+    const entryUpdates = entryEntries.length
+      ? await this.refreshTrackedVirtualStyleUpdates(
+          context.server,
+          entryEntries,
+          previousResults!,
+          context.timestamp,
+        )
+      : [];
+    const updates = [...dependencyUpdates, ...entryUpdates];
 
     if (!updates.length) {
-      this.logDebug(
-        debug,
-        `package css hmr no-update ${getRelativeFile(context.file)} total=${Date.now() - totalStartedAt}ms`,
-      );
       return undefined;
     }
 
@@ -318,10 +300,6 @@ export class AukletStyleHmr {
     });
     logger.info(
       `package css hmr ${getRelativeFile(context.file)} tracked=${trackedEntries.length} updates=${updates.length}`,
-    );
-    this.logDebug(
-      debug,
-      `package css hmr done ${getRelativeFile(context.file)} tracked=${trackedEntries.length} updates=${updates.length} total=${Date.now() - totalStartedAt}ms`,
     );
     return [];
   }
@@ -335,26 +313,16 @@ export class AukletStyleHmr {
       return false;
     }
 
-    const totalStartedAt = Date.now();
     const virtualIds = this.getDependencyVirtualIds(file, server.moduleGraph);
     if (!virtualIds.length) {
       graph.invalidateFile(file);
-      this.logDebug(
-        false,
-        `package css source hmr skip ${getRelativeFile(file)} reason=untracked total=${Date.now() - totalStartedAt}ms`,
-      );
       return false;
     }
     const parsedVirtualIds = this.parseTrackedVirtualIds(graph, virtualIds);
     if (!parsedVirtualIds.length) {
       graph.invalidateFile(file);
-      this.logDebug(
-        false,
-        `package css source hmr skip ${getRelativeFile(file)} reason=unparsed total=${Date.now() - totalStartedAt}ms`,
-      );
       return false;
     }
-    const debug = await graph.isDebugEnabled(parsedVirtualIds[0]!.parsed);
 
     const previousResults = this.createTrackedVirtualStyleResults(
       graph,
@@ -367,13 +335,8 @@ export class AukletStyleHmr {
       parsedVirtualIds,
       previousResults,
       Date.now(),
-      debug,
     );
     if (!updates.length) {
-      this.logDebug(
-        debug,
-        `package css source hmr no-update ${getRelativeFile(file)} tracked=${parsedVirtualIds.length} total=${Date.now() - totalStartedAt}ms`,
-      );
       return false;
     }
     this.suppressFullReload();
@@ -383,10 +346,6 @@ export class AukletStyleHmr {
     });
     logger.info(
       `package css source hmr ${getRelativeFile(file)} tracked=${parsedVirtualIds.length} updates=${updates.length}`,
-    );
-    this.logDebug(
-      debug,
-      `package css source hmr done ${getRelativeFile(file)} tracked=${parsedVirtualIds.length} updates=${updates.length} total=${Date.now() - totalStartedAt}ms`,
     );
     return true;
   }
@@ -551,17 +510,11 @@ export class AukletStyleHmr {
       Awaited<ReturnType<ModuleStyleGraph['createPackageStyleCode']>> | null
     >,
     timestamp: number,
-    debug: boolean,
   ) {
     const graph = this.graph();
     const changedVirtualIds: Array<string> = [];
     for (const item of parsedVirtualIds) {
-      const buildStartedAt = Date.now();
       const nextResult = await graph.createPackageStyleCode(item.parsed);
-      this.logDebug(
-        debug,
-        `package css hmr rebuild ${item.id} took=${Date.now() - buildStartedAt}ms`,
-      );
       const previousResult = previousResults.get(item.id);
       if (
         !previousResult ||
@@ -598,11 +551,6 @@ export class AukletStyleHmr {
 
   private shouldSuppressFullReload() {
     return Date.now() <= this.suppressFullReloadUntil;
-  }
-
-  private logDebug(enabled: boolean, message: string) {
-    if (!enabled) return;
-    logger.info(message);
   }
 
   private isDuplicateUpdate(file: string) {

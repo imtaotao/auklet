@@ -12,6 +12,10 @@ import type {
   ResolvedModuleStyleBuildContext,
 } from '#auklet/types';
 
+type ModuleStyleBuildInternalOptions = ModuleStyleBuildOptions & {
+  packageContext?: StylePackageContext;
+};
+
 export class ModuleStyleBuilder {
   private readonly context: ModuleStyleBuildContext & { packageRoot: string };
 
@@ -27,11 +31,13 @@ export class ModuleStyleBuilder {
     };
   }
 
-  async build(options: ModuleStyleBuildOptions = {}) {
+  async build(options: ModuleStyleBuildInternalOptions = {}) {
     const rawConfig = options.aukletConfig ?? this.context.aukletConfig ?? {};
     const normalizedConfig = normalizeAukletConfig(rawConfig);
     const context = this.createBuildContext(normalizedConfig);
-    const packageContext = this.createPackageContext(context, normalizedConfig);
+    const packageContext =
+      (options.packageContext as StylePackageContext | undefined) ??
+      this.createStylePackageContext(context, normalizedConfig);
     packageContext.assertNoSourceRootEscapingLocalStyleImports();
 
     const writerOptions = {
@@ -57,6 +63,13 @@ export class ModuleStyleBuilder {
     };
   }
 
+  createPackageContext(options: ModuleStyleBuildOptions = {}) {
+    const rawConfig = options.aukletConfig ?? this.context.aukletConfig ?? {};
+    const normalizedConfig = normalizeAukletConfig(rawConfig);
+    const context = this.createBuildContext(normalizedConfig);
+    return this.createStylePackageContext(context, normalizedConfig);
+  }
+
   private createBuildContext(config: NormalizedAukletConfig) {
     return {
       packageRoot: this.context.packageRoot,
@@ -65,7 +78,7 @@ export class ModuleStyleBuilder {
     };
   }
 
-  private createPackageContext(
+  private createStylePackageContext(
     context: ResolvedModuleStyleBuildContext,
     normalizedConfig: NormalizedAukletConfig,
   ) {

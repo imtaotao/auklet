@@ -23,12 +23,20 @@ const mocks = vi.hoisted(() => {
   const build = vi.fn(function build() {
     return Promise.resolve();
   });
+  const packageContext = {
+    invalidateModuleStyleImports: vi.fn(),
+    invalidateStyleContentCaches: vi.fn(),
+  };
+  const createPackageContext = vi.fn(function createPackageContext() {
+    return packageContext;
+  });
   const createBuilder = vi.fn(function createBuilder(
     context: Record<string, unknown>,
   ) {
     builderContexts.push(context);
     return {
       build,
+      createPackageContext,
     };
   });
   const builderContexts: Array<Record<string, unknown>> = [];
@@ -38,7 +46,9 @@ const mocks = vi.hoisted(() => {
     builderContexts,
     close,
     createBuilder,
+    createPackageContext,
     events,
+    packageContext,
     watch,
   };
 });
@@ -66,6 +76,9 @@ describe('ModuleStyleWatcher', () => {
     mocks.build.mockReset();
     mocks.build.mockResolvedValue(undefined);
     mocks.builderContexts.length = 0;
+    mocks.createPackageContext.mockClear();
+    mocks.packageContext.invalidateModuleStyleImports.mockClear();
+    mocks.packageContext.invalidateStyleContentCaches.mockClear();
     mocks.close.mockClear();
     mocks.createBuilder.mockClear();
     mocks.events.clear();
@@ -116,9 +129,10 @@ describe('ModuleStyleWatcher', () => {
     });
 
     await watcher.watch();
-    mocks.events.get('all')?.();
-    mocks.events.get('all')?.();
-    await vi.advanceTimersByTimeAsync(80);
+    expect(mocks.events.has('all')).toBe(true);
+    mocks.events.get('all')?.('change', project.resolve('src/index.tsx'));
+    mocks.events.get('all')?.('change', project.resolve('src/index.tsx'));
+    await vi.advanceTimersByTimeAsync(81);
 
     expect(mocks.build).toHaveBeenCalledTimes(2);
 
@@ -138,20 +152,66 @@ describe('ModuleStyleWatcher', () => {
     expect(mocks.build).toHaveBeenCalledTimes(1);
 
     mocks.events.get('all')?.('change', project.resolve('src/data.ts'));
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
     expect(mocks.build).toHaveBeenCalledTimes(1);
 
     mocks.events.get('all')?.('change', project.resolve('src/index.tsx'));
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
     expect(mocks.build).toHaveBeenCalledTimes(2);
 
     mocks.events.get('all')?.('change', project.resolve('src/index.css'));
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
     expect(mocks.build).toHaveBeenCalledTimes(3);
 
     mocks.events.get('all')?.('change', project.resolve('auklet.config.js'));
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
     expect(mocks.build).toHaveBeenCalledTimes(4);
+
+    await watcher.close();
+  });
+
+  test('reuses cached package context for css-only rebuilds', async () => {
+    project.writeFile('src/index.tsx', 'export const value = 1;');
+    project.writeFile('src/index.css', '.root {}');
+    const watcher = new ModuleStyleWatcher({
+      packageRoot: project.root,
+    });
+
+    await watcher.watch();
+    expect(mocks.createPackageContext).toHaveBeenCalledTimes(1);
+
+    mocks.events.get('all')?.('change', project.resolve('src/index.css'));
+    await vi.advanceTimersByTimeAsync(81);
+
+    expect(mocks.build).toHaveBeenCalledTimes(2);
+    expect(mocks.createPackageContext).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.packageContext.invalidateStyleContentCaches,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.packageContext.invalidateModuleStyleImports,
+    ).not.toHaveBeenCalled();
+
+    await watcher.close();
+  });
+
+  test('invalidates module imports cache for source module changes', async () => {
+    project.writeFile('src/index.tsx', 'export const value = 1;');
+    const watcher = new ModuleStyleWatcher({
+      packageRoot: project.root,
+    });
+
+    await watcher.watch();
+    expect(mocks.createPackageContext).toHaveBeenCalledTimes(1);
+
+    mocks.events.get('all')?.('change', project.resolve('src/index.tsx'));
+    await vi.advanceTimersByTimeAsync(81);
+
+    expect(mocks.build).toHaveBeenCalledTimes(2);
+    expect(mocks.createPackageContext).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.packageContext.invalidateModuleStyleImports,
+    ).toHaveBeenCalledTimes(1);
 
     await watcher.close();
   });
@@ -174,7 +234,7 @@ describe('ModuleStyleWatcher', () => {
 
     await watcher.watch();
     mocks.events.get('all')?.('change', project.resolve('src/index.tsx'));
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
 
     expect(mocks.watch).toHaveBeenCalledTimes(2);
     expect(mocks.build).toHaveBeenCalledTimes(2);
@@ -209,7 +269,7 @@ describe('ModuleStyleWatcher', () => {
       'CSS watcher error; waiting for changes.',
     );
     expect(logger.error).toHaveBeenCalledWith(error);
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
     expect(mocks.build).toHaveBeenCalledTimes(2);
     expect(mocks.watch).toHaveBeenCalledTimes(2);
 
@@ -232,9 +292,9 @@ describe('ModuleStyleWatcher', () => {
     vi.setSystemTime(2_000);
     await watcher.watch();
     mocks.events.get('error')?.(new Error('first watch error'));
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
     mocks.events.get('error')?.(new Error('second watch error'));
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
 
     expect(logger.error).toHaveBeenCalledTimes(2);
     expect(mocks.build).toHaveBeenCalledTimes(3);
@@ -256,7 +316,7 @@ describe('ModuleStyleWatcher', () => {
     await watcher.watch();
     await watcher.close();
     mocks.events.get('all')?.('change', project.resolve('src/index.tsx'));
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(81);
 
     expect(mocks.build).toHaveBeenCalledTimes(1);
   });

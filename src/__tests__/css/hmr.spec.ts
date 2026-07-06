@@ -97,8 +97,12 @@ const createGraph = () => {
       return resultCache.get(parsed.stylePath) ?? null;
     }),
     getPackageNames: vi.fn(() => [fixture.packageName]),
-    isDebugEnabled: vi.fn(async () => false),
     invalidateFile: vi.fn(() => {
+      version += 1;
+      resultCache.clear();
+      return fixture.packageName;
+    }),
+    invalidateFileLoadResults: vi.fn(() => {
       version += 1;
       resultCache.clear();
       return fixture.packageName;
@@ -183,7 +187,9 @@ describe('AukletStyleHmr', () => {
     const result = await handleStyleUpdate(context);
 
     expect(result).toEqual([]);
-    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
+    expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
+      fixture.styleFile,
+    );
     expect(context.invalidateModule).toHaveBeenCalledWith(
       trackedDependency.module,
     );
@@ -200,8 +206,8 @@ describe('AukletStyleHmr', () => {
       createPackageStyleCode: vi.fn(async () => stableResult),
       peekPackageStyleCode: vi.fn(() => stableResult),
       getPackageNames: vi.fn(() => [fixture.packageName]),
-      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => fixture.packageName),
+      invalidateFileLoadResults: vi.fn(() => fixture.packageName),
       parsePackageStyleId: vi.fn((stylePath: string) => {
         return {
           packageName: fixture.packageName,
@@ -219,7 +225,9 @@ describe('AukletStyleHmr', () => {
 
     const result = await handleStyleUpdate(context);
 
-    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
+    expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
+      fixture.styleFile,
+    );
     expect(context.invalidateModule).toHaveBeenCalledWith({
       id: componentVirtualId(fixture.componentName),
     });
@@ -378,7 +386,6 @@ describe('AukletStyleHmr', () => {
       })),
       peekPackageStyleCode: vi.fn(() => null),
       getPackageNames: vi.fn(() => [fixture.packageName]),
-      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => fixture.packageName),
       parsePackageStyleId: vi.fn((stylePath: string) => {
         return {
@@ -424,7 +431,6 @@ describe('AukletStyleHmr', () => {
       })),
       peekPackageStyleCode: vi.fn(() => null),
       getPackageNames: vi.fn(() => [fixture.packageName]),
-      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => {
         version += 1;
         return fixture.packageName;
@@ -497,7 +503,6 @@ describe('AukletStyleHmr', () => {
         return resultCache.get(parsed.stylePath) ?? null;
       }),
       getPackageNames: vi.fn(() => [fixture.packageName]),
-      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => {
         resultCache.clear();
         return fixture.packageName;
@@ -543,7 +548,6 @@ describe('AukletStyleHmr', () => {
         }),
       peekPackageStyleCode: vi.fn(() => null),
       getPackageNames: vi.fn(() => [fixture.packageName]),
-      isDebugEnabled: vi.fn(async () => false),
       invalidateFile: vi.fn(() => fixture.packageName),
       parsePackageStyleId: vi.fn((stylePath: string) => {
         if (
@@ -578,12 +582,14 @@ describe('AukletStyleHmr', () => {
     trackVirtualStyleDependency(context);
     await handleStyleUpdate(context);
     context.send.mockClear();
-    vi.mocked(graph.invalidateFile).mockClear();
+    vi.mocked(graph.invalidateFileLoadResults).mockClear();
 
     const result = await handleStyleUpdate(context);
 
     expect(result).toEqual([]);
-    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
+    expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
+      fixture.styleFile,
+    );
     expect(context.send).not.toHaveBeenCalled();
   });
 
