@@ -4,6 +4,7 @@ import {
   toRelativeImportSpecifier,
   writeStyleFile,
 } from '#auklet/css/production/format/shared';
+import { toOutputStylePath } from '#auklet/css/core/style/specifier';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 
 export class SourceStyleFileWriter {
@@ -17,25 +18,34 @@ export class SourceStyleFileWriter {
     this.styleProcessor = options.packageContext.styleProcessor;
   }
 
-  copy(files: Array<string>, outRoot: string) {
+  async copy(files: Array<string>, outRoot: string) {
     for (const sourceFile of files) {
-      const relative = path.relative(this.sourceRoot, sourceFile);
+      const relative = toOutputStylePath(
+        path.relative(this.sourceRoot, sourceFile),
+      );
       const target = path.join(outRoot, relative);
-      const content = this.styleProcessor.readStyleFile(sourceFile, undefined, {
-        mapImportSpecifier: (reference) => {
-          if (!this.resolver.isInsideSourceRoot(reference.imported)) {
-            return reference.specifier;
-          }
-          return toRelativeImportSpecifier(
-            path.dirname(target),
-            path.join(
-              outRoot,
-              path.relative(this.sourceRoot, reference.imported),
-            ),
-          );
+      const content = await this.styleProcessor.readStyleFile(
+        sourceFile,
+        undefined,
+        {
+          applyPrefix: true,
+          mapImportSpecifier: (reference) => {
+            if (!this.resolver.isInsideSourceRoot(reference.imported)) {
+              return reference.specifier;
+            }
+            return toRelativeImportSpecifier(
+              path.dirname(target),
+              path.join(
+                outRoot,
+                toOutputStylePath(
+                  path.relative(this.sourceRoot, reference.imported),
+                ),
+              ),
+            );
+          },
+          shouldExpandImport: () => false,
         },
-        shouldExpandImport: () => false,
-      });
+      );
       writeStyleFile(target, content);
     }
   }

@@ -29,12 +29,14 @@ export class PackageStyleEntryWriter {
     this.styleProcessor = options.packageContext.styleProcessor;
   }
 
-  write() {
+  async write() {
     const seen = new Set<string>();
     const root = this.styleProcessor.createRoot();
 
     for (const stylePath of this.packageContext.themeFiles.values()) {
-      const content = this.styleProcessor.readStyleFile(stylePath, seen);
+      const content = await this.styleProcessor.readStyleFile(stylePath, seen, {
+        applyPrefix: true,
+      });
       if (content.trim()) {
         this.styleProcessor.appendStyleContent(root, content, stylePath);
       }
@@ -45,14 +47,19 @@ export class PackageStyleEntryWriter {
     )) {
       const stylePath = this.resolver.resolveStyleDependency(specifier);
       if (!stylePath) continue;
-      const content = this.styleProcessor.readStyleFile(stylePath, seen);
+      // Dependency CSS is already built; never apply this package's prefix.
+      const content = await this.styleProcessor.readStyleFile(stylePath, seen, {
+        applyPrefix: false,
+      });
       if (content.trim()) {
         this.styleProcessor.appendStyleContent(root, content, stylePath);
       }
     }
 
     for (const styleFile of this.packageContext.styleFiles) {
-      const content = this.styleProcessor.readStyleFile(styleFile, seen);
+      const content = await this.styleProcessor.readStyleFile(styleFile, seen, {
+        applyPrefix: true,
+      });
       if (content.trim()) {
         this.styleProcessor.appendStyleContent(root, content, styleFile);
       }

@@ -14,8 +14,7 @@ style.
   system temp directories directly.
 - Real build output and Vite/dev maps are normalized into `StyleStructure` before
   assertions when possible.
-- Test helpers use `style` semantics to leave room for future style languages
-  such as Less.
+- Test helpers use `style` semantics for CSS/Less sources and CSS artifacts.
 
 ## Representative Test Entry Points
 
@@ -398,7 +397,7 @@ Reasons:
 
 - The project already depends on PostCSS.
 - PostCSS is more appropriate than regex for generated CSS.
-- If Less support lands later, test-side structure is easier to extend.
+- PostCSS stays the assertion substrate after Less compile (outputs are CSS).
 
 ## New Feature Test Checklist
 
@@ -436,12 +435,10 @@ such as:
 - `auk build-css` triggers the build flow;
 - unknown command returns a failing exit code.
 
-If other style languages are added through hooks later:
-
-- do not add long-term pending/skipped tests;
-- first decide whether the hook only converts source styles to CSS, or also
-  participates in auklet's dependency graph;
-- then extend fixtures, `StyleStructure`, and real output assertions.
+Less / `styles.prefix` changes need production↔Vite semantic alignment tests
+(including no `/@fs/**/*.less`, Less import closure at collect time, and prefix
+applied once). Prefer `StyleStructure` over raw string equality when module
+graphs mix `/@fs` CSS with inlined compiled Less.
 
 ## Current Structure
 

@@ -7,6 +7,7 @@ import {
   createOutputModuleStyleSpecifier,
   createOutputOwnStyleSpecifier,
   createOutputStyleSpecifier,
+  toOutputStylePath,
   toRelativeImportSpecifier,
 } from '#auklet/css/core/style/specifier';
 
@@ -19,6 +20,16 @@ const outputOptions = {
 };
 
 describe('style specifier helpers', () => {
+  test('maps Less sources to CSS output paths', () => {
+    expect(toOutputStylePath('components/Button/index.less')).toBe(
+      'components/Button/index.css',
+    );
+    expect(toOutputStylePath('components/Button/index.css')).toBe(
+      'components/Button/index.css',
+    );
+    expect(toOutputStylePath('themes/light.LESS')).toBe('themes/light.LESS');
+  });
+
   test('creates relative import specifiers', () => {
     expect(
       toRelativeImportSpecifier(

@@ -15,6 +15,7 @@ const fixture = {
   packageName: '@scope/package',
   componentName: 'Widget',
   styleFile: '/workspace/packages/package/src/components/Widget/index.css',
+  lessFile: '/workspace/packages/package/src/components/Widget/index.less',
   sourceFile: '/workspace/packages/package/src/components/Widget/index.tsx',
   outsideFile: '/workspace/README.md',
 };
@@ -117,7 +118,9 @@ const createGraph = () => {
       file.startsWith(`${fixture.workspaceRoot}/packages/`),
     ),
     isSourceModuleFile: vi.fn((file: string) => file.endsWith('.tsx')),
-    isStyleFile: vi.fn((file: string) => file.endsWith('.css')),
+    isStyleFile: vi.fn(
+      (file: string) => file.endsWith('.css') || file.endsWith('.less'),
+    ),
   } as unknown as ModuleStyleGraph;
 };
 
@@ -194,6 +197,27 @@ describe('AukletStyleHmr', () => {
       trackedDependency.module,
     );
     expect(context.invalidateModule).toHaveBeenCalledTimes(1);
+    expectJsUpdates(context, [trackedDependency.id]);
+  });
+
+  test('sends js updates for tracked virtual Less dependencies', async () => {
+    const context = createHmrTestContext(graph);
+    const trackedDependency = trackVirtualStyleDependency(
+      context,
+      componentVirtualId(fixture.componentName),
+      fixture.lessFile,
+    );
+
+    const result = await handleStyleUpdate(context, fixture.lessFile);
+
+    expect(result).toEqual([]);
+    expect(graph.isStyleFile).toHaveBeenCalledWith(fixture.lessFile);
+    expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
+      fixture.lessFile,
+    );
+    expect(context.invalidateModule).toHaveBeenCalledWith(
+      trackedDependency.module,
+    );
     expectJsUpdates(context, [trackedDependency.id]);
   });
 

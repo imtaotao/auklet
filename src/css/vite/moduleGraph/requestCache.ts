@@ -234,6 +234,7 @@ export class ModuleStyleGraphRequestCache {
       context,
       normalizedConfig,
     });
+    await packageContext.prepareStyleLanguage();
 
     return {
       context,

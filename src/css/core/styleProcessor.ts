@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import postcss, { type AtRule, type Root } from 'postcss';
+import {
+  compileLess,
+  type LessCompileResult,
+} from '#auklet/css/core/lessCompiler';
+import { prefixSelectors } from '#auklet/css/core/prefixSelectors';
 import type { ModuleStyleBuildConfig } from '#auklet/types';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 
@@ -13,13 +18,52 @@ export type StyleFileImportReference = {
 export type StyleFileImportExpandOptions = {
   mapImportSpecifier?: (reference: StyleFileImportReference) => string;
   shouldExpandImport?: (reference: StyleFileImportReference) => boolean;
+  /**
+   * Apply `styles.prefix` to this read's result. Use only for own-package
+   * style/theme top-level reads — never for dependency CSS. Nested import
+   * expansion always forces this off so prefix runs once per top-level read.
+   * Defaults to false; callers must opt in explicitly.
+   */
+  applyPrefix?: boolean;
+};
+
+export type StyleProcessorOptions = {
+  prefix?: string;
 };
 
 export class StyleProcessor {
+  private readonly lessCache = new Map<string, LessCompileResult>();
+  private readonly prefix?: string;
+
   constructor(
     private readonly config: ModuleStyleBuildConfig,
     private readonly resolver: WorkspaceStyleResolver,
-  ) {}
+    options: StyleProcessorOptions = {},
+  ) {
+    this.prefix = options.prefix;
+  }
+
+  async warmLessCache(styleFiles: Iterable<string>) {
+    for (const styleFile of styleFiles) {
+      if (path.extname(styleFile) !== '.less') continue;
+      if (!fs.existsSync(styleFile)) continue;
+      await this.getLessResult(styleFile);
+    }
+  }
+
+  clearLessCache() {
+    this.lessCache.clear();
+  }
+
+  async collectLessImportFiles(styleFile: string) {
+    if (path.extname(styleFile) !== '.less' || !fs.existsSync(styleFile)) {
+      return [] as Array<string>;
+    }
+    const result = await this.getLessResult(styleFile);
+    return result.imports.filter((imported) =>
+      this.config.styleExtensions.includes(path.extname(imported)),
+    );
+  }
 
   createRoot() {
     return postcss.root();
@@ -41,14 +85,16 @@ export class StyleProcessor {
   }
 
   appendStyleContent(target: Root, content: string, from: string) {
-    const root = this.parse(content, from);
+    // content is already CSS (possibly from a .less source). Never re-run Less
+    // or prefix based on the source path extension.
+    const root = this.parseCss(content, from);
     if (target.nodes?.length && root.nodes?.[0]) {
       root.nodes[0].raws.before = '\n';
     }
     target.append(...(root.nodes ?? []));
   }
 
-  readStyleFile(
+  async readStyleFile(
     stylePath: string,
     seen = new Set<string>(),
     options: StyleFileImportExpandOptions = {},
@@ -56,12 +102,12 @@ export class StyleProcessor {
     if (!fs.existsSync(stylePath)) {
       return '';
     }
+    const applyPrefix = options.applyPrefix === true;
     const normalizedPath = path.resolve(stylePath);
     if (seen.has(normalizedPath)) return '';
     seen.add(normalizedPath);
 
-    const css = fs.readFileSync(stylePath, 'utf8');
-    const root = this.parse(css, stylePath);
+    const root = await this.loadStyleRootFromDisk(stylePath);
     const imports: Array<{
       rule: AtRule;
       specifier: string;
@@ -73,6 +119,11 @@ export class StyleProcessor {
       const reference = this.parseImportSpecifierReference(rule.params);
       if (reference) imports.push({ rule, ...reference });
     });
+
+    const nestedOptions: StyleFileImportExpandOptions = {
+      ...options,
+      applyPrefix: false,
+    };
 
     for (const { rule, specifier, specifierStart, specifierEnd } of imports) {
       const { reference, isLocalStyleImport } =
@@ -88,14 +139,22 @@ export class StyleProcessor {
       if (options.shouldExpandImport?.(reference) === false) {
         continue;
       }
-      const content = this.readStyleFile(reference.imported, seen, options);
+      const content = await this.readStyleFile(
+        reference.imported,
+        seen,
+        nestedOptions,
+      );
       if (!content.trim()) {
         rule.remove();
         continue;
       }
       rule.replaceWith(
-        ...(this.parse(content, reference.imported).nodes ?? []),
+        ...(this.parseCss(content, reference.imported).nodes ?? []),
       );
+    }
+
+    if (applyPrefix && this.prefix) {
+      prefixSelectors(root, this.prefix);
     }
     return root.toString();
   }
@@ -124,41 +183,43 @@ export class StyleProcessor {
     );
   }
 
-  collectImportedStyleFiles(styleFiles: Array<string>) {
+  async collectImportedStyleFiles(styleFiles: Array<string>) {
     return new Set(
-      this.collectImportedStyleFileReferences(styleFiles).map(
+      (await this.collectImportedStyleFileReferences(styleFiles)).map(
         (item) => item.imported,
       ),
     );
   }
 
-  collectImportedStyleFileReferences(styleFiles: Array<string>) {
+  async collectImportedStyleFileReferences(styleFiles: Array<string>) {
     const imports: Array<StyleFileImportReference> = [];
 
     for (const styleFile of styleFiles) {
-      const css = fs.readFileSync(styleFile, 'utf8');
-      const root = this.parse(css, styleFile);
-
-      root.walkAtRules('import', (rule) => {
-        const specifier = this.parseImportSpecifier(rule.params);
-        if (!specifier) return;
-        const { reference, isLocalStyleImport } =
-          this.resolveStyleImportReference(specifier, styleFile);
-        if (!isLocalStyleImport) {
-          return;
+      imports.push(
+        ...(await this.collectLocalStyleImportReferences(styleFile)),
+      );
+      if (path.extname(styleFile) === '.less') {
+        const result = await this.getLessResult(styleFile);
+        for (const imported of result.imports) {
+          if (!this.config.styleExtensions.includes(path.extname(imported))) {
+            continue;
+          }
+          imports.push({
+            importer: path.resolve(styleFile),
+            imported: path.resolve(imported),
+            specifier: imported,
+          });
         }
-        imports.push(reference);
-      });
+      }
     }
     return imports;
   }
 
-  collectStyleImportReferences(styleFiles: Array<string>) {
+  async collectStyleImportReferences(styleFiles: Array<string>) {
     const imports: Array<StyleFileImportReference> = [];
 
     for (const styleFile of styleFiles) {
-      const css = fs.readFileSync(styleFile, 'utf8');
-      const root = this.parse(css, styleFile);
+      const root = await this.loadStyleRootFromDisk(styleFile);
 
       root.walkAtRules('import', (rule) => {
         const specifier = this.parseImportSpecifier(rule.params);
@@ -173,12 +234,11 @@ export class StyleProcessor {
     return imports;
   }
 
-  collectStyleImportSpecifiers(styleFiles: Array<string>) {
+  async collectStyleImportSpecifiers(styleFiles: Array<string>) {
     const specifiers = new Set<string>();
 
     for (const styleFile of styleFiles) {
-      const css = fs.readFileSync(styleFile, 'utf8');
-      const root = this.parse(css, styleFile);
+      const root = await this.loadStyleRootFromDisk(styleFile);
 
       root.walkAtRules('import', (rule) => {
         const specifier = this.parseImportSpecifier(rule.params);
@@ -188,12 +248,12 @@ export class StyleProcessor {
     return specifiers;
   }
 
-  assertNoLocalStyleImportCycles(styleFiles: Array<string>) {
+  async assertNoLocalStyleImportCycles(styleFiles: Array<string>) {
     const visited = new Set<string>();
     const visiting = new Set<string>();
     const stack: Array<string> = [];
 
-    const visit = (styleFile: string) => {
+    const visit = async (styleFile: string) => {
       const normalizedPath = path.resolve(styleFile);
       if (visited.has(normalizedPath)) return;
 
@@ -213,10 +273,10 @@ export class StyleProcessor {
       visiting.add(normalizedPath);
       stack.push(normalizedPath);
 
-      for (const reference of this.collectLocalStyleImportReferences(
+      for (const reference of await this.collectLocalStyleImportReferences(
         normalizedPath,
       )) {
-        visit(reference.imported);
+        await visit(reference.imported);
       }
 
       stack.pop();
@@ -225,24 +285,58 @@ export class StyleProcessor {
     };
 
     for (const styleFile of styleFiles) {
-      visit(styleFile);
+      await visit(styleFile);
     }
   }
 
-  assertNoSourceRootEscapingLocalStyleImports(styleFiles: Array<string>) {
+  async assertNoSourceRootEscapingLocalStyleImports(styleFiles: Array<string>) {
     for (const styleFile of styleFiles) {
       if (!fs.existsSync(styleFile)) continue;
-      for (const reference of this.collectLocalStyleImportReferences(
-        path.resolve(styleFile),
+      const normalized = path.resolve(styleFile);
+      for (const reference of await this.collectLocalStyleImportReferences(
+        normalized,
       )) {
         this.assertSourceRootLocalStyleImport(reference, true);
+      }
+      // Less inlines partials before CSS @import remains; still guard the
+      // Less import closure (including modules: false package builds).
+      for (const imported of await this.collectLessImportFiles(normalized)) {
+        this.assertSourceRootLocalStyleImport(
+          {
+            importer: normalized,
+            imported: path.resolve(imported),
+            specifier: imported,
+          },
+          true,
+        );
       }
     }
   }
 
-  private parse(code: string, from: string) {
-    // Keep parsing behind one method so future style languages can transform
-    // to CSS before PostCSS reads the final stylesheet.
+  private async loadStyleRootFromDisk(stylePath: string) {
+    if (!fs.existsSync(stylePath)) {
+      return postcss.root();
+    }
+    if (path.extname(stylePath) === '.less') {
+      const result = await this.getLessResult(stylePath);
+      return this.parseCss(result.css, stylePath);
+    }
+    const code = fs.readFileSync(stylePath, 'utf8');
+    return this.parseCss(code, stylePath);
+  }
+
+  private async getLessResult(stylePath: string) {
+    const key = path.resolve(stylePath);
+    const cached = this.lessCache.get(key);
+    if (cached) return cached;
+
+    const code = fs.readFileSync(stylePath, 'utf8');
+    const result = await compileLess(stylePath, code);
+    this.lessCache.set(key, result);
+    return result;
+  }
+
+  private parseCss(code: string, from: string) {
     return postcss.parse(code, { from });
   }
 
@@ -252,10 +346,9 @@ export class StyleProcessor {
 
   private resolveStyleImportReference(specifier: string, stylePath: string) {
     const fromDir = path.dirname(stylePath);
-    const sourceStylePath = this.resolver.resolveSourceStyleDependency(
-      specifier,
-      fromDir,
-    );
+    const sourceStylePath =
+      this.resolver.resolveSourceStyleDependency(specifier, fromDir) ??
+      this.resolveLessRewrittenStyleDependency(specifier, fromDir);
     const isSourceStyleSpecifier = this.isSourceStyleImportSpecifier(
       specifier,
       sourceStylePath,
@@ -265,6 +358,7 @@ export class StyleProcessor {
       if (!sourceStylePath || !fs.existsSync(sourceStylePath)) {
         this.throwMissingLocalStyleImport(specifier, stylePath);
       }
+      this.assertCssDoesNotImportLess(stylePath, sourceStylePath, specifier);
       return {
         reference: {
           importer: path.resolve(stylePath),
@@ -289,6 +383,42 @@ export class StyleProcessor {
     };
   }
 
+  // Less may rewrite `@import "./file.css"` to `@import "file.css"`.
+  private resolveLessRewrittenStyleDependency(
+    specifier: string,
+    fromDir: string,
+  ) {
+    if (
+      specifier.startsWith('.') ||
+      specifier.startsWith('#') ||
+      specifier.startsWith('@') ||
+      specifier.includes('/') ||
+      specifier.includes('\\')
+    ) {
+      return null;
+    }
+    if (!this.config.styleExtensions.includes(path.extname(specifier))) {
+      return null;
+    }
+    const candidate = path.resolve(fromDir, specifier);
+    return fs.existsSync(candidate) ? candidate : null;
+  }
+
+  private assertCssDoesNotImportLess(
+    importer: string,
+    imported: string,
+    specifier: string,
+  ) {
+    if (
+      path.extname(importer) === '.css' &&
+      path.extname(imported) === '.less'
+    ) {
+      throw new Error(
+        `[css] CSS must not import Less: ${specifier} from ${importer}`,
+      );
+    }
+  }
+
   private assertSourceRootLocalStyleImport(
     reference: StyleFileImportReference,
     isLocalStyleImport: boolean,
@@ -306,10 +436,10 @@ export class StyleProcessor {
     );
   }
 
-  private collectLocalStyleImportReferences(styleFile: string) {
+  private async collectLocalStyleImportReferences(styleFile: string) {
     const imports: Array<StyleFileImportReference> = [];
-    const css = fs.readFileSync(styleFile, 'utf8');
-    const root = this.parse(css, styleFile);
+    if (!fs.existsSync(styleFile)) return imports;
+    const root = await this.loadStyleRootFromDisk(styleFile);
 
     root.walkAtRules('import', (rule) => {
       const specifier = this.parseImportSpecifier(rule.params);

@@ -6,6 +6,7 @@ import {
   toRelativeImportSpecifier,
   writeStyleFile,
 } from '#auklet/css/production/format/shared';
+import { toOutputStylePath } from '#auklet/css/core/style/specifier';
 
 export class ModuleStyleWriter {
   private readonly sourceRoot: string;
@@ -20,7 +21,7 @@ export class ModuleStyleWriter {
     this.styleProcessor = options.packageContext.styleProcessor;
   }
 
-  write(outRoot: string) {
+  async write(outRoot: string) {
     const target = path.join(
       outRoot,
       this.config.output.styleDir,
@@ -29,10 +30,10 @@ export class ModuleStyleWriter {
     const targetDir = path.dirname(target);
     const root = this.styleProcessor.createRoot();
 
-    for (const styleFile of this.packageContext.getStyleEntryFiles()) {
+    for (const styleFile of await this.packageContext.getStyleEntryFiles()) {
       const outputStyleFile = path.join(
         outRoot,
-        path.relative(this.sourceRoot, styleFile),
+        toOutputStylePath(path.relative(this.sourceRoot, styleFile)),
       );
       this.styleProcessor.appendImportRule(
         root,

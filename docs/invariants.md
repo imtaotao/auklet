@@ -63,13 +63,15 @@ the same change and make the reason explicit.
 - Broad CSS semantic changes need tests that compare production build structure
   and Vite/dev graph structure.
 - auklet is a style entry generator, not a general CSS bundler. Do not add
-  partial CSS transform behavior inside entry writers.
-- `styles.shared` is the only same-package exception to component-local CSS
-  imports. It must stay limited to current source-root CSS files and must not
-  permit component-to-component or package-to-package CSS imports. Nested shared
-  imports must stay limited to non-module, non-theme helper CSS. Shared imports
-  should preserve the source import relationship in module output and dev
-  virtual CSS rather than duplicating shared rules into every importer.
+  transform behavior inside entry writers.
+- Allowed style transforms are only Less compilation and `styles.prefix`. Both
+  run in `StyleProcessor` and must stay aligned for production and Vite/dev.
+- `styles.shared` is the only same-package exception to component-local style
+  imports. It must stay limited to current source-root style files and must not
+  permit component-to-component or package-to-package style imports. Nested
+  shared imports must stay limited to non-module, non-theme helpers. When the
+  shared file is CSS, preserve the `@import` relationship in module output and
+  dev virtual CSS rather than duplicating shared rules into every importer.
 - CSS auto import inference only reads the supported source model. `.tsx` named
   imports/re-exports are supported; `.ts`, `.d.ts`, and `export * from` remain
   outside the inference model unless the model is intentionally changed.

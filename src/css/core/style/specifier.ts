@@ -43,6 +43,12 @@ export function removeStyleExtension(stylePath: string) {
   return stylePath.slice(0, -path.extname(stylePath).length);
 }
 
+export function toOutputStylePath(stylePath: string) {
+  return path.extname(stylePath) === '.less'
+    ? `${stylePath.slice(0, -'.less'.length)}.css`
+    : stylePath;
+}
+
 export function toRelativeImportSpecifier(fromDir: string, file: string) {
   const relative = toPosixPath(path.relative(fromDir, file));
   return relative.startsWith('.') ? relative : `./${relative}`;
@@ -166,7 +172,10 @@ export function createOutputOwnStyleSpecifier(
 ) {
   return toRelativeImportSpecifier(
     options.styleDir,
-    path.join(options.outputRoot, path.relative(options.sourceRoot, styleFile)),
+    path.join(
+      options.outputRoot,
+      toOutputStylePath(path.relative(options.sourceRoot, styleFile)),
+    ),
   );
 }
 

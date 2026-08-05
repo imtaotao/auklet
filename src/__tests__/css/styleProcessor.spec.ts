@@ -60,7 +60,7 @@ describe('StyleProcessor', () => {
     project.cleanup();
   });
 
-  test('inlines nested CSS imports with PostCSS AST order preserved', () => {
+  test('inlines nested CSS imports with PostCSS AST order preserved', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -77,7 +77,7 @@ describe('StyleProcessor', () => {
     );
     project.writeFile('tokens.css', '.tokens { color: green; }');
 
-    const content = processor.readStyleFile(entry);
+    const content = await processor.readStyleFile(entry);
 
     expectNoImports(content);
     expect(content).toContain('.tokens { color: green; }');
@@ -86,7 +86,7 @@ describe('StyleProcessor', () => {
     expectContentOrder(content, ['.tokens', '.base', '.entry']);
   });
 
-  test('inlines long mixed relative and alias CSS import chains in dependency order', () => {
+  test('inlines long mixed relative and alias CSS import chains in dependency order', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -117,7 +117,7 @@ describe('StyleProcessor', () => {
     );
     project.writeFile('reset.css', '.reset { box-sizing: border-box; }');
 
-    const content = processor.readStyleFile(entry);
+    const content = await processor.readStyleFile(entry);
 
     expectNoImports(content);
     expect(content).toContain('.reset { box-sizing: border-box; }');
@@ -134,7 +134,7 @@ describe('StyleProcessor', () => {
     ]);
   });
 
-  test('inlines url imports and avoids repeating circular imports', () => {
+  test('inlines url imports and avoids repeating circular imports', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -150,14 +150,14 @@ describe('StyleProcessor', () => {
       `,
     );
 
-    const content = processor.readStyleFile(entry);
+    const content = await processor.readStyleFile(entry);
 
     expectNoImports(content);
     expect(content.match(/\.entry/g)).toHaveLength(1);
     expect(content.match(/\.base/g)).toHaveLength(1);
   });
 
-  test('inlines long circular CSS import chains without repeating styles', () => {
+  test('inlines long circular CSS import chains without repeating styles', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -194,7 +194,7 @@ describe('StyleProcessor', () => {
       `,
     );
 
-    const content = processor.readStyleFile(entry);
+    const content = await processor.readStyleFile(entry);
 
     expectNoImports(content);
     expect(content.match(/\.entry\s*\{/g)).toHaveLength(1);
@@ -211,7 +211,7 @@ describe('StyleProcessor', () => {
     ]);
   });
 
-  test('detects self CSS import cycles before preserving import graphs', () => {
+  test('detects self CSS import cycles before preserving import graphs', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -220,12 +220,12 @@ describe('StyleProcessor', () => {
       `,
     );
 
-    expect(() => processor.assertNoLocalStyleImportCycles([entry])).toThrow(
-      '[css] circular CSS import detected:',
-    );
+    await expect(
+      processor.assertNoLocalStyleImportCycles([entry]),
+    ).rejects.toThrow('[css] circular CSS import detected:');
   });
 
-  test('detects mutual CSS import cycles before preserving import graphs', () => {
+  test('detects mutual CSS import cycles before preserving import graphs', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -241,12 +241,12 @@ describe('StyleProcessor', () => {
       `,
     );
 
-    expect(() => processor.assertNoLocalStyleImportCycles([entry])).toThrow(
-      '[css] circular CSS import detected:',
-    );
+    await expect(
+      processor.assertNoLocalStyleImportCycles([entry]),
+    ).rejects.toThrow('[css] circular CSS import detected:');
   });
 
-  test('collects relative and local alias CSS imports', () => {
+  test('collects relative and local alias CSS imports', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -264,12 +264,12 @@ describe('StyleProcessor', () => {
     project.writeFile('alias.css', '.alias {}');
     project.writeFile('theme.module.css', '.theme {}');
 
-    const imported = processor.collectImportedStyleFiles([entry]);
+    const imported = await processor.collectImportedStyleFiles([entry]);
 
     expect(imported).toEqual(new Set([base, alias, themeModule]));
   });
 
-  test('rejects missing local CSS imports', () => {
+  test('rejects missing local CSS imports', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -278,12 +278,12 @@ describe('StyleProcessor', () => {
       `,
     );
 
-    expect(() => processor.readStyleFile(entry)).toThrow(
+    await expect(processor.readStyleFile(entry)).rejects.toThrow(
       '[css] local CSS import not found: ./missing.css from',
     );
   });
 
-  test('rejects unresolved source CSS alias imports without falling back to packages', () => {
+  test('rejects unresolved source CSS alias imports without falling back to packages', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -292,12 +292,12 @@ describe('StyleProcessor', () => {
       `,
     );
 
-    expect(() => processor.readStyleFile(entry)).toThrow(
+    await expect(processor.readStyleFile(entry)).rejects.toThrow(
       '[css] local CSS import not found: #styles/missing.css from',
     );
   });
 
-  test('rejects unresolved extensionless source CSS alias imports', () => {
+  test('rejects unresolved extensionless source CSS alias imports', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -306,12 +306,12 @@ describe('StyleProcessor', () => {
       `,
     );
 
-    expect(() => processor.readStyleFile(entry)).toThrow(
+    await expect(processor.readStyleFile(entry)).rejects.toThrow(
       '[css] local CSS import not found: #styles/missing from',
     );
   });
 
-  test('preserves valid local and external imports when expansion is disabled', () => {
+  test('preserves valid local and external imports when expansion is disabled', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -322,7 +322,7 @@ describe('StyleProcessor', () => {
     );
     project.writeFile('base.css', '.base { color: blue; }');
 
-    const content = processor.readStyleFile(entry, undefined, {
+    const content = await processor.readStyleFile(entry, undefined, {
       shouldExpandImport: () => false,
     });
 
@@ -331,7 +331,7 @@ describe('StyleProcessor', () => {
     expect(content).toContain('.entry { color: red; }');
   });
 
-  test('rejects source-root escaping local imports when expansion is disabled', () => {
+  test('rejects source-root escaping local imports when expansion is disabled', async () => {
     const sourceRoot = project.resolve('src');
     const sourceRootProcessor = new StyleProcessor(moduleStyleBuildConfig, {
       resolveSourceStyleDependency(specifier: string, fromDir: string) {
@@ -360,14 +360,14 @@ describe('StyleProcessor', () => {
     );
     project.writeFile('outside.css', '.outside { color: blue; }');
 
-    expect(() =>
+    await expect(
       sourceRootProcessor.readStyleFile(entry, undefined, {
         shouldExpandImport: () => false,
       }),
-    ).toThrow('[css] local CSS import escapes source root:');
+    ).rejects.toThrow('[css] local CSS import escapes source root:');
   });
 
-  test('rejects source-root escaping local imports when expansion is enabled', () => {
+  test('rejects source-root escaping local imports when expansion is enabled', async () => {
     const sourceRoot = project.resolve('src');
     const sourceRootProcessor = new StyleProcessor(moduleStyleBuildConfig, {
       resolveSourceStyleDependency(specifier: string, fromDir: string) {
@@ -396,12 +396,12 @@ describe('StyleProcessor', () => {
     );
     project.writeFile('outside.css', '.outside { color: blue; }');
 
-    expect(() => sourceRootProcessor.readStyleFile(entry)).toThrow(
+    await expect(sourceRootProcessor.readStyleFile(entry)).rejects.toThrow(
       '[css] local CSS import escapes source root:',
     );
   });
 
-  test('preserves import conditions when remapping string import specifiers', () => {
+  test('preserves import conditions when remapping string import specifiers', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -411,7 +411,7 @@ describe('StyleProcessor', () => {
     );
     project.writeFile('base.css', '.base { color: blue; }');
 
-    const content = processor.readStyleFile(entry, undefined, {
+    const content = await processor.readStyleFile(entry, undefined, {
       mapImportSpecifier: () => './mapped/base.css',
       shouldExpandImport: () => false,
     });
@@ -422,7 +422,7 @@ describe('StyleProcessor', () => {
     expect(content).toContain('.entry { color: red; }');
   });
 
-  test('preserves import conditions when remapping url import specifiers', () => {
+  test('preserves import conditions when remapping url import specifiers', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -432,7 +432,7 @@ describe('StyleProcessor', () => {
     );
     project.writeFile('base.css', '.base { color: blue; }');
 
-    const content = processor.readStyleFile(entry, undefined, {
+    const content = await processor.readStyleFile(entry, undefined, {
       mapImportSpecifier: () => './mapped/base.css',
       shouldExpandImport: () => false,
     });
@@ -443,7 +443,7 @@ describe('StyleProcessor', () => {
     expect(content).toContain('.entry { color: red; }');
   });
 
-  test('rejects missing local CSS imports when expansion is disabled', () => {
+  test('rejects missing local CSS imports when expansion is disabled', async () => {
     const entry = project.writeFile(
       'entry.css',
       `
@@ -452,10 +452,259 @@ describe('StyleProcessor', () => {
       `,
     );
 
-    expect(() =>
+    await expect(
       processor.readStyleFile(entry, undefined, {
         shouldExpandImport: () => false,
       }),
-    ).toThrow('[css] local CSS import not found: ./missing.css from');
+    ).rejects.toThrow('[css] local CSS import not found: ./missing.css from');
+  });
+
+  test('compiles Less nesting and variables on disk read', async () => {
+    const entry = project.writeFile(
+      'entry.less',
+      `
+        @color: red;
+        .entry {
+          color: @color;
+          .child { color: blue; }
+        }
+      `,
+    );
+
+    const content = await processor.readStyleFile(entry);
+
+    expect(content).toContain('color: red');
+    expect(content).toContain('.entry .child');
+    expect(content).not.toContain('@color');
+  });
+
+  test('inlines Less imports and keeps remaining CSS @import for the graph', async () => {
+    const tokens = project.writeFile(
+      'tokens.less',
+      '@text: green;\n.tokens { color: @text; }',
+    );
+    project.writeFile('base.css', '.base { color: blue; }');
+    const entry = project.writeFile(
+      'entry.less',
+      `
+        @import "./tokens.less";
+        @import "./base.css";
+        .entry { color: red; }
+      `,
+    );
+
+    const content = await processor.readStyleFile(entry, undefined, {
+      shouldExpandImport: () => false,
+    });
+    const lessImports = await processor.collectLessImportFiles(entry);
+    const imported = await processor.collectImportedStyleFiles([entry]);
+
+    expect(content).toContain('.tokens');
+    expect(content).toContain('color: green');
+    // Less rewrites `./base.css` to a bare `base.css` import.
+    expect(content).toMatch(/@import\s+"base\.css"/);
+    expect(content).not.toContain('@import "./tokens.less"');
+    expect(lessImports).toEqual([tokens]);
+    expect(imported).toEqual(new Set([tokens, project.resolve('base.css')]));
+  });
+
+  test('allows Less to import CSS and rejects CSS importing Less', async () => {
+    project.writeFile('base.css', '.base { color: blue; }');
+    const lessEntry = project.writeFile(
+      'entry.less',
+      `
+        @import "./base.css";
+        .entry { color: red; }
+      `,
+    );
+    project.writeFile('theme.less', '.theme { color: green; }');
+    const cssEntry = project.writeFile(
+      'entry.css',
+      `
+        @import "./theme.less";
+        .entry { color: red; }
+      `,
+    );
+
+    const content = await processor.readStyleFile(lessEntry);
+    expect(content).toContain('.base');
+    expect(content).toContain('color: blue');
+    expect(content).toContain('.entry');
+    expect(content).toContain('color: red');
+
+    await expect(processor.readStyleFile(cssEntry)).rejects.toThrow(
+      '[css] CSS must not import Less:',
+    );
+  });
+
+  test('applies styles.prefix once on the root read and not again via appendStyleContent', async () => {
+    const resolver = {
+      resolveSourceStyleDependency(specifier: string, fromDir: string) {
+        if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
+        return null;
+      },
+      resolveStyleDependency(specifier: string, fromDir: string) {
+        if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
+        return project.resolve('node_modules', specifier);
+      },
+      isInsideSourceRoot(file: string) {
+        const relative = path.relative(project.root, file);
+        return (
+          Boolean(relative) &&
+          !relative.startsWith('..') &&
+          !path.isAbsolute(relative)
+        );
+      },
+    } as WorkspaceStyleResolver;
+    const prefixed = new StyleProcessor(moduleStyleBuildConfig, resolver, {
+      prefix: '.mf-app',
+    });
+    const entry = project.writeFile(
+      'entry.less',
+      `
+        @keyframes fade {
+          from { opacity: 0; }
+        }
+        .entry { color: red; }
+      `,
+    );
+
+    const content = await prefixed.readStyleFile(entry, undefined, {
+      applyPrefix: true,
+    });
+    expect(content).toContain('.mf-app .entry');
+    expect(content).not.toContain('.mf-app .mf-app .entry');
+    expect(content).toContain('@keyframes fade');
+    expect(content).toContain('opacity: 0');
+    expect(content).not.toContain('.mf-app from');
+
+    const root = prefixed.createRoot();
+    prefixed.appendStyleContent(root, content, entry);
+    const appended = prefixed.stringify(root);
+
+    expect(appended).toContain('.mf-app .entry');
+    expect(appended).not.toContain('.mf-app .mf-app .entry');
+  });
+
+  test('prefixes nested CSS import expansion only at the root call', async () => {
+    const resolver = {
+      resolveSourceStyleDependency(specifier: string, fromDir: string) {
+        if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
+        return null;
+      },
+      resolveStyleDependency(specifier: string, fromDir: string) {
+        if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
+        return project.resolve('node_modules', specifier);
+      },
+      isInsideSourceRoot(_file: string) {
+        return true;
+      },
+    } as WorkspaceStyleResolver;
+    const prefixed = new StyleProcessor(moduleStyleBuildConfig, resolver, {
+      prefix: '.mf-app',
+    });
+    const entry = project.writeFile(
+      'entry.css',
+      `
+        @import "./base.css";
+        .entry { color: red; }
+      `,
+    );
+    project.writeFile('base.css', '.base { color: blue; }');
+
+    const content = await prefixed.readStyleFile(entry, undefined, {
+      applyPrefix: true,
+    });
+
+    expectNoImports(content);
+    expect(content).toContain('.mf-app .base');
+    expect(content).toContain('.mf-app .entry');
+    expect(content).not.toContain('.mf-app .mf-app');
+  });
+
+  test('does not apply styles.prefix unless applyPrefix is opted in', async () => {
+    const resolver = {
+      resolveSourceStyleDependency(specifier: string, fromDir: string) {
+        if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
+        return null;
+      },
+      resolveStyleDependency(specifier: string, fromDir: string) {
+        if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
+        return project.resolve('node_modules', specifier);
+      },
+      isInsideSourceRoot(_file: string) {
+        return true;
+      },
+    } as WorkspaceStyleResolver;
+    const prefixed = new StyleProcessor(moduleStyleBuildConfig, resolver, {
+      prefix: '.mf-app',
+    });
+    const entry = project.writeFile('entry.css', '.entry { color: red; }');
+
+    const content = await prefixed.readStyleFile(entry);
+
+    expect(content).toContain('.entry { color: red; }');
+    expect(content).not.toContain('.mf-app .entry');
+  });
+
+  test('applies prefix to every top-level own file when reusing a shared seen set', async () => {
+    const resolver = {
+      resolveSourceStyleDependency(specifier: string, fromDir: string) {
+        if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
+        return null;
+      },
+      resolveStyleDependency(specifier: string, fromDir: string) {
+        if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
+        return project.resolve('node_modules', specifier);
+      },
+      isInsideSourceRoot(file: string) {
+        const relative = path.relative(project.root, file);
+        return (
+          Boolean(relative) &&
+          !relative.startsWith('..') &&
+          !path.isAbsolute(relative)
+        );
+      },
+    } as WorkspaceStyleResolver;
+    const prefixed = new StyleProcessor(moduleStyleBuildConfig, resolver, {
+      prefix: '.mf-app',
+    });
+    const first = project.writeFile('first.css', '.first { color: red; }');
+    const second = project.writeFile('second.css', '.second { color: blue; }');
+    const dependency = project.writeFile(
+      'node_modules/dep.css',
+      '.dependency { color: purple; }',
+    );
+    const seen = new Set<string>();
+
+    const firstContent = await prefixed.readStyleFile(first, seen, {
+      applyPrefix: true,
+    });
+    const dependencyContent = await prefixed.readStyleFile(dependency, seen, {
+      applyPrefix: false,
+    });
+    const secondContent = await prefixed.readStyleFile(second, seen, {
+      applyPrefix: true,
+    });
+
+    expect(firstContent).toContain('.mf-app .first');
+    expect(secondContent).toContain('.mf-app .second');
+    expect(dependencyContent).toContain('.dependency { color: purple; }');
+    expect(dependencyContent).not.toContain('.mf-app .dependency');
+  });
+
+  test('reuses Less compile cache until clearLessCache', async () => {
+    const entry = project.writeFile('entry.less', '.entry { color: red; }');
+
+    await processor.warmLessCache([entry]);
+    const first = await processor.readStyleFile(entry);
+    project.writeFile('entry.less', '.entry { color: blue; }');
+    const cached = await processor.readStyleFile(entry);
+    processor.clearLessCache();
+    const refreshed = await processor.readStyleFile(entry);
+
+    expect(first).toContain('color: red');
+    expect(cached).toContain('color: red');
+    expect(refreshed).toContain('color: blue');
   });
 });

@@ -55,6 +55,34 @@ describe('ModuleStyleBuilder package output', () => {
     expect(fixture.exists('output/lib/style/index.css')).toBe(false);
   });
 
+  test('compiles Less sources and applies styles.prefix in package output', async () => {
+    fixture.writeFile(
+      'source/components/Button/index.tsx',
+      'export const Button = null;',
+    );
+    fixture.writeFile(
+      'source/components/Button/index.less',
+      `
+        @accent: blue;
+        .button { color: @accent; }
+      `,
+    );
+
+    await createBuilder(fixture, {
+      ...baseConfig,
+      styles: {
+        prefix: '.mf-app',
+      },
+    }).build();
+
+    const packageStyle = fixture.readFile('output/index.css');
+
+    expect(packageStyle).toContain('.mf-app .button');
+    expect(packageStyle).toContain('color: blue');
+    expect(packageStyle).not.toContain('@accent');
+    expect(fixture.exists('output/components/Button/index.less')).toBe(false);
+  });
+
   test('rejects source-root escaping local CSS imports before writing package output', async () => {
     fixture.writeFile(
       'source/components/Button/index.tsx',

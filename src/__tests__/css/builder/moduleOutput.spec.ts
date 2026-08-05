@@ -57,6 +57,35 @@ describe('ModuleStyleBuilder module output', () => {
     expect(esStyleEntry).toBe('@import "./module.css";\n');
   });
 
+  test('copies compiled Less sources as CSS under module format output', async () => {
+    fixture.writeFile(
+      'source/components/Button/index.tsx',
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/Button/index.less',
+      `
+        @accent: blue;
+        .button { color: @accent; }
+      `,
+    );
+
+    await createBuilder(fixture, moduleConfig).build();
+
+    const sourceStyle = fixture.readFile(
+      'output/es/components/Button/index.css',
+    );
+    const moduleStyle = fixture.readFile('output/es/style/module.css');
+
+    expect(sourceStyle).toContain('.button');
+    expect(sourceStyle).toContain('color: blue');
+    expect(sourceStyle).not.toContain('@accent');
+    expect(fixture.exists('output/es/components/Button/index.less')).toBe(
+      false,
+    );
+    expect(moduleStyle).toContain('@import "../components/Button/index.css"');
+  });
+
   test('preserves configured same-package shared CSS imports in component outputs and aggregate entries', async () => {
     fixture.writePackageJson({
       name: 'fixture-package',

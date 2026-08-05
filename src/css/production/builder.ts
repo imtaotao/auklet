@@ -38,7 +38,9 @@ export class ModuleStyleBuilder {
     const packageContext =
       (options.packageContext as StylePackageContext | undefined) ??
       this.createStylePackageContext(context, normalizedConfig);
-    packageContext.assertNoSourceRootEscapingLocalStyleImports();
+
+    await packageContext.prepareStyleLanguage();
+    await packageContext.assertNoSourceRootEscapingLocalStyleImports();
 
     const writerOptions = {
       config: this.config,
@@ -46,11 +48,13 @@ export class ModuleStyleBuilder {
       packageContext,
     };
     const packageWriter = new PackageStyleEntryWriter(writerOptions);
-    const packageOutput = packageWriter.write();
+    const packageOutput = await packageWriter.write();
     const outputs = packageOutput ? [packageOutput] : [];
 
     if (normalizedConfig.modules) {
-      outputs.push(...new ModuleStyleOutputWriter(writerOptions).write());
+      outputs.push(
+        ...(await new ModuleStyleOutputWriter(writerOptions).write()),
+      );
     }
 
     return {

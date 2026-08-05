@@ -160,11 +160,12 @@ export const config = defineConfig({
     target: 'es2022',
   },
   styles: {
+    prefix: '#subapp',
     themes: {
       light: './src/themes/light.css',
       dark: './src/themes/dark.css',
     },
-    shared: ['./src/internal/**/*.css'],
+    shared: ['./src/internal/**/*.{css,less}'],
     dependencies: {
       '@scope/ui': {
         entry: '/style.css',
@@ -175,16 +176,12 @@ export const config = defineConfig({
 });
 ```
 
-`styles.shared` declares same-package CSS fragments that component CSS may
-import directly. Matched files must live under the current source root. The
-pattern syntax is a small glob subset: `*`, `**`, and `?`.
-
-For example, `components/CodeBlock/index.css` may import
-`../../internal/syntaxHighlight.css` when it matches `styles.shared`; component
-CSS outputs keep that `@import` relationship instead of expanding the shared
-rules into every component output. The shared CSS file is still copied as its
-own source-level CSS file. `dist/index.css` remains the full package CSS
-aggregate, while format-level and component-level CSS entries preserve the
-import graph as much as possible. Shared CSS cannot import component CSS or
-theme CSS. Component-to-component CSS imports are still rejected; package CSS
-dependencies should be expressed through `styles.dependencies`.
+Source styles may be `.css` or `.less` (compiled by auklet; outputs stay CSS).
+`styles.prefix` wraps selectors on this package's own rules for mount-point
+isolation; dependency CSS from `styles.dependencies` is never prefixed. The host
+must provide a matching container when prefixed rules target `:root`, `html`, or
+`body`. `styles.shared` declares same-package fragments component styles may
+import (`*`, `**`, `?`); prefer `.css` shared when the `@import` edge must stay
+in the graph. Shared files cannot import component or theme styles.
+Component-to-component style imports are rejected; package style dependencies
+use `styles.dependencies` (built CSS of the dependency, not its Less sources).

@@ -24,7 +24,7 @@ export class ModuleStyleEntryWriter {
     this.styleProcessor = options.packageContext.styleProcessor;
   }
 
-  write(outRoot: string, entries: Array<ModuleStyleEntryPlan>) {
+  async write(outRoot: string, entries: Array<ModuleStyleEntryPlan>) {
     const outputs: Array<string> = [];
 
     for (const entry of entries) {
@@ -34,7 +34,7 @@ export class ModuleStyleEntryWriter {
         this.config.output.styleDir,
       );
       const target = path.join(styleDir, this.config.output.indexStyleFile);
-      const ownImports = this.styleProcessor.collectStyleImportSpecifiers(
+      const ownImports = await this.styleProcessor.collectStyleImportSpecifiers(
         entry.ownStyleFiles,
       );
       const sourceStyleSpecifiers = [

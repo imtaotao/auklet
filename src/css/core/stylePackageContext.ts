@@ -56,7 +56,9 @@ export class StylePackageContext {
     this.normalizedConfig = normalizedConfig;
     this.sourceRoot = path.join(context.packageRoot, context.sourceDir);
     this.resolver = new WorkspaceStyleResolver(config, context);
-    this.styleProcessor = new StyleProcessor(config, this.resolver);
+    this.styleProcessor = new StyleProcessor(config, this.resolver, {
+      prefix: normalizedConfig.styles.prefix,
+    });
     this.importCollector = new ModuleStyleImportCollector(
       this.sourceRoot,
       context.packageRoot,
@@ -110,17 +112,24 @@ export class StylePackageContext {
     this.moduleStyleEntryPlanner = undefined;
     this.hasValidatedSourceRootLocalStyleImports = false;
     this.hasValidatedPreservedLocalStyleImports = false;
+    this.styleProcessor.clearLessCache();
   }
 
-  getModuleStyleEntryPlanner() {
-    this.moduleStyleEntryPlanner ??= new StyleModuleEntryPlanner(this);
+  async prepareStyleLanguage() {
+    await this.styleProcessor.warmLessCache([
+      ...this.styleFiles,
+      ...this.themeFiles.values(),
+    ]);
+  }
+
+  async getModuleStyleEntryPlanner() {
+    this.moduleStyleEntryPlanner ??= await StyleModuleEntryPlanner.create(this);
     return this.moduleStyleEntryPlanner;
   }
 
-  getStyleEntryFiles() {
-    const importedStyleFiles = this.styleProcessor.collectImportedStyleFiles(
-      this.styleFiles,
-    );
+  async getStyleEntryFiles() {
+    const importedStyleFiles =
+      await this.styleProcessor.collectImportedStyleFiles(this.styleFiles);
     return this.styleFiles.filter(
       (styleFile) => !importedStyleFiles.has(path.resolve(styleFile)),
     );
@@ -139,16 +148,16 @@ export class StylePackageContext {
     );
   }
 
-  assertPreservedLocalStyleImports() {
+  async assertPreservedLocalStyleImports() {
     if (this.hasValidatedPreservedLocalStyleImports) return;
-    this.assertNoSourceRootEscapingLocalStyleImports();
-    this.styleProcessor.assertNoLocalStyleImportCycles(this.styleFiles);
+    await this.assertNoSourceRootEscapingLocalStyleImports();
+    await this.styleProcessor.assertNoLocalStyleImportCycles(this.styleFiles);
     this.hasValidatedPreservedLocalStyleImports = true;
   }
 
-  assertNoSourceRootEscapingLocalStyleImports() {
+  async assertNoSourceRootEscapingLocalStyleImports() {
     if (this.hasValidatedSourceRootLocalStyleImports) return;
-    this.styleProcessor.assertNoSourceRootEscapingLocalStyleImports([
+    await this.styleProcessor.assertNoSourceRootEscapingLocalStyleImports([
       ...this.styleFiles,
       ...this.themeFiles.values(),
     ]);

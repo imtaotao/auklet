@@ -83,7 +83,7 @@ export class StyleCodeFactory {
     } else if (parsed.stylePath === EXTERNAL_ENTRY) {
       result = await this.createExternalStyleCode(context, cache);
     } else if (parsed.stylePath === MODULE_ENTRY) {
-      result = this.createModuleStyleCode(context);
+      result = await this.createModuleStyleCode(context);
     } else if (parsed.stylePath.startsWith(THEMES_ENTRY_PREFIX)) {
       result = await this.createThemeStyleCode(context, cache, [
         removeStyleExtension(
@@ -124,7 +124,7 @@ export class StyleCodeFactory {
         );
         continue;
       }
-      results.push(this.createFullModuleStyleCode(context));
+      results.push(await this.createFullModuleStyleCode(context));
     }
 
     return mergeLoadResults(...results);
@@ -223,7 +223,11 @@ export class StyleCodeFactory {
 
         const themeFile = themeFiles.get(part.themeName);
         if (!themeFile) continue;
-        const content = context.styleProcessor.readStyleFile(themeFile);
+        const content = await context.styleProcessor.readStyleFile(
+          themeFile,
+          undefined,
+          { applyPrefix: true },
+        );
         if (content.trim()) {
           context.styleProcessor.appendStyleContent(root, content, themeFile);
         }
@@ -243,13 +247,17 @@ export class StyleCodeFactory {
     );
   }
 
-  private createFullModuleStyleCode(context: PackageStyleContext) {
+  private async createFullModuleStyleCode(context: PackageStyleContext) {
     const { styleFiles } = context.packageContext;
     const root = context.styleProcessor.createRoot();
     const seen = new Set<string>();
 
     for (const styleFile of styleFiles) {
-      const content = context.styleProcessor.readStyleFile(styleFile, seen);
+      const content = await context.styleProcessor.readStyleFile(
+        styleFile,
+        seen,
+        { applyPrefix: true },
+      );
       if (content.trim()) {
         context.styleProcessor.appendStyleContent(root, content, styleFile);
       }
@@ -261,16 +269,29 @@ export class StyleCodeFactory {
     };
   }
 
-  private createModuleStyleCode(context: PackageStyleContext) {
-    context.packageContext.assertPreservedLocalStyleImports();
+  private async createModuleStyleCode(context: PackageStyleContext) {
+    await context.packageContext.assertPreservedLocalStyleImports();
 
     const { styleFiles } = context.packageContext;
-    const imports = context.packageContext
-      .getStyleEntryFiles()
-      .map((styleFile) => toFsSpecifier(styleFile));
+    const hasPrefix = Boolean(context.normalizedConfig.styles.prefix);
+    const cssImports: Array<string> = [];
+    const processedCodes: Array<string> = [];
+
+    for (const styleFile of await context.packageContext.getStyleEntryFiles()) {
+      // Less can never be /@fs. With styles.prefix, own CSS must also go through
+      // StyleProcessor so Vite matches production's prefixed copies.
+      if (path.extname(styleFile) === '.less' || hasPrefix) {
+        const code = await this.createOwnSourceStyleCode(context, [styleFile]);
+        if (code.trim()) processedCodes.push(code);
+        continue;
+      }
+      cssImports.push(toFsSpecifier(styleFile));
+    }
 
     return {
-      code: createImportCode(imports),
+      code: [createImportCode(cssImports), ...processedCodes]
+        .filter((code) => code.trim())
+        .join('\n'),
       watchFiles: [...context.configPaths, ...styleFiles],
     };
   }
@@ -280,11 +301,11 @@ export class StyleCodeFactory {
     cache: ModuleStyleGraphRequestCache,
     stylePath: string,
   ) {
-    context.packageContext.assertPreservedLocalStyleImports();
+    await context.packageContext.assertPreservedLocalStyleImports();
 
     const sourceModuleDir = removeStyleExtension(stylePath);
     const { sourceFiles } = context.packageContext;
-    const entry = createModuleStyleEntryPlan(
+    const entry = await createModuleStyleEntryPlan(
       context.packageContext,
       sourceModuleDir,
     );
@@ -326,11 +347,11 @@ export class StyleCodeFactory {
       }
     }
 
-    const ownStyleCode = this.createOwnSourceStyleCode(
+    const ownStyleCode = await this.createOwnSourceStyleCode(
       context,
       entry.ownStyleFiles,
     );
-    const sourceWatchFiles = this.collectSourceStyleWatchFiles(
+    const sourceWatchFiles = await this.collectSourceStyleWatchFiles(
       context,
       entry.ownStyleFiles,
     );
@@ -363,24 +384,40 @@ export class StyleCodeFactory {
     });
   }
 
-  private createOwnSourceStyleCode(
+  private async createOwnSourceStyleCode(
     context: PackageStyleContext,
     styleFiles: Array<string>,
   ) {
     const root = context.styleProcessor.createRoot();
+    const hasPrefix = Boolean(context.normalizedConfig.styles.prefix);
 
     for (const styleFile of styleFiles) {
-      const content = context.styleProcessor.readStyleFile(
+      const content = await context.styleProcessor.readStyleFile(
         styleFile,
         undefined,
         {
+          applyPrefix: true,
           mapImportSpecifier: (reference) => {
             if (!context.resolver.isInsideSourceRoot(reference.imported)) {
               return reference.specifier;
             }
+            if (path.extname(reference.imported) === '.less') {
+              throw new Error(
+                `[css] Vite must not emit /@fs for Less: ${reference.imported}`,
+              );
+            }
+            // With prefix, own CSS is expanded below instead of raw /@fs.
+            if (hasPrefix) return reference.specifier;
             return toFsSpecifier(reference.imported);
           },
-          shouldExpandImport: () => false,
+          shouldExpandImport: (reference) => {
+            if (!context.resolver.isInsideSourceRoot(reference.imported)) {
+              return false;
+            }
+            // Less cannot use /@fs. Prefixed own CSS must be processed too so
+            // preserved shared imports match production's prefixed copies.
+            return path.extname(reference.imported) === '.less' || hasPrefix;
+          },
         },
       );
       if (content.trim()) {
@@ -391,7 +428,7 @@ export class StyleCodeFactory {
     return root.nodes?.length ? context.styleProcessor.stringify(root) : '';
   }
 
-  private collectSourceStyleWatchFiles(
+  private async collectSourceStyleWatchFiles(
     context: PackageStyleContext,
     styleFiles: Array<string>,
   ) {
@@ -418,7 +455,7 @@ export class StyleCodeFactory {
           : 'dependency',
       );
 
-      for (const reference of context.styleProcessor.collectStyleImportReferences(
+      for (const reference of await context.styleProcessor.collectStyleImportReferences(
         [normalized],
       )) {
         if (
@@ -429,6 +466,16 @@ export class StyleCodeFactory {
         }
         pending.push({
           file: reference.imported,
+          kind: 'dependency',
+        });
+      }
+
+      for (const imported of await context.styleProcessor.collectLessImportFiles(
+        normalized,
+      )) {
+        if (!fs.existsSync(imported)) continue;
+        pending.push({
+          file: imported,
           kind: 'dependency',
         });
       }

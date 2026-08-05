@@ -12,7 +12,8 @@ areas:
 - JavaScript/TypeScript builds: generate bundle, global, and module output based
   on `tsdown`.
 - Style builds: generate package CSS, module CSS, theme CSS, external CSS, and
-  virtual CSS entries for Vite dev mode.
+  virtual CSS entries for Vite dev mode. CSS/Less semantics, `styles.prefix`,
+  and Vite alignment details live in `docs/css.md`.
 
 This repository itself is a single-package project. `examples/` contains real
 project-shape demos for debugging and testing both monorepo and single-package

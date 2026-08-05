@@ -33,7 +33,7 @@ export class ThemeStyleWriter {
     });
   }
 
-  writeThemeStyles(outRoot: string) {
+  async writeThemeStyles(outRoot: string) {
     const outputs: Array<ThemeStyleOutput> = [];
     const themesDir = path.join(
       outRoot,
@@ -43,7 +43,11 @@ export class ThemeStyleWriter {
 
     for (const [themeName, stylePath] of this.packageContext.themeFiles) {
       const root = this.styleProcessor.createRoot();
-      const content = this.styleProcessor.readStyleFile(stylePath);
+      const content = await this.styleProcessor.readStyleFile(
+        stylePath,
+        undefined,
+        { applyPrefix: true },
+      );
       if (content.trim()) {
         this.styleProcessor.appendStyleContent(root, content, stylePath);
       }

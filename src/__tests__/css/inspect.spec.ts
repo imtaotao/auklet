@@ -31,8 +31,8 @@ describe('createCssInspectModel', () => {
     fixture.project.cleanup();
   });
 
-  test('explains configured CSS entries without writing output', () => {
-    const model = createCssInspectModel({
+  test('explains configured CSS entries without writing output', async () => {
+    const model = await createCssInspectModel({
       packageRoot: fixture.packageRoot,
       aukletConfig: {
         source: fixture.sourceDir,
@@ -110,8 +110,8 @@ describe('createCssInspectModel', () => {
     expect(fixture.outputFiles()).toEqual([]);
   });
 
-  test('does not report module entries when modules are disabled', () => {
-    const model = createCssInspectModel({
+  test('does not report module entries when modules are disabled', async () => {
+    const model = await createCssInspectModel({
       packageRoot: fixture.packageRoot,
       aukletConfig: {
         source: fixture.sourceDir,
@@ -125,13 +125,13 @@ describe('createCssInspectModel', () => {
     expect(model.moduleEntries).toEqual([]);
   });
 
-  test('does not report CSS entry rows when the package has no CSS inputs', () => {
+  test('does not report CSS entry rows when the package has no CSS inputs', async () => {
     const project = createVirtualProject('auklet-css-inspect-empty-');
     project.writeJson('package.json', {
       name: '@scope/empty',
     });
 
-    const model = createCssInspectModel({
+    const model = await createCssInspectModel({
       packageRoot: project.root,
       aukletConfig: {
         source: 'src',
@@ -147,7 +147,7 @@ describe('createCssInspectModel', () => {
     project.cleanup();
   });
 
-  test('sorts external dependencies before internal dependencies for inspection', () => {
+  test('sorts external dependencies before internal dependencies for inspection', async () => {
     fixture.writeStyle(
       `${fixture.sourceDir}/components/Sorted/index.tsx`,
       `
@@ -157,7 +157,7 @@ describe('createCssInspectModel', () => {
         export function Sorted() { return Callout ?? Button ?? InternalButton ?? null; }
       `,
     );
-    const model = createCssInspectModel({
+    const model = await createCssInspectModel({
       packageRoot: fixture.packageRoot,
       aukletConfig: {
         source: fixture.sourceDir,

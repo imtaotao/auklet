@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { groupStyleFilesByDir } from '#auklet/css/core/style/files';
+import type { StyleFileImportReference } from '#auklet/css/core/styleProcessor';
 import { getSourceModuleDir, toPosixPath } from '#auklet/utils';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 
@@ -14,16 +15,28 @@ export class StyleModuleEntryPlanner {
   private readonly importedStyleFiles: Set<string>;
   private readonly styleFilesByDir: Map<string, Array<string>>;
 
-  constructor(private readonly packageContext: StylePackageContext) {
+  private constructor(
+    private readonly packageContext: StylePackageContext,
+    importedStyleFiles: Set<string>,
+  ) {
     this.styleFilesByDir = groupStyleFilesByDir(
       this.packageContext.sourceRoot,
       this.packageContext.styleFiles,
     );
-    this.importedStyleFiles =
-      this.packageContext.styleProcessor.collectImportedStyleFiles(
-        this.packageContext.styleFiles,
+    this.importedStyleFiles = importedStyleFiles;
+  }
+
+  static async create(packageContext: StylePackageContext) {
+    const importedStyleFiles =
+      await packageContext.styleProcessor.collectImportedStyleFiles(
+        packageContext.styleFiles,
       );
-    this.rejectCrossModuleStyleImports();
+    const planner = new StyleModuleEntryPlanner(
+      packageContext,
+      importedStyleFiles,
+    );
+    await planner.rejectCrossModuleStyleImports();
+    return planner;
   }
 
   createEntries(moduleStyleImports: Map<string, Array<string>>) {
@@ -86,58 +99,65 @@ export class StyleModuleEntryPlanner {
     );
   }
 
-  private rejectCrossModuleStyleImports() {
+  private async rejectCrossModuleStyleImports() {
     if (!this.packageContext.normalizedConfig.modules) return;
 
     const styleFileKeys = new Set(
       this.packageContext.styleFiles.map((file) => path.resolve(file)),
     );
     const imports =
-      this.packageContext.styleProcessor.collectImportedStyleFileReferences(
+      await this.packageContext.styleProcessor.collectImportedStyleFileReferences(
         this.packageContext.styleFiles,
       );
 
     for (const item of imports) {
-      if (!this.isInsideSourceRoot(item.imported)) {
-        const importer = this.toRelativeSourceFile(item.importer);
-        const imported = toPosixPath(item.imported);
-        throw new Error(
-          `[css] cross-package CSS import detected: ${importer} imports ${imported}. ` +
-            'Use styles.dependencies to express package style dependencies.',
-        );
-      }
+      this.rejectCrossModuleStyleImport(item, styleFileKeys);
+    }
+  }
 
-      if (this.packageContext.shouldAllowSharedStyleImport(item)) continue;
+  private rejectCrossModuleStyleImport(
+    item: StyleFileImportReference,
+    styleFileKeys: Set<string>,
+  ) {
+    if (!this.isInsideSourceRoot(item.imported)) {
+      const importer = this.toRelativeSourceFile(item.importer);
+      const imported = toPosixPath(item.imported);
+      throw new Error(
+        `[css] cross-package CSS import detected: ${importer} imports ${imported}. ` +
+          'Use styles.dependencies to express package style dependencies.',
+      );
+    }
 
-      if (this.packageContext.isSharedStyleFile(item.importer)) {
-        const importer = this.toRelativeSourceFile(item.importer);
-        const imported = this.toRelativeSourceFile(item.imported);
-        throw new Error(
-          `[css] shared CSS import must target non-module source CSS: ${importer} imports ${imported}.`,
-        );
-      }
+    if (this.packageContext.shouldAllowSharedStyleImport(item)) return;
 
-      if (!styleFileKeys.has(item.imported)) continue;
-
-      const importerModuleDir = this.getStyleFileModuleDir(item.importer);
-      const importedModuleDir = this.getStyleFileModuleDir(item.imported);
-
-      if (
-        !importerModuleDir ||
-        !importedModuleDir ||
-        importerModuleDir === importedModuleDir
-      ) {
-        continue;
-      }
-
+    if (this.packageContext.isSharedStyleFile(item.importer)) {
       const importer = this.toRelativeSourceFile(item.importer);
       const imported = this.toRelativeSourceFile(item.imported);
       throw new Error(
-        `[css] cross-component CSS import detected: ${importer} imports ${imported}. ` +
-          'Use TSX imports to express component dependencies so auklet can ' +
-          'generate module CSS entries correctly.',
+        `[css] shared CSS import must target non-module source CSS: ${importer} imports ${imported}.`,
       );
     }
+
+    if (!styleFileKeys.has(item.imported)) return;
+
+    const importerModuleDir = this.getStyleFileModuleDir(item.importer);
+    const importedModuleDir = this.getStyleFileModuleDir(item.imported);
+
+    if (
+      !importerModuleDir ||
+      !importedModuleDir ||
+      importerModuleDir === importedModuleDir
+    ) {
+      return;
+    }
+
+    const importer = this.toRelativeSourceFile(item.importer);
+    const imported = this.toRelativeSourceFile(item.imported);
+    throw new Error(
+      `[css] cross-component CSS import detected: ${importer} imports ${imported}. ` +
+        'Use TSX imports to express component dependencies so auklet can ' +
+        'generate module CSS entries correctly.',
+    );
   }
 
   private getStyleFileModuleDir(file: string) {

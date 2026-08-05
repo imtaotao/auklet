@@ -62,6 +62,8 @@ Check:
 - Production writers under `src/css/production/format/`.
 - Vite graph generation under `src/css/vite/moduleGraph/`.
 - `docs/css.md` if the supported model or boundaries change.
+- Less compile / `styles.prefix` / Vite `/@fs` rules stay in `StyleProcessor`
+  and `styleCodeFactory` (not entry writers).
 
 Tests:
 

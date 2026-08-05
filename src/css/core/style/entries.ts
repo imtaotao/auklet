@@ -56,19 +56,20 @@ export function collectModuleStyleImports(packageContext: StylePackageContext) {
   return packageContext.getModuleStyleImports();
 }
 
-export function createModuleStyleEntryPlan(
+export async function createModuleStyleEntryPlan(
   packageContext: StylePackageContext,
   sourceDir: string,
 ) {
-  return packageContext
-    .getModuleStyleEntryPlanner()
-    .createEntry(sourceDir, collectModuleStyleImports(packageContext));
+  const planner = await packageContext.getModuleStyleEntryPlanner();
+  return planner.createEntry(
+    sourceDir,
+    collectModuleStyleImports(packageContext),
+  );
 }
 
-export function createModuleStyleEntryPlans(
+export async function createModuleStyleEntryPlans(
   packageContext: StylePackageContext,
 ) {
-  return packageContext
-    .getModuleStyleEntryPlanner()
-    .createEntries(collectModuleStyleImports(packageContext));
+  const planner = await packageContext.getModuleStyleEntryPlanner();
+  return planner.createEntries(collectModuleStyleImports(packageContext));
 }

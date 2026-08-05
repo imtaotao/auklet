@@ -7,8 +7,8 @@ bundler or a replacement for Vite/PostCSS.
 ## Naming Conventions
 
 Use `Style` for internal style build concepts, such as `ModuleStyleBuilder`,
-`ModuleStyleGraph`, and `PackageStyleEntryWriter`. This keeps core abstractions
-stable if auklet later supports other style languages such as Less.
+`ModuleStyleGraph`, and `PackageStyleEntryWriter`. Source languages may be CSS
+or Less; published and virtual artifacts remain CSS.
 
 Keep `css` only where the API or artifact is explicitly CSS-oriented:
 
@@ -30,6 +30,8 @@ src/css/
 └── core/
     ├── stylePackageContext.ts        # Collects style build context for one package
     ├── styleProcessor.ts             # Reads, merges, and expands style content
+    ├── lessCompiler.ts               # Compiles `.less` sources to CSS
+    ├── prefixSelectors.ts            # Applies `styles.prefix` to PostCSS roots
     ├── workspaceStyleResolver.ts     # Resolves workspace/package/node_modules style deps
     ├── styleImports/                 # Infers style deps from TSX imports/re-exports
     ├── resolvers/                    # Same-package source import candidate resolvers
@@ -41,8 +43,10 @@ Key modules:
 
 - `StylePackageContext`: aggregates package root, source/output directories,
   theme files, style files, resolver, and processor.
-- `StyleProcessor`: reads CSS files, can expand local `@import` when a writer
-  needs merged CSS, and merges PostCSS roots.
+- `StyleProcessor`: loads `.css` / `.less` (Less compiles on disk read), expands
+  local `@import` when needed, applies `styles.prefix`, and merges PostCSS roots.
+- `lessCompiler.ts` / `prefixSelectors.ts`: the only allowed style transforms;
+  called from `StyleProcessor`, not from production writers.
 - `WorkspaceStyleResolver`: resolves style dependencies from config to real
   files or output paths.
 - `styleImports/collector.ts`: scans `.tsx` source files and infers module-level
@@ -140,24 +144,20 @@ auklet supports this user model:
 
 The supported input surface is intentionally narrow:
 
-- Source style files are regular CSS files discovered under the configured
-  source root.
-- Current package theme entries come from `styles.themes`.
-- Controlled same-package shared CSS fragments come from `styles.shared`.
-  Matched files must be under the current package source root. Component CSS may
-  import them directly, and generated component CSS preserves those imports so
-  shared style layers stay represented as shared files. Shared patterns support a
-  small glob subset: `*`, `**`, and `?`.
-- External package style entries, theme entries, and component auto-import rules
-  come from `styles.dependencies`.
-- `auk inspect css` is read-only. It can explain the current package plan before
-  building that package, but dependency packages should be built first when their
-  CSS outputs are part of the plan.
-- Module auto imports are inferred from `.tsx` imports and named re-exports.
-  `.ts`, `.d.ts`, and `export * from` are outside the inference model.
-- Same-package source specifiers may resolve through relative paths,
-  `package.json#imports`, or `tsconfig.compilerOptions.paths`, but resolved
-  files must stay inside the current package source root.
+- Source style files are `.css` or `.less` under the configured source root.
+  Outputs and Vite virtual modules are always CSS (`.less` → `.css`).
+- `styles.prefix` wraps selectors on the current package's own style rules
+  (host must provide the matching container for `:root` / `html` / `body`).
+- Current package theme entries come from `styles.themes` (may point at `.less`).
+- Controlled same-package shared fragments come from `styles.shared` under the
+  source root. Prefer `.css` shared when the `@import` edge must be preserved;
+  Less→Less shared is inlined by Less. Shared patterns support `*`, `**`, `?`.
+- External package style entries come from `styles.dependencies` and always
+  reference the dependency's built CSS (not its Less sources).
+- `auk inspect css` is read-only; dependency CSS outputs should already exist.
+- Module auto imports are inferred from `.tsx` named imports/re-exports only.
+- Same-package source specifiers may use relative paths, `package.json#imports`,
+  or `tsconfig` paths, and must stay inside the current package source root.
 
 ## Import Semantics
 
@@ -168,52 +168,56 @@ format/module output and component-level Vite/dev entries prefer an import graph
 over duplicated rules. Treat this as source-file composition, not as full CSS
 bundling.
 
-Supported import behavior:
+Cross-language `@import`:
 
-- local relative CSS imports inside source style files;
-- local CSS imports may also use `package.json#imports` or
-  `tsconfig.compilerOptions.paths` when they resolve to CSS files under the
-  current package source root. Production source CSS copies rewrite those
-  specifiers to relative output paths so published CSS does not depend on source
-  aliases;
-- source-local CSS import intent is strict: unresolved relative CSS imports and
-  `#...` source aliases fail the build/dev CSS request instead of falling back
-  to package resolution;
-- preserved local import graphs require resolved local CSS files to stay inside
-  the current package source root. Relative CSS imports that escape the source
-  root are rejected instead of being copied to dist as stale source-relative
-  links. The same boundary applies to configured theme CSS files;
-- local relative CSS imports should stay inside the same component/module
-  directory. Importing another component's CSS from component CSS is rejected;
-  express component reuse through TSX imports so auklet can infer module CSS
-  dependencies.
-- component CSS may import local CSS outside its component/module directory only
-  when the imported file is under the current source root and matches
-  `styles.shared`;
-- CSS imports inside a shared fragment may target non-module, non-theme helper
-  CSS under the current source root. Those imports stay in the shared file copy,
-  preserving the shared layer without bypassing component or theme boundaries;
-- recursive local imports with circular import protection;
-- preserved local import graphs reject circular CSS imports instead of emitting
-  self-referential `@import` rules to production source copies or dev virtual
-  CSS;
-- duplicate local import/content suppression for generated output stability;
-- when a preserved local import is rewritten, the specifier changes but media,
-  supports, and layer conditions after the import target are kept as source
-  text;
-- generated `@import` paths between auklet output entries, produced by
-  `style/entries.ts` and the production/dev writers.
+- `.less` → `.less`: Less inlines; `less.render` `imports` mark partials (no
+  separate module entry) and enforce the same component-local / `styles.shared`
+  rules as CSS.
+- `.less` → `.css`: allowed; remaining CSS `@import` uses the existing graph.
+  Less may rewrite `./file.css` to `file.css`; auklet recovers same-directory
+  style files so the graph still treats them as local imports.
+- `.css` → `.less`: rejected.
+- Do not use `@import (less)` on `.css` files.
+
+Supported import behavior (after Less compile when applicable):
+
+- local relative style imports; also `package.json#imports` /
+  `tsconfig.compilerOptions.paths` to files under the source root. Production
+  copies rewrite aliases to relative `.css` output paths;
+- unresolved relative / `#...` source-local imports fail (no package fallback);
+- imports must stay inside the source root; theme files follow the same rule;
+- component style imports stay in the same component/module directory, except
+  `styles.shared`; cross-component reuse goes through TSX imports;
+- shared fragments may import non-module, non-theme helpers under the source
+  root and keep those `@import`s when the shared file is CSS;
+- circular local CSS `@import`s are rejected; duplicate import/content is
+  suppressed; rewritten imports keep media/supports/layer tails;
+- generated `@import`s between auklet entries come from `style/entries.ts`.
+
+Vite/dev: virtual CSS never emits `/@fs/**/*.less` (including module entry
+lists). `.less` sources are compiled in the processor; watch/HMR still tracks
+`.less` and Less `imports`. When `styles.prefix` is set, own-package CSS entries
+and preserved same-package imports also go through `StyleProcessor` (not raw
+`/@fs`) so selector prefixing matches production copies. Dependency CSS is never
+prefixed.
+
+Graph shape caveat with `styles.prefix`: production still preserves `@import`
+edges to already-prefixed copies (`SourceStyleFileWriter` does not expand).
+Vite inlines those same-package CSS imports while prefixing so virtual modules
+cannot point at raw `/@fs` sources. Selector prefixes stay aligned; the import
+graph may differ (Vite flattens; production keeps `@import`, which bundlers can
+dedupe by URL). Without `styles.prefix`, Vite keeps the `/@fs` preserve path for
+own `.css` files.
 
 Out of scope:
 
 - URL rebasing for `url(...)`;
-- CSS Modules class name transformation;
-- Sass/Less/Stylus or other preprocessors;
-- minification, autoprefixing, nesting transforms, or other PostCSS plugin
-  behavior;
+- CSS Modules / `:global`;
+- Sass/Stylus or other preprocessors beyond Less;
+- general PostCSS plugin pipelines (only Less compile + `styles.prefix`);
+- compiling dependency / `node_modules` Less sources;
 - arbitrary package CSS bundling beyond configured style dependencies;
-- interpreting conditional CSS import semantics such as media, supports, or
-  layer-specific conditions during aggregate expansion.
+- interpreting conditional CSS import semantics during aggregate expansion.
 
 ## Production And Dev Alignment
 
@@ -227,7 +231,10 @@ Production output and Vite dev virtual CSS must share the same entry semantics:
 - third-party CSS dependencies in dev should keep resolving from the package
   root that declares them, usually through Vite `/@fs/...` imports;
 - workspace package style dependencies in dev should stay virtual and recursive
-  so HMR can track source changes across packages.
+  so HMR can track source changes across packages;
+- Less compile and `styles.prefix` must stay aligned for selectors; when
+  `styles.prefix` is on, Vite may flatten same-package CSS `@import`s while
+  production keeps the `@import` graph (see Import Semantics above).
 
 When changing CSS behavior, update both production and dev paths or explicitly
 document why the behavior is production-only or dev-only. Broad semantic changes

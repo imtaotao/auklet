@@ -60,6 +60,14 @@ const normalizeStyleShared = (shared: StyleOptions['shared']) => {
   return shared ? [shared] : [];
 };
 
+const normalizeStylePrefix = (prefix: StyleOptions['prefix']) => {
+  if (prefix == null || prefix === '') return undefined;
+  if (!isString(prefix)) {
+    throw new Error('[config] styles.prefix must be a string.');
+  }
+  return prefix;
+};
+
 export function normalizeAukletConfig(config: AukletConfig = {}) {
   const dependencies: Record<string, StyleDependencyGroup> =
     config.styles?.dependencies ?? aukletDefaultOptions.styles.dependencies;
@@ -84,6 +92,8 @@ export function normalizeAukletConfig(config: AukletConfig = {}) {
       shared: normalizeStyleShared(
         config.styles?.shared ?? aukletDefaultOptions.styles.shared,
       ),
+
+      prefix: normalizeStylePrefix(config.styles?.prefix),
 
       dependencies: Object.fromEntries(
         Object.entries(dependencies).map(([packageName, dependency]) => [

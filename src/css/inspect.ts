@@ -58,8 +58,8 @@ export type CssInspectModel = {
 
 export async function runInspectCssCli(args: Array<string>) {
   const inspectOptions = await resolveInspectCssOptions(args);
-  const models = inspectOptions.targets.map((target) =>
-    createCssInspectModel(target),
+  const models = await Promise.all(
+    inspectOptions.targets.map((target) => createCssInspectModel(target)),
   );
   new CssInspectReporter(inspectOptions.cwd, models).report();
   return 0;
@@ -101,7 +101,7 @@ export async function resolveInspectCssOptions(args: Array<string>) {
   };
 }
 
-export function createCssInspectModel(options: {
+export async function createCssInspectModel(options: {
   packageRoot: string;
   packageName?: string;
   aukletConfig?: AukletConfig;
@@ -116,7 +116,7 @@ export function createCssInspectModel(options: {
     normalizedConfig,
   });
   const moduleEntries = normalizedConfig.modules
-    ? createModuleStyleEntryPlans(packageContext)
+    ? await createModuleStyleEntryPlans(packageContext)
     : [];
   const packageEntries = createCssInspectEntryRows(
     config,

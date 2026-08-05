@@ -43,14 +43,14 @@ export class ModuleStyleOutputWriter {
     this.moduleEntryWriter = new ModuleStyleEntryWriter(options);
   }
 
-  write() {
-    this.packageContext.assertPreservedLocalStyleImports();
+  async write() {
+    await this.packageContext.assertPreservedLocalStyleImports();
 
-    const moduleEntries = this.createModuleEntries();
+    const moduleEntries = await this.createModuleEntries();
     const outputs: Array<string> = [];
 
     for (const format of this.config.output.outputFormats) {
-      outputs.push(...this.writeFormat(format, moduleEntries));
+      outputs.push(...(await this.writeFormat(format, moduleEntries)));
     }
 
     return outputs;
@@ -64,7 +64,7 @@ export class ModuleStyleOutputWriter {
     return createModuleStyleEntryPlans(this.packageContext);
   }
 
-  private writeFormat(
+  private async writeFormat(
     format: string,
     moduleEntries: Array<ModuleStyleEntryPlan>,
   ) {
@@ -72,9 +72,9 @@ export class ModuleStyleOutputWriter {
     const outputs: Array<string> = [];
 
     this.themeWriter.clean(outRoot);
-    this.sourceWriter.copy(this.packageContext.styleFiles, outRoot);
+    await this.sourceWriter.copy(this.packageContext.styleFiles, outRoot);
 
-    const themeStyles = this.themeWriter.writeThemeStyles(outRoot);
+    const themeStyles = await this.themeWriter.writeThemeStyles(outRoot);
     const themeStyleMap = new Map(
       themeStyles.map((themeStyle) => [themeStyle.themeName, themeStyle.file]),
     );
@@ -83,13 +83,13 @@ export class ModuleStyleOutputWriter {
       outRoot,
     );
     const externalStyle = this.externalWriter.write(outRoot);
-    const moduleStyle = this.moduleWriter.write(outRoot);
+    const moduleStyle = await this.moduleWriter.write(outRoot);
     const entryStyle = this.entryWriter.write(
       outRoot,
       themeStyleMap,
       moduleStyle,
     );
-    const moduleStyleEntries = this.moduleEntryWriter.write(
+    const moduleStyleEntries = await this.moduleEntryWriter.write(
       outRoot,
       moduleEntries,
     );

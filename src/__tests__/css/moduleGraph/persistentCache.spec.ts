@@ -185,6 +185,58 @@ describe('ModuleStyleGraph persistent cache', () => {
     expect(result.code).not.toContain('color: red');
   });
 
+  test('invalidates persistent virtual CSS load results when Less inputs change', async () => {
+    fixture.writeFile(
+      path.join(appPackageRoot, 'auklet.config.js'),
+      `
+        export const config = {
+          source: 'src',
+          output: 'dist',
+          modules: true,
+        };
+      `,
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.tsx'),
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/tokens.less'),
+      '@accent: red;\n',
+    );
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/index.less'),
+      '@import "./tokens.less";\n.button { color: @accent; }',
+    );
+    const parsed = {
+      packageName: '@scope/app',
+      stylePath: 'components/Button.css',
+    };
+    const firstGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const firstResult = await firstGraph.createPackageStyleCode(parsed);
+
+    expect(firstResult.code).toContain('color: red');
+    expect(
+      firstResult.watchFiles.some((file) => file.endsWith('tokens.less')),
+    ).toBe(true);
+
+    fixture.writeFile(
+      path.join(appPackageRoot, 'src/components/Button/tokens.less'),
+      '@accent: blue;\n',
+    );
+    const secondGraph = new ModuleStyleGraph({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const secondResult = await secondGraph.createPackageStyleCode(parsed);
+
+    expect(secondResult.code).toContain('color: blue');
+    expect(secondResult.code).not.toContain('color: red');
+  });
+
   test('invalidates persistent virtual CSS load results when content changes without stat changes', async () => {
     const styleFile = fixture.writeFile(
       path.join(appPackageRoot, 'src/components/Button/index.css'),

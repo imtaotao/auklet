@@ -256,4 +256,32 @@ describe('normalizeAukletConfig', () => {
       '[config] styles.shared must be a string or an array of strings.',
     );
   });
+
+  test('normalizes styles.prefix and rejects non-strings', () => {
+    expect(
+      normalizeAukletConfig({
+        styles: {
+          prefix: '.mf-app',
+        },
+      }).styles.prefix,
+    ).toBe('.mf-app');
+
+    expect(
+      normalizeAukletConfig({
+        styles: {
+          prefix: '',
+        },
+      }).styles.prefix,
+    ).toBeUndefined();
+
+    expect(normalizeAukletConfig({}).styles.prefix).toBeUndefined();
+
+    expect(() =>
+      normalizeAukletConfig({
+        styles: {
+          prefix: 1 as never,
+        },
+      }),
+    ).toThrow('[config] styles.prefix must be a string.');
+  });
 });
