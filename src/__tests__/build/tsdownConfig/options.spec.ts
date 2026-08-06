@@ -109,6 +109,25 @@ describe('defineKernelPackageConfigFromOptions', () => {
       target: 'es2020',
       unbundle: true,
     });
+
+    const moduleConfigs = configs.filter((config) => config.unbundle);
+    const cssModulePlugins = moduleConfigs.map((config) => {
+      const plugins = config.plugins;
+      if (!plugins || !Array.isArray(plugins)) return null;
+      return (
+        plugins.find(
+          (plugin) =>
+            plugin &&
+            typeof plugin === 'object' &&
+            'name' in plugin &&
+            plugin.name === 'auklet-css-modules',
+        ) ?? null
+      );
+    });
+    expect(cssModulePlugins).toHaveLength(2);
+    expect(cssModulePlugins[0]).toBeDefined();
+    expect(cssModulePlugins[1]).toBeDefined();
+    expect(cssModulePlugins[0]).not.toBe(cssModulePlugins[1]);
   });
 
   test('uses custom build target for bundle and module configs', () => {

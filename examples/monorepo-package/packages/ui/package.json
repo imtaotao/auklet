@@ -29,6 +29,7 @@
     "./themes/*.css": "./dist/es/themes/*.css"
   },
   "devDependencies": {
-    "auklet": "link:../../../.."
+    "auklet": "link:../../../..",
+    "less": "catalog:"
   }
 }

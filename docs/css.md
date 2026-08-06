@@ -27,6 +27,7 @@ src/css/
 ├── config.ts                     # Default CSS output structure config
 ├── constants.ts                  # CSS/source file matching constants
 ├── inspect.ts                    # Read-only CSS plan inspection
+├── modules/                      # CSS Modules protocol (independent of global entries)
 └── core/
     ├── stylePackageContext.ts        # Collects style build context for one package
     ├── styleProcessor.ts             # Reads, merges, and expands style content
@@ -42,11 +43,17 @@ src/css/
 Key modules:
 
 - `StylePackageContext`: aggregates package root, source/output directories,
-  theme files, style files, resolver, and processor.
+  theme files, style files, resolver, and processor. Excludes `*.module.css` /
+  `*.module.less` from the global `styleFiles` list.
 - `StyleProcessor`: loads `.css` / `.less` (Less compiles on disk read), expands
   local `@import` when needed, applies `styles.prefix`, and merges PostCSS roots.
-- `lessCompiler.ts` / `prefixSelectors.ts`: the only allowed style transforms;
-  called from `StyleProcessor`, not from production writers.
+  Rejects CSS Modules files; those use `src/css/modules` instead.
+- `lessCompiler.ts` / `prefixSelectors.ts`: global style transforms called from
+  `StyleProcessor`, not from production writers. `lessCompiler` is also reused as
+  a leaf by the CSS Modules protocol.
+- `modules/`: CSS Modules protocol (`compileCssModule` → `{ css, locals,
+watchFiles }`). JS build and Vite call this API; the global entry pipeline does
+  not.
 - `WorkspaceStyleResolver`: resolves style dependencies from config to real
   files or output paths.
 - `styleImports/collector.ts`: scans `.tsx` source files and infers module-level
@@ -87,7 +94,7 @@ composition order should come from `src/css/core/style/entries.ts`.
 ```text
 src/css/vite/
 ├── vitePlugin.ts        # Vite plugin entry
-├── hmr.ts               # Style-related HMR checks and updates
+├── hmr/                 # Dev style HMR (package CSS + CSS Modules)
 └── moduleGraph/         # Vite/dev virtual CSS graph
     ├── graph.ts
     ├── styleCodeFactory.ts
@@ -102,12 +109,9 @@ src/css/vite/
         └── types.ts
 ```
 
-The Vite plugin turns package CSS imports into virtual modules and calls
-`moduleGraph/` to generate CSS. HMR logic decides which virtual CSS modules to
-invalidate when source, config, or style files change. Tracked style files use
-auklet's own js-update path so dependency packages can refresh their virtual
-CSS without a full reload; CSS files outside the tracked style graph stay on
-Vite's native CSS HMR.
+The Vite plugin resolves package CSS through virtual modules built by
+`moduleGraph/`. On tracked source changes, `hmr/` refreshes affected package CSS
+and CSS Modules; other CSS remains on Vite's native HMR.
 
 Vite/dev caches virtual CSS generation in memory for the current dev server
 lifecycle and persists generated virtual CSS results under
@@ -144,8 +148,11 @@ auklet supports this user model:
 
 The supported input surface is intentionally narrow:
 
-- Source style files are `.css` or `.less` under the configured source root.
-  Outputs and Vite virtual modules are always CSS (`.less` → `.css`).
+- Global source style files are `.css` or `.less` under the configured source
+  root (excluding `*.module.css` / `*.module.less`). Outputs and Vite virtual
+  modules for that pipeline are always CSS (`.less` → `.css`).
+- CSS Modules sources are `*.module.css` / `*.module.less` and follow the
+  Modules protocol above; they are not global style entries.
 - `styles.prefix` wraps selectors on the current package's own style rules
   (host must provide the matching container for `:root` / `html` / `body`).
 - Current package theme entries come from `styles.themes` (may point at `.less`).
@@ -170,9 +177,12 @@ bundling.
 
 Cross-language `@import`:
 
-- `.less` → `.less`: Less inlines; `less.render` `imports` mark partials (no
-  separate module entry) and enforce the same component-local / `styles.shared`
-  rules as CSS.
+- `.less` → `.less`: production copies compile each Less file to `.css` and
+  rewrite local Less partial imports to `@import "./partial.css"` instead of
+  inlining partial rules into the importer copy. `less.render` `imports` still
+  mark partials (no separate module entry) and enforce the same component-local
+  / `styles.shared` rules as CSS. Package `index.css` and other aggregate
+  reads may still expand imports when `preserveLessImportGraph` is not enabled.
 - `.less` → `.css`: allowed; remaining CSS `@import` uses the existing graph.
   Less may rewrite `./file.css` to `file.css`; auklet recovers same-directory
   style files so the graph still treats them as local imports.
@@ -195,11 +205,10 @@ Supported import behavior (after Less compile when applicable):
 - generated `@import`s between auklet entries come from `style/entries.ts`.
 
 Vite/dev: virtual CSS never emits `/@fs/**/*.less` (including module entry
-lists). `.less` sources are compiled in the processor; watch/HMR still tracks
-`.less` and Less `imports`. When `styles.prefix` is set, own-package CSS entries
-and preserved same-package imports also go through `StyleProcessor` (not raw
-`/@fs`) so selector prefixing matches production copies. Dependency CSS is never
-prefixed.
+lists). `.less` is compiled in the processor; dev watch covers `.less` and Less
+partials. When `styles.prefix` is set, own-package CSS entries and preserved
+same-package imports also go through `StyleProcessor` (not raw `/@fs`) so selector
+prefixing matches production copies. Dependency CSS is never prefixed.
 
 Graph shape caveat with `styles.prefix`: production still preserves `@import`
 edges to already-prefixed copies (`SourceStyleFileWriter` does not expand).
@@ -209,15 +218,85 @@ graph may differ (Vite flattens; production keeps `@import`, which bundlers can
 dedupe by URL). Without `styles.prefix`, Vite keeps the `/@fs` preserve path for
 own `.css` files.
 
+## CSS Modules
+
+`*.module.css` / `*.module.less` use `src/css/modules`, separate from the global
+style entry pipeline.
+
+- **Compile:** `compileCssModule` yields scoped CSS, locals, and `watchFiles`
+  (module sources and Less partials). Less partials become sibling `.css` assets
+  with preserved `@import` in both production and dev CSS sources.
+- **Production:** emitted by the JS build (`createCssModulesPlugin`), not
+  `build-css` alone — CSS asset plus side-effect shim with locals. Local CSS
+  partials referenced by `*.module.css` are emitted as sibling assets so
+  standalone `build-js` output stays self-contained.
+- **Dev:** `aukletStylePlugin` serves the same protocol; changes to tracked files
+  refresh virtual CSS, including Less partials listed in `watchFiles`.
+  Dev splits each module into two virtual chunks: a **locals** shim
+  (`\0auklet-css-module:*.js`) that re-exports compiled class names, and a
+  **style** virtual CSS module (`\0auklet-css-module:*.style.css`) processed by
+  Vite. Preserved imports point at virtual sibling CSS assets, including compiled
+  Less partials. The style CSS self-accepts so property edits hot-update without
+  re-rendering importers. The locals chunk does not
+  self-accept and is included in hot updates only when the compiled class map
+  changes; auklet does not patch `acceptedHmrDeps` on importers. When locals do
+  change, Vite propagates to a real client boundary (React Refresh, explicit
+  `import.meta.hot.accept`, or full reload). Dev caches `compileCssModule`
+  output per Vite environment and module file, reuses it for paired locals/style
+  virtual loads (including in-flight deduplication and generation guards), and
+  invalidates when the module file or a tracked partial changes. Hot-update planning
+  compares locals against the environment-local cache; partial edits compile module
+  entries from disk rather than reusing `context.read` from the partial file event.
+  Dev and production therefore retain the same import graph; production emits
+  physical sibling assets while dev serves equivalent virtual CSS assets.
+- **Partial imports:** relative paths only, bounded to the package source root,
+  with the same missing-import, source-root, and cycle errors as global styles.
+  Plain `.module.less` imports use the sibling-asset protocol. `reference` and
+  `inline` stay in the Less compilation input so Less preserves their native
+  semantics. A `(css)` import is emitted as a sibling CSS asset and rewritten
+  to import that emitted asset. Other valid Less options are delegated to Less
+  instead of being rewritten as sibling imports. Less options are valid only
+  when the importer is `.less`; every `.css` node rejects optioned imports.
+  Alias imports (`#imports`, tsconfig paths) are not supported in module partials.
+
+### Source import relationships
+
+| Importer        | Plain `.css`                                   | Plain `.less`                                  | `*.module.css` / `*.module.less` |
+| --------------- | ---------------------------------------------- | ---------------------------------------------- | -------------------------------- |
+| Plain `.css`    | Allowed                                        | Rejected                                       | Rejected                         |
+| Plain `.less`   | Allowed                                        | Allowed                                        | Rejected                         |
+| `*.module.css`  | Allowed as a tracked external style dependency | Rejected                                       | Rejected                         |
+| `*.module.less` | Allowed as a tracked external style dependency | Allowed as a tracked external style dependency | Rejected                         |
+
+CSS Modules are imported from JS/TSX to preserve their independent locals maps.
+When a CSS Module imports a plain CSS/Less dependency, both production and dev
+retain the import graph:
+
+- production emits physical sibling `.css` assets;
+- dev serves equivalent virtual `.css` assets through Vite;
+- `(reference)` contributes variables or mixins without emitting a normal style
+  import;
+- `(inline)` is compiled inline and does not create a sibling asset.
+
+- **Boundaries:** excluded from global entries and `styles.prefix`; cannot be
+  imported from global style files, and cannot import another `*.module.css` or
+  `*.module.less`. Import each CSS Module from JS/TSX so every module keeps its
+  own locals map. Published aggregate `style/module.css` is unrelated to source
+  `*.module.*` names.
+- **Breaking:** `*.module.*` names are reserved for Modules. Rename former global
+  files or import them from JS/TSX. Ambient TypeScript declarations belong in the
+  consuming package.
+
 Out of scope:
 
 - URL rebasing for `url(...)`;
-- CSS Modules / `:global`;
 - Sass/Stylus or other preprocessors beyond Less;
-- general PostCSS plugin pipelines (only Less compile + `styles.prefix`);
+- general PostCSS plugin pipelines beyond Less, `styles.prefix`, and CSS Modules;
 - compiling dependency / `node_modules` Less sources;
 - arbitrary package CSS bundling beyond configured style dependencies;
-- interpreting conditional CSS import semantics during aggregate expansion.
+- interpreting conditional CSS import semantics during aggregate expansion;
+- CSS Modules sourcemaps;
+- `composes` watch tracking (compile-time resolution only).
 
 ## Production And Dev Alignment
 
@@ -231,7 +310,7 @@ Production output and Vite dev virtual CSS must share the same entry semantics:
 - third-party CSS dependencies in dev should keep resolving from the package
   root that declares them, usually through Vite `/@fs/...` imports;
 - workspace package style dependencies in dev should stay virtual and recursive
-  so HMR can track source changes across packages;
+  so dependency source changes propagate in dev;
 - Less compile and `styles.prefix` must stay aligned for selectors; when
   `styles.prefix` is on, Vite may flatten same-package CSS `@import`s while
   production keeps the `@import` graph (see Import Semantics above).
@@ -289,8 +368,8 @@ flowchart TD
   Factory --> SharedGraph["core/style/entries.ts"]
   SharedGraph --> LoadStyle["generate virtual CSS content"]
   LoadStyle --> Vite["return to Vite"]
-  FileChange["source/config/style changes"] --> Hmr["hmr.ts"]
-  Hmr --> Invalidate["invalidate related virtual modules"]
+  FileChange["source/config/style changes"] --> Hmr["hmr/"]
+  Hmr --> Graph
 ```
 
 The dev flow does not write real output. It generates virtual CSS content and

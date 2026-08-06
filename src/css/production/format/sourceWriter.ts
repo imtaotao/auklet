@@ -29,6 +29,7 @@ export class SourceStyleFileWriter {
         undefined,
         {
           applyPrefix: true,
+          preserveLessImportGraph: true,
           mapImportSpecifier: (reference) => {
             if (!this.resolver.isInsideSourceRoot(reference.imported)) {
               return reference.specifier;

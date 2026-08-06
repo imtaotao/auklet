@@ -1,4 +1,6 @@
+import path from 'node:path';
 import type { UserConfig } from 'tsdown/config';
+import { createCssModulesPlugin } from '#auklet/build/cssModulesPlugin';
 import type {
   BuildContext,
   ConfigureTsdownOptions,
@@ -16,6 +18,11 @@ export function createCommonConfig(context: BuildContext, deps: TsdownDeps) {
     platform: context.platform,
     alias: context.alias,
     deps,
+    plugins: [
+      createCssModulesPlugin({
+        sourceRoot: path.join(context.packageRoot, context.source),
+      }),
+    ],
     define: {
       __TEST__: 'false',
       __VERSION__: JSON.stringify(context.pkg.version),

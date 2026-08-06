@@ -33,22 +33,22 @@ const createModuleConfig = (
 };
 
 export function createModuleConfigs(context: BuildContext) {
-  const commonConfig = createCommonConfig(context, {
-    neverBundle: context.packageExternal,
-  });
   const entry = getModuleEntries(context.packageRoot, context.source);
+  const moduleDeps = {
+    neverBundle: context.packageExternal,
+  };
 
   return [
     createModuleConfig(
       context,
-      commonConfig,
+      createCommonConfig(context, moduleDeps),
       entry,
       'esm',
       path.join(context.output, 'es'),
     ),
     createModuleConfig(
       context,
-      commonConfig,
+      createCommonConfig(context, moduleDeps),
       entry,
       'cjs',
       path.join(context.output, 'lib'),

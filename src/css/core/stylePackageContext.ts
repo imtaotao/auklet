@@ -14,6 +14,7 @@ import {
   getThemeNames,
   resolveThemeStyleFiles,
 } from '#auklet/css/core/style/dependencies';
+import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
 import {
   fileWalker,
   getSourceModuleDir,
@@ -41,12 +42,14 @@ export class StylePackageContext {
   readonly sourceFiles: Array<string>;
   readonly themeFiles: Map<string, string>;
   readonly themeNames: Array<string>;
-  readonly styleFiles: Array<string>;
+  private readonly scannedStyleFiles: Array<string>;
+  private resolvedStyleFiles: Array<string>;
   private readonly sourceModuleDirs: Set<string>;
   private readonly themeStyleFileKeys: Set<string>;
   private readonly sharedStyleFileKeys: Set<string>;
   private hasValidatedSourceRootLocalStyleImports = false;
   private hasValidatedPreservedLocalStyleImports = false;
+  private hasResolvedModuleOnlyStyleFiles = false;
   private moduleStyleEntryPlanner?: StyleModuleEntryPlanner;
   private moduleStyleImports?: Map<string, Array<string>>;
 
@@ -75,13 +78,18 @@ export class StylePackageContext {
     this.themeNames = getThemeNames(normalizedConfig);
     this.themeStyleFileKeys = createStyleFileKeySet(this.themeFiles.values());
     this.sourceModuleDirs = this.getSourceModuleDirs(this.sourceFiles);
-    this.styleFiles = this.getStyleFiles(this.sourceFiles);
+    this.scannedStyleFiles = this.getStyleFiles(this.sourceFiles);
+    this.resolvedStyleFiles = this.scannedStyleFiles;
     this.sharedStyleFileKeys = createSharedStyleFileKeySet({
       packageRoot: context.packageRoot,
       sourceRoot: this.sourceRoot,
-      styleFiles: this.styleFiles,
+      styleFiles: this.scannedStyleFiles,
       patterns: normalizedConfig.styles.shared,
     });
+  }
+
+  get styleFiles() {
+    return this.resolvedStyleFiles;
   }
 
   getStyleFiles(files: Array<string>) {
@@ -89,6 +97,7 @@ export class StylePackageContext {
       .filter((file) =>
         this.options.config.styleExtensions.includes(path.extname(file)),
       )
+      .filter((styleFile) => !isCssModuleFile(styleFile))
       .filter(
         (styleFile) =>
           !this.themeStyleFileKeys.has(normalizeFileKey(styleFile)),
@@ -112,10 +121,13 @@ export class StylePackageContext {
     this.moduleStyleEntryPlanner = undefined;
     this.hasValidatedSourceRootLocalStyleImports = false;
     this.hasValidatedPreservedLocalStyleImports = false;
+    this.hasResolvedModuleOnlyStyleFiles = false;
+    this.resolvedStyleFiles = this.scannedStyleFiles;
     this.styleProcessor.clearLessCache();
   }
 
   async prepareStyleLanguage() {
+    await this.resolveModuleOnlyStyleFiles();
     await this.styleProcessor.warmLessCache([
       ...this.styleFiles,
       ...this.themeFiles.values(),
@@ -211,5 +223,57 @@ export class StylePackageContext {
       return null;
     }
     return toPosixPath(relative);
+  }
+
+  private async resolveModuleOnlyStyleFiles() {
+    if (this.hasResolvedModuleOnlyStyleFiles) return;
+
+    const cssModuleFiles = this.sourceFiles.filter((file) =>
+      isCssModuleFile(file),
+    );
+    if (cssModuleFiles.length === 0) {
+      this.hasResolvedModuleOnlyStyleFiles = true;
+      return;
+    }
+
+    const moduleReferenced = new Set<string>();
+    for (const moduleFile of cssModuleFiles) {
+      if (moduleFile.endsWith('.module.less')) {
+        for (const imported of await this.styleProcessor.collectLessImportFiles(
+          moduleFile,
+        )) {
+          moduleReferenced.add(normalizeFileKey(imported));
+        }
+      }
+    }
+
+    if (moduleReferenced.size === 0) {
+      this.hasResolvedModuleOnlyStyleFiles = true;
+      return;
+    }
+
+    const globalImported = new Set(
+      Array.from(
+        await this.styleProcessor.collectImportedStyleFiles(
+          this.scannedStyleFiles,
+        ),
+        normalizeFileKey,
+      ),
+    );
+    const nextStyleFiles = this.scannedStyleFiles.filter((styleFile) => {
+      const key = normalizeFileKey(styleFile);
+      if (!moduleReferenced.has(key)) return true;
+      // Plain .css partials keep the existing global source-copy output path.
+      // Only Less partials compiled by CSS Modules are excluded here.
+      if (path.extname(styleFile).toLowerCase() !== '.less') return true;
+      return globalImported.has(key);
+    });
+
+    this.resolvedStyleFiles = nextStyleFiles;
+    if (nextStyleFiles.length !== this.scannedStyleFiles.length) {
+      this.moduleStyleEntryPlanner = undefined;
+    }
+
+    this.hasResolvedModuleOnlyStyleFiles = true;
   }
 }

@@ -86,6 +86,80 @@ describe('ModuleStyleBuilder module output', () => {
     expect(moduleStyle).toContain('@import "../components/Button/index.css"');
   });
 
+  test('keeps reference and inline semantics consistent across package and module outputs', async () => {
+    fixture.writeFile(
+      'source/components/Button/index.tsx',
+      'export function Button() { return null; }',
+    );
+    fixture.writeFile(
+      'source/components/Button/reference.less',
+      '.reference-only { color: red; }\n.reference-mixin() { border-color: teal; }',
+    );
+    fixture.writeFile(
+      'source/components/Button/inline.css',
+      '.inline-only { color: blue; }',
+    );
+    fixture.writeFile(
+      'source/components/Button/index.less',
+      [
+        '@import (reference) "./reference.less";',
+        '@import (inline) "./inline.css";',
+        '.button { .reference-mixin(); }',
+      ].join('\n'),
+    );
+
+    await createBuilder(fixture, moduleConfig).build();
+
+    const packageStyle = fixture.readFile('output/index.css');
+    expect(packageStyle).toContain('border-color: teal');
+    expect(packageStyle).toContain('.inline-only');
+    expect(packageStyle).not.toContain('.reference-only');
+    expect(packageStyle).not.toContain('@import');
+
+    for (const format of ['es', 'lib']) {
+      const componentStyle = fixture.readFile(
+        `output/${format}/components/Button/index.css`,
+      );
+      const componentEntry = fixture.readFile(
+        `output/${format}/components/Button/style/index.css`,
+      );
+      const moduleStyle = fixture.readFile(`output/${format}/style/module.css`);
+
+      expect(componentStyle).toContain('border-color: teal');
+      expect(componentStyle).toContain('.inline-only');
+      expect(componentStyle).not.toContain('.reference-only');
+      expect(componentStyle).not.toContain('@import');
+      expect(componentEntry).toBe('@import "../index.css";\n');
+      expect(moduleStyle).toContain('@import "../components/Button/index.css"');
+      expect(moduleStyle).not.toContain('reference.css');
+      expect(moduleStyle).not.toContain('inline.css');
+    }
+  });
+
+  test('copies css partials referenced only by CSS Modules through source output', async () => {
+    fixture.writeFile(
+      'source/components/Button/tokens.css',
+      ':root { --button-color: tomato; }',
+    );
+    fixture.writeFile(
+      'source/components/Button/Button.module.css',
+      '@import "./tokens.css";\n.button {}',
+    );
+    fixture.writeFile(
+      'source/components/Button/index.tsx',
+      `import styles from './Button.module.css';\nexport const className = styles.button;\n`,
+    );
+
+    await createBuilder(fixture, moduleConfig).build();
+
+    expect(
+      fixture.readFile('output/es/components/Button/tokens.css'),
+    ).toContain('--button-color: tomato');
+    expect(
+      fixture.readFile('output/lib/components/Button/tokens.css'),
+    ).toContain('--button-color: tomato');
+  });
+
   test('preserves configured same-package shared CSS imports in component outputs and aggregate entries', async () => {
     fixture.writePackageJson({
       name: 'fixture-package',

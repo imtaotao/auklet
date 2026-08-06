@@ -185,3 +185,9 @@ import (`*`, `**`, `?`); prefer `.css` shared when the `@import` edge must stay
 in the graph. Shared files cannot import component or theme styles.
 Component-to-component style imports are rejected; package style dependencies
 use `styles.dependencies` (built CSS of the dependency, not its Less sources).
+
+CSS Modules (`*.module.css` / `*.module.less`) import from JS/TS and compile
+outside the global style entry graph. They skip `styles.prefix` and ship with
+the JS build (locals plus side-effect CSS). That naming pattern is reserved for
+Modules — rename former global `*.module.*` files if needed. Ambient TypeScript
+declarations live in the consuming package.

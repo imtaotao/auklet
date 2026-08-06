@@ -1,13 +1,25 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createServer as createViteServer } from 'vite';
-import { AukletStyleHmr } from '#auklet/css/vite/hmr';
+import { AukletStyleHmr } from '#auklet/css/vite/hmr/styleHmr';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../fixtures/virtualProject';
+import {
+  loadCssModuleDevPair,
+  parseCssModuleDevModule,
+  readPluginLoadCode,
+  readPluginLoadModuleType,
+} from './modules/helpers';
+import {
+  toCssModuleStyleAssetBrowserUrl,
+  toResolvedCssModuleStyleAssetVirtualId,
+  toCssModuleStyleVirtualId,
+  toCssModuleVirtualId,
+} from '#auklet/css/vite/hmr/cssModule';
 import type { ViteDevServer } from 'vite';
 
 type WatchHandler = (file: string) => void;
@@ -21,12 +33,22 @@ const createServer = (
   const handlers = new Map<string, WatchHandler>();
   const send = vi.fn();
   const invalidateModule = vi.fn();
+  const reloadModule = vi.fn(async () => {});
   const close = vi.fn(async () => {});
   const modules = new Map(moduleIds.map((id) => [id, { id }]));
+  const environmentModuleGraph = {
+    getModuleById: vi.fn((id: string) => modules.get(id)),
+    invalidateModule,
+  };
+  const clientEnvironment = {
+    moduleGraph: environmentModuleGraph,
+    reloadModule,
+  };
 
   return {
     handlers,
     invalidateModule,
+    reloadModule,
     send,
     server: {
       watcher: {
@@ -36,16 +58,51 @@ const createServer = (
         }),
       },
       httpServer: null,
-      moduleGraph: {
-        getModuleById: vi.fn((id: string) => modules.get(id)),
-        invalidateModule,
+      environments: {
+        client: clientEnvironment,
+        ssr: { moduleGraph: environmentModuleGraph },
       },
+      moduleGraph: environmentModuleGraph,
+      reloadModule,
       ws: {
         send,
       },
       close,
     } as unknown as ViteDevServer,
     close,
+  };
+};
+
+const runHotUpdate = async (
+  plugin: ReturnType<typeof aukletStylePlugin>,
+  server: ViteDevServer,
+  file: string,
+  environment: 'client' | 'ssr' = 'client',
+) => {
+  const hotUpdate = plugin.hotUpdate;
+  const handler =
+    typeof hotUpdate === 'object' && hotUpdate && 'handler' in hotUpdate
+      ? hotUpdate.handler
+      : hotUpdate;
+
+  return handler?.call(
+    { environment: server.environments[environment] } as never,
+    {
+      file,
+      modules: [],
+      server,
+      timestamp: Date.now(),
+      type: 'update',
+      read: vi.fn(),
+    } as never,
+  );
+};
+
+const cssModuleVirtualIdsForFile = (moduleFile: string) => {
+  const resolved = path.resolve(moduleFile);
+  return {
+    localsVirtualId: toCssModuleVirtualId(resolved),
+    styleVirtualId: toCssModuleStyleVirtualId(resolved),
   };
 };
 
@@ -187,18 +244,8 @@ describe('aukletStylePlugin Vite server integration', () => {
 
     await runChange(context.handlers.get('change'), sourceFile);
 
-    expect(context.invalidateModule).toHaveBeenCalledWith({
-      id: appVirtualId,
-    });
-    expect(context.send).toHaveBeenCalledWith({
-      type: 'update',
-      updates: [
-        expect.objectContaining({
-          path: '/@id/__x00__auklet-css:@scope/app/pages/Article.css',
-          type: 'js-update',
-        }),
-      ],
-    });
+    expect(context.reloadModule).toHaveBeenCalledWith({ id: appVirtualId });
+    expect(context.send).not.toHaveBeenCalled();
   });
 
   test('does not send css updates for unrelated css files in the same package', async () => {
@@ -232,8 +279,9 @@ describe('aukletStylePlugin Vite server integration', () => {
     context.send.mockClear();
     context.invalidateModule.mockClear();
 
-    await runChange(context.handlers.get('change'), unrelatedFile);
+    const result = await runHotUpdate(plugin, context.server, unrelatedFile);
 
+    expect(result).toBeUndefined();
     expect(context.invalidateModule).not.toHaveBeenCalled();
     expect(context.send).not.toHaveBeenCalled();
   });
@@ -246,14 +294,7 @@ describe('aukletStylePlugin Vite server integration', () => {
     const styleFile = path.join('/private/tmp', 'foreign.css');
 
     await plugin.configureServer?.(context.server);
-    const result = await plugin.hotUpdate?.handler?.({
-      file: styleFile,
-      modules: [],
-      server: context.server,
-      timestamp: Date.now(),
-      type: 'update',
-      read: vi.fn(),
-    } as never);
+    const result = await runHotUpdate(plugin, context.server, styleFile);
 
     expect(result).toBeUndefined();
     expect(context.invalidateModule).not.toHaveBeenCalled();
@@ -297,20 +338,14 @@ describe('aukletStylePlugin Vite server integration', () => {
       '.skeleton { color: green; }',
     );
 
-    await runChange(context.handlers.get('change'), externalStyleFile);
+    const result = await runHotUpdate(
+      plugin,
+      context.server,
+      externalStyleFile,
+    );
 
-    expect(context.invalidateModule).toHaveBeenCalledWith({
-      id: appVirtualId,
-    });
-    expect(context.send).toHaveBeenCalledWith({
-      type: 'update',
-      updates: [
-        expect.objectContaining({
-          path: '/@id/__x00__auklet-css:@scope/app/components/Renderer.css',
-          type: 'js-update',
-        }),
-      ],
-    });
+    expect(result?.map((item) => item.id)).toEqual([appVirtualId]);
+    expect(context.send).not.toHaveBeenCalled();
   });
 
   test('keeps source css load working when external imports are not present locally', async () => {
@@ -490,23 +525,13 @@ describe('aukletStylePlugin Vite server integration', () => {
       path.join('packages/ui/src/components/Button/index.css'),
       '.button { color: green; }',
     );
-    await runChange(context.handlers.get('change'), styleFile);
+    const result = await runHotUpdate(plugin, context.server, styleFile);
 
-    expect(context.server.moduleGraph.getModuleById).toHaveBeenCalledWith(
-      virtualId,
-    );
-    expect(context.invalidateModule).toHaveBeenCalledWith({
-      id: virtualId,
-    });
-    expect(context.send).toHaveBeenCalledWith({
-      type: 'update',
-      updates: [
-        expect.objectContaining({
-          path: '/@id/__x00__auklet-css:@scope/app/style.css',
-          type: 'js-update',
-        }),
-      ],
-    });
+    expect(
+      context.server.environments.client.moduleGraph.getModuleById,
+    ).toHaveBeenCalledWith(virtualId);
+    expect(result?.map((item) => item.id)).toEqual([virtualId]);
+    expect(context.send).not.toHaveBeenCalled();
   });
 
   test('invalidates css request cache even when tracked virtual css modules are no longer live', async () => {
@@ -535,19 +560,22 @@ describe('aukletStylePlugin Vite server integration', () => {
     expect(initial).toContain('color: blue');
     context.send.mockClear();
     context.invalidateModule.mockClear();
-    context.server.moduleGraph.getModuleById = vi.fn(() => undefined);
+    context.server.environments.client.moduleGraph.getModuleById = vi.fn(
+      () => undefined,
+    );
 
     fixture.writeFile(
       'src/components/Button/index.css',
       '.button { color: green; }',
     );
 
-    await runChange(context.handlers.get('change'), styleFile);
+    const result = await runHotUpdate(plugin, context.server, styleFile);
 
     const refreshed = await plugin.load?.call({ addWatchFile }, virtualId);
     expect(refreshed).toContain('color: green');
     expect(refreshed).not.toContain('color: blue');
     expect(context.invalidateModule).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
     expect(context.send).not.toHaveBeenCalled();
   });
 
@@ -629,26 +657,15 @@ describe('aukletStylePlugin Vite server integration', () => {
       path.join('packages/ui/src/components/Button/index.css'),
       '.button { color: green; }',
     );
-    await runChange(context.handlers.get('change'), styleFile);
+    const result = await runHotUpdate(plugin, context.server, styleFile);
 
     expect(appCode).toContain('.button { color: blue; }');
     expect(appCode).not.toContain('auklet-css:@scope/ui/components/Button.css');
     expect(addWatchFile).toHaveBeenCalledWith(styleFile);
-    expect(context.invalidateModule).toHaveBeenCalledWith({ id: appVirtualId });
-    expect(context.invalidateModule).toHaveBeenCalledWith({ id: uiVirtualId });
-    expect(context.send).toHaveBeenCalledWith({
-      type: 'update',
-      updates: expect.arrayContaining([
-        expect.objectContaining({
-          path: '/@id/__x00__auklet-css:@scope/app/components/App.css',
-          type: 'js-update',
-        }),
-        expect.objectContaining({
-          path: '/@id/__x00__auklet-css:@scope/ui/components/Button.css',
-          type: 'js-update',
-        }),
-      ]),
-    });
+    expect(result?.map((item) => item.id)).toEqual(
+      expect.arrayContaining([appVirtualId, uiVirtualId]),
+    );
+    expect(context.send).not.toHaveBeenCalled();
   });
 
   test('lets Vite 8 transform recursive workspace package CSS dependencies', async () => {
@@ -846,27 +863,10 @@ describe('aukletStylePlugin Vite server integration', () => {
       path.join('packages/ui/src/components/Button/index.css'),
       '.button { color: green; }',
     );
-    await runChange(context.handlers.get('change'), styleFile);
-    await plugin.hotUpdate?.handler?.({
-      file: styleFile,
-      modules: [],
-      server: context.server,
-      timestamp: Date.now(),
-      type: 'update',
-      read: vi.fn(),
-    } as never);
+    const result = await runHotUpdate(plugin, context.server, styleFile);
 
-    expect(context.invalidateModule).toHaveBeenCalledTimes(1);
-    expect(context.send).toHaveBeenCalledTimes(1);
-    expect(context.send).toHaveBeenCalledWith({
-      type: 'update',
-      updates: [
-        expect.objectContaining({
-          path: '/@id/__x00__auklet-css:@scope/app/style.css',
-          type: 'js-update',
-        }),
-      ],
-    });
+    expect(result?.map((item) => item.id)).toEqual([virtualId]);
+    expect(context.send).not.toHaveBeenCalled();
   });
 
   test('sends full reload for style config changes', async () => {
@@ -896,6 +896,622 @@ describe('aukletStylePlugin Vite server integration', () => {
     context.handlers.get('add')?.(styleFile);
 
     expect(context.invalidateModule).toHaveBeenCalled();
+    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+  });
+});
+
+describe('aukletStylePlugin CSS Modules integration', () => {
+  let fixture: VirtualProject;
+  let packageRoot: string;
+
+  beforeEach(() => {
+    fixture = createVirtualProject('auklet-vite-css-modules-');
+    fixture.writeJson('package.json', { name: '@scope/app' });
+    packageRoot = fixture.root;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fixture.cleanup();
+  });
+
+  test('resolveId redirects CSS Modules imports to virtual js modules', async () => {
+    fixture.writeFile('src/Button.module.css', '.button {}');
+    const importer = path.join(packageRoot, 'src/Button.tsx');
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const handler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+
+    const resolved = await handler?.call(
+      plugin,
+      './Button.module.css',
+      importer,
+    );
+    const resolvedId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? resolved.id
+        : resolved;
+
+    expect(String(resolvedId)).toContain('\0auklet-css-module:');
+    expect(String(resolvedId)).toContain('Button.module.css.js');
+  });
+
+  test('load registers Less partial paths from compileCssModule watchFiles', async () => {
+    fixture.writeFile('src/tokens.less', '@brand: tomato;');
+    const moduleFile = path.join(
+      packageRoot,
+      'src/components/Card/Card.module.less',
+    );
+    fixture.writeFile(
+      'src/components/Card/Card.module.less',
+      '@import "../../tokens.less";\n.card { color: @brand; }',
+    );
+
+    const addWatchFile = vi.fn();
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const { styleCode } = await loadCssModuleDevPair(
+      plugin,
+      { addWatchFile },
+      moduleFile,
+    );
+
+    expect(readPluginLoadCode(styleCode)).toContain('color: tomato');
+    expect(addWatchFile).toHaveBeenCalledWith(moduleFile);
+    expect(addWatchFile).toHaveBeenCalledWith(
+      path.join(packageRoot, 'src/tokens.less'),
+    );
+  });
+
+  test('hotUpdate returns module nodes for tracked CSS Modules files', async () => {
+    const moduleFile = path.join(packageRoot, 'src/Button.module.css');
+    const importer = path.join(packageRoot, 'src/Button.tsx');
+    fixture.writeFile('src/Button.module.css', '.button {}');
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Button.module.css',
+      importer,
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+    const { styleVirtualId } = cssModuleVirtualIdsForFile(moduleFile);
+    const context = createServer([virtualId, styleVirtualId]);
+
+    await plugin.load?.call({ addWatchFile: vi.fn() }, virtualId);
+    context.send.mockClear();
+
+    const result = await runHotUpdate(plugin, context.server, moduleFile);
+
+    expect(result?.map((item) => item.id)).toEqual([styleVirtualId]);
+    expect(context.invalidateModule).not.toHaveBeenCalled();
+    expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('hotUpdate on CSS Modules file returns module nodes without full-reload', async () => {
+    const moduleFile = path.join(packageRoot, 'src/Button.module.css');
+    const importer = path.join(packageRoot, 'src/Button.tsx');
+    fixture.writeFile('src/Button.module.css', '.button { color: red; }');
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Button.module.css',
+      importer,
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+    const { styleVirtualId } = cssModuleVirtualIdsForFile(moduleFile);
+    const context = createServer([virtualId, styleVirtualId]);
+
+    await plugin.load?.call({ addWatchFile: vi.fn() }, virtualId);
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    fixture.writeFile('src/Button.module.css', '.button { color: blue; }');
+    const result = await runHotUpdate(plugin, context.server, moduleFile);
+
+    expect(result?.map((item) => item.id)).toEqual([styleVirtualId]);
+    expect(context.send).not.toHaveBeenCalled();
+    expect(context.invalidateModule).not.toHaveBeenCalled();
+  });
+
+  test('hotUpdate on CSS Modules Less partial returns module nodes', async () => {
+    const importer = path.join(packageRoot, 'src/components/Tag/index.tsx');
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+
+    fixture.writeFile(
+      'src/components/Tag/tokens.less',
+      ':root { --tag-color: #0f766e; }',
+    );
+    fixture.writeFile(
+      'src/components/Tag/Tag.module.less',
+      '@import "./tokens.less";\n.tag { color: var(--tag-color); }',
+    );
+
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Tag.module.less',
+      importer,
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+    const moduleFile = path.join(
+      packageRoot,
+      'src/components/Tag/Tag.module.less',
+    );
+    const { styleVirtualId } = cssModuleVirtualIdsForFile(moduleFile);
+    const context = createServer([virtualId, styleVirtualId]);
+
+    await plugin.load?.call({ addWatchFile: vi.fn() }, virtualId);
+    context.send.mockClear();
+
+    const partialFile = path.join(
+      packageRoot,
+      'src/components/Tag/tokens.less',
+    );
+    fixture.writeFile(
+      'src/components/Tag/tokens.less',
+      ':root { --tag-color: #111827; }',
+    );
+    const result = await runHotUpdate(plugin, context.server, partialFile);
+
+    expect(result?.map((item) => item.id)).toEqual([styleVirtualId]);
+    expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('reloads CSS Modules css and locals when load runs after source edits', async () => {
+    const moduleFile = path.join(
+      packageRoot,
+      'src/components/Button/Button.module.css',
+    );
+    fixture.writeFile(
+      'src/components/Button/Button.module.css',
+      '.button { color: red; }',
+    );
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const loadContext = { addWatchFile: vi.fn() };
+    const firstDev = await loadCssModuleDevPair(
+      plugin,
+      loadContext,
+      moduleFile,
+    );
+    const first = parseCssModuleDevModule(
+      firstDev.localsCode!,
+      firstDev.styleCode!,
+    );
+
+    expect(first.css).toContain('color: red');
+    expect(first.locals.button).toBeTruthy();
+
+    fixture.writeFile(
+      'src/components/Button/Button.module.css',
+      '.button { color: blue; }\n.icon { width: 1rem; }',
+    );
+
+    const secondDev = await loadCssModuleDevPair(
+      plugin,
+      loadContext,
+      moduleFile,
+    );
+    const second = parseCssModuleDevModule(
+      secondDev.localsCode!,
+      secondDev.styleCode!,
+    );
+
+    expect(second.css).toContain('color: blue');
+    expect(second.css).not.toBe(first.css);
+    expect(second.locals.button).toBe(first.locals.button);
+    expect(second.locals.icon).toBeTruthy();
+    expect(second.locals).not.toEqual(first.locals);
+  });
+
+  test('reloads a virtual CSS asset when a Less partial changes', async () => {
+    const tokensFile = fixture.writeFile(
+      'src/components/Tag/tokens.less',
+      ':root { --tag-color: #0f766e; }',
+    );
+    const moduleFile = path.join(
+      packageRoot,
+      'src/components/Tag/Tag.module.less',
+    );
+    fixture.writeFile(
+      'src/components/Tag/Tag.module.less',
+      '@import "./tokens.less";\n.tag { color: var(--tag-color); }',
+    );
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const loadContext = { addWatchFile: vi.fn() };
+    const firstDev = await loadCssModuleDevPair(
+      plugin,
+      loadContext,
+      moduleFile,
+    );
+    const first = parseCssModuleDevModule(
+      firstDev.localsCode!,
+      firstDev.styleCode!,
+    );
+
+    expect(first.css).toContain('@import');
+    expect(first.css).not.toContain('--tag-color: #0f766e');
+    const assetVirtualId = toResolvedCssModuleStyleAssetVirtualId(
+      moduleFile,
+      tokensFile,
+    );
+    const assetBrowserUrl = toCssModuleStyleAssetBrowserUrl(
+      moduleFile,
+      tokensFile,
+    );
+    expect(decodeURIComponent(assetBrowserUrl)).toContain(moduleFile);
+    expect(decodeURIComponent(assetBrowserUrl)).toContain(tokensFile);
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+    expect(await resolveHandler?.call(plugin, assetBrowserUrl)).toBe(
+      assetVirtualId,
+    );
+    const firstAsset = await plugin.load?.call(loadContext, assetVirtualId);
+    expect(readPluginLoadCode(firstAsset)).toContain('--tag-color: #0f766e');
+
+    fixture.writeFile(
+      'src/components/Tag/tokens.less',
+      ':root { --tag-color: #111827; }',
+    );
+
+    const secondDev = await loadCssModuleDevPair(
+      plugin,
+      loadContext,
+      moduleFile,
+    );
+    const second = parseCssModuleDevModule(
+      secondDev.localsCode!,
+      secondDev.styleCode!,
+    );
+
+    const secondAsset = await plugin.load?.call(loadContext, assetVirtualId);
+    expect(readPluginLoadCode(secondAsset)).toContain('--tag-color: #111827');
+    expect(readPluginLoadCode(secondAsset)).not.toContain('#0f766e');
+    expect(second.css).toBe(first.css);
+    expect(second.locals).toEqual(first.locals);
+  });
+
+  test('load returns JS locals and raw virtual CSS styles', async () => {
+    fixture.writeFile('src/Button.module.css', '.button {}');
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Button.module.css',
+      path.join(packageRoot, 'src/Button.tsx'),
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+
+    const loaded = await plugin.load?.call(
+      { addWatchFile: vi.fn() },
+      virtualId,
+    );
+    const styleLoaded = await plugin.load?.call(
+      { addWatchFile: vi.fn() },
+      toCssModuleStyleVirtualId(
+        path.join(packageRoot, 'src/Button.module.css'),
+      ),
+    );
+
+    expect(readPluginLoadModuleType(loaded)).toBe('js');
+    expect(readPluginLoadCode(loaded)).not.toContain(
+      'import.meta.hot.accept()',
+    );
+    expect(readPluginLoadModuleType(styleLoaded)).toBe(null);
+    expect(readPluginLoadCode(styleLoaded)).toContain('.Button_button_');
+    expect(readPluginLoadCode(styleLoaded)).not.toContain('document.');
+    expect(String(virtualId)).toMatch(/\.module\.css\.js$/);
+    expect(String(virtualId)).not.toMatch(/\.style\.js$/);
+  });
+
+  test('css module hotUpdate returns environment module nodes with importers', async () => {
+    fixture.writeFile(
+      'auklet.config.js',
+      `export const config = { source: 'src' };`,
+    );
+    fixture.writeFile('src/Tag.module.css', '.tag { color: red; }');
+    fixture.writeFile(
+      'src/useTag.ts',
+      `
+        import styles from './Tag.module.css';
+        export function getTagClass() {
+          return styles.tag;
+        }
+        export function getLabelClass() {
+          return styles.label;
+        }
+        export function getLocalKeys() {
+          return Object.keys(styles);
+        }
+      `,
+    );
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const server = await createViteServer({
+      configFile: false,
+      logLevel: 'silent',
+      root: packageRoot,
+      plugins: [plugin],
+    });
+
+    try {
+      await server.transformRequest('/src/useTag.ts');
+      const first = await server.ssrLoadModule('/src/useTag.ts');
+      expect(first.getLocalKeys()).toContain('tag');
+
+      fixture.writeFile('src/Tag.module.css', '.label { color: blue; }');
+
+      const moduleFile = path.join(packageRoot, 'src/Tag.module.css');
+      const modules = await runHotUpdate(plugin, server, moduleFile);
+
+      expect(modules?.length).toBeGreaterThan(0);
+      expect(modules![0].importers.size).toBeGreaterThan(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('hotUpdate returns undefined for untracked CSS Modules files', async () => {
+    const moduleFile = path.join(packageRoot, 'src/Button.module.css');
+    fixture.writeFile('src/Button.module.css', '.button {}');
+    const plugin = aukletStylePlugin({ root: packageRoot });
+
+    const result = await runHotUpdate(
+      plugin,
+      createServer().server,
+      moduleFile,
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  test('hotUpdate returns module nodes on repeated css module updates', async () => {
+    const moduleFile = path.join(packageRoot, 'src/Button.module.css');
+    const importer = path.join(packageRoot, 'src/Button.tsx');
+    fixture.writeFile('src/Button.module.css', '.button { color: red; }');
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Button.module.css',
+      importer,
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+    const { styleVirtualId } = cssModuleVirtualIdsForFile(moduleFile);
+    const context = createServer([virtualId, styleVirtualId]);
+
+    await plugin.load?.call({ addWatchFile: vi.fn() }, virtualId);
+    context.send.mockClear();
+
+    const first = await runHotUpdate(plugin, context.server, moduleFile);
+    const second = await runHotUpdate(plugin, context.server, moduleFile);
+
+    expect(first?.map((item) => item.id)).toEqual([styleVirtualId]);
+    expect(second?.map((item) => item.id)).toEqual([styleVirtualId]);
+    expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('hotUpdate uses combined style hot update for CSS Modules files', async () => {
+    const moduleFile = path.join(packageRoot, 'src/Button.module.css');
+    const importer = path.join(packageRoot, 'src/Button.tsx');
+    fixture.writeFile('src/Button.module.css', '.button {}');
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Button.module.css',
+      importer,
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+    const { styleVirtualId } = cssModuleVirtualIdsForFile(moduleFile);
+    const context = createServer([virtualId, styleVirtualId]);
+
+    await plugin.load?.call({ addWatchFile: vi.fn() }, virtualId);
+
+    const result = await runHotUpdate(plugin, context.server, moduleFile);
+
+    expect(result?.map((item) => item.id)).toEqual([styleVirtualId]);
+  });
+
+  test('unlink of tracked CSS Modules partial sends full reload', async () => {
+    const importer = path.join(packageRoot, 'src/components/Tag/index.tsx');
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+
+    fixture.writeFile(
+      'src/components/Tag/tokens.less',
+      ':root { --tag-color: #0f766e; }',
+    );
+    fixture.writeFile(
+      'src/components/Tag/Tag.module.less',
+      '@import "./tokens.less";\n.tag { color: var(--tag-color); }',
+    );
+
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Tag.module.less',
+      importer,
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+    const partialFile = path.join(
+      packageRoot,
+      'src/components/Tag/tokens.less',
+    );
+    const context = createServer([virtualId]);
+
+    await plugin.configureServer?.(context.server);
+    await plugin.load?.call({ addWatchFile: vi.fn() }, virtualId);
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    await context.handlers.get('unlink')?.(partialFile);
+
+    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+    expect(context.invalidateModule).toHaveBeenCalled();
+  });
+
+  test('unlink of an SSR-only CSS Modules partial clears tracking', async () => {
+    const importer = path.join(packageRoot, 'src/components/Tag/index.tsx');
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+
+    fixture.writeFile(
+      'src/components/Tag/tokens.less',
+      ':root { --tag-color: #0f766e; }',
+    );
+    fixture.writeFile(
+      'src/components/Tag/Tag.module.less',
+      '@import "./tokens.less";\n.tag { color: var(--tag-color); }',
+    );
+
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Tag.module.less',
+      importer,
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+    const partialFile = path.join(
+      packageRoot,
+      'src/components/Tag/tokens.less',
+    );
+    const context = createServer([]);
+    const ssrInvalidateModule = vi.fn();
+    context.server.environments.ssr.moduleGraph = {
+      getModuleById: vi.fn((id: string) =>
+        id === virtualId ? ({ id } as never) : undefined,
+      ),
+      invalidateModule: ssrInvalidateModule,
+    } as never;
+
+    await plugin.configureServer?.(context.server);
+    await plugin.load?.call(
+      {
+        addWatchFile: vi.fn(),
+        environment: { name: 'ssr' },
+      },
+      virtualId,
+    );
+    context.send.mockClear();
+
+    await context.handlers.get('unlink')?.(partialFile);
+
+    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+    expect(ssrInvalidateModule).toHaveBeenCalledWith(
+      expect.objectContaining({ id: virtualId }),
+    );
+  });
+
+  test('unlink of CSS Modules entry sends full reload', async () => {
+    const moduleFile = path.join(packageRoot, 'src/Button.module.css');
+    const importer = path.join(packageRoot, 'src/Button.tsx');
+    fixture.writeFile('src/Button.module.css', '.button {}');
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const resolveHandler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+    const resolved = await resolveHandler?.call(
+      plugin,
+      './Button.module.css',
+      importer,
+    );
+    const virtualId =
+      typeof resolved === 'object' && resolved && 'id' in resolved
+        ? String(resolved.id)
+        : String(resolved);
+    const context = createServer([virtualId]);
+
+    await plugin.configureServer?.(context.server);
+    await plugin.load?.call({ addWatchFile: vi.fn() }, virtualId);
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    await context.handlers.get('unlink')?.(moduleFile);
+
+    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+    expect(context.invalidateModule).toHaveBeenCalled();
+  });
+
+  test('add of CSS Modules entry sends full reload', async () => {
+    const moduleFile = path.join(packageRoot, 'src/Button.module.css');
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const context = createServer();
+
+    await plugin.configureServer?.(context.server);
+    context.send.mockClear();
+
+    await context.handlers.get('add')?.(moduleFile);
+
     expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
   });
 });

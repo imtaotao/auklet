@@ -1,18 +1,84 @@
 import fs from 'node:fs';
-import path from 'node:path';
-import type { HotUpdateOptions, ModuleNode, Plugin, ViteDevServer } from 'vite';
+import type {
+  DevEnvironment,
+  HotUpdateOptions,
+  Plugin,
+  ViteDevServer,
+} from 'vite';
+import { createCssModuleLocalsViteLoadCode } from '#auklet/css/modules/compileCssModule';
+import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
+import { createCssModuleDevStyleSource } from '#auklet/css/vite/cssModuleStyleSource';
+import {
+  cssModuleFileFromVirtualId,
+  isCssModuleRootStyleVirtualModuleId,
+  resolveCssModuleStyleAssetVirtualId,
+  toCssModuleStyleVirtualId,
+  toCssModuleVirtualId,
+} from '#auklet/css/vite/cssModuleVirtualId';
+import { invalidateModuleInEnvironments } from '#auklet/css/vite/hmr/propagate';
+import {
+  resolveCssModuleImport,
+  stripCssModuleQuery,
+} from '#auklet/css/modules/resolveCssModuleImport';
 import type { ModuleStyleGraphOptions } from '#auklet/css/vite/moduleGraph/types';
-import { AukletStyleHmr } from '#auklet/css/vite/hmr';
+import { AukletStyleHmr } from '#auklet/css/vite/hmr/styleHmr';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import { createAukletLogger } from '#auklet/logger';
+import { findWorkspaceRoot } from '#auklet/workspace/root';
 
-const WORKSPACE_FILE = 'pnpm-workspace.yaml';
 const VIRTUAL_ID_PREFIX = 'virtual:auklet-css:';
 const RESOLVED_VIRTUAL_ID_PREFIX = '\0auklet-css:';
+const RESOLVED_CSS_MODULE_PREFIX = '\0auklet-css-module:';
 const BROWSER_VIRTUAL_ID_PREFIX = 'auklet-css:';
 const logger = createAukletLogger({ scope: 'css:vite' });
 
-const stripQuery = (id: string) => id.split('?')[0];
+const fromCssModuleVirtualId = cssModuleFileFromVirtualId;
+
+const loadCssModuleCode = async (
+  context: { addWatchFile?: (file: string) => void },
+  virtualId: string,
+  moduleFile: string,
+  hmr: AukletStyleHmr,
+  graph: ModuleStyleGraph,
+  environment = 'client',
+) => {
+  const sourceRoot = await graph.resolveSourceRootForFile(moduleFile);
+  const result = await hmr.compileCssModuleForDev(
+    moduleFile,
+    sourceRoot ?? undefined,
+    environment,
+  );
+  for (const file of result.watchFiles) {
+    context.addWatchFile?.(file);
+  }
+  hmr.replaceCssModuleDependency(
+    moduleFile,
+    result.watchFiles,
+    result.styleAssets,
+  );
+  const styleAsset = resolveCssModuleStyleAssetVirtualId(virtualId);
+  if (styleAsset) {
+    return {
+      code: createCssModuleDevStyleSource(
+        moduleFile,
+        result,
+        styleAsset.assetFile,
+      ),
+    };
+  }
+  if (isCssModuleRootStyleVirtualModuleId(virtualId)) {
+    return {
+      code: createCssModuleDevStyleSource(moduleFile, result),
+    };
+  }
+  return {
+    code: createCssModuleLocalsViteLoadCode(
+      result,
+      toCssModuleStyleVirtualId(moduleFile),
+    ),
+    moduleType: 'js' as const,
+  };
+};
 
 const toResolvedVirtualId = (id: string) => {
   if (id.startsWith(RESOLVED_VIRTUAL_ID_PREFIX)) {
@@ -24,18 +90,6 @@ const toResolvedVirtualId = (id: string) => {
     )}`;
   }
   return null;
-};
-
-const findWorkspaceRoot = (startDir: string) => {
-  let current = path.resolve(startDir);
-  while (true) {
-    if (fs.existsSync(path.join(current, WORKSPACE_FILE))) {
-      return current;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
 };
 
 const createModuleStyleGraph = (
@@ -78,21 +132,17 @@ const createWatcherErrorPayload = (error: unknown, file: string) => {
 };
 
 const invalidateVirtualModules = (
-  server: Pick<ViteDevServer, 'moduleGraph'>,
+  server: Pick<ViteDevServer, 'environments'>,
   graph: ModuleStyleGraph,
 ) => {
-  const modules: Array<ModuleNode> = [];
   for (const packageName of graph.getPackageNames()) {
     for (const entry of ['style.css', 'external.css', 'module.css']) {
-      const module = server.moduleGraph.getModuleById(
+      invalidateModuleInEnvironments(
+        server,
         `${RESOLVED_VIRTUAL_ID_PREFIX}${packageName}/${entry}`,
       );
-      if (!module) continue;
-      server.moduleGraph.invalidateModule(module);
-      modules.push(module);
     }
   }
-  return modules;
 };
 
 export type AukletStylePluginOptions = Partial<
@@ -102,7 +152,7 @@ export type AukletStylePluginOptions = Partial<
 
 export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
   let graph: ModuleStyleGraph | null = null;
-  let moduleGraph: ViteDevServer['moduleGraph'] | null = null;
+  let clientModuleGraph: DevEnvironment['moduleGraph'] | null = null;
 
   const getGraph = () => {
     if (!graph) {
@@ -122,21 +172,68 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
       graph = createModuleStyleGraph(options, config.root);
     },
 
-    resolveId(id: string) {
-      const graph = getGraph();
-      const cleanId = stripQuery(id);
-      const resolvedVirtualId = toResolvedVirtualId(cleanId);
-      if (resolvedVirtualId) return resolvedVirtualId;
-      if (cleanId.startsWith(VIRTUAL_ID_PREFIX)) {
-        return `${RESOLVED_VIRTUAL_ID_PREFIX}${cleanId.slice(
-          VIRTUAL_ID_PREFIX.length,
-        )}`;
-      }
-      if (!graph.parsePackageStyleId(cleanId)) return null;
-      return `${RESOLVED_VIRTUAL_ID_PREFIX}${cleanId}`;
+    resolveId: {
+      order: 'pre' as const,
+      handler(source: string, importer?: string) {
+        const graph = getGraph();
+        const cleanId = stripCssModuleQuery(source);
+
+        const styleAsset = resolveCssModuleStyleAssetVirtualId(cleanId);
+        if (styleAsset) return styleAsset.id;
+
+        if (cleanId.startsWith(RESOLVED_CSS_MODULE_PREFIX)) {
+          return cleanId;
+        }
+
+        const cssModuleFile = resolveCssModuleImport({
+          source,
+          importer,
+          parseModuleFileFromId: fromCssModuleVirtualId,
+        });
+        if (cssModuleFile) {
+          return {
+            id: toCssModuleVirtualId(cssModuleFile),
+            moduleSideEffects: true,
+          };
+        }
+
+        const resolvedVirtualId = toResolvedVirtualId(cleanId);
+        if (resolvedVirtualId) return resolvedVirtualId;
+        if (cleanId.startsWith(VIRTUAL_ID_PREFIX)) {
+          return `${RESOLVED_VIRTUAL_ID_PREFIX}${cleanId.slice(
+            VIRTUAL_ID_PREFIX.length,
+          )}`;
+        }
+        if (!graph.parsePackageStyleId(cleanId)) return null;
+        return `${RESOLVED_VIRTUAL_ID_PREFIX}${cleanId}`;
+      },
     },
 
     async load(this: { addWatchFile?: (file: string) => void }, id: string) {
+      const environmentName =
+        (this as { environment?: { name?: string } }).environment?.name ??
+        'client';
+      const styleAsset = resolveCssModuleStyleAssetVirtualId(id);
+      const cssModuleFile =
+        styleAsset?.moduleFile ??
+        fromCssModuleVirtualId(id) ??
+        (() => {
+          const cleanId = stripCssModuleQuery(id);
+          if (!isCssModuleFile(cleanId) || !fs.existsSync(cleanId)) return null;
+          return cleanId;
+        })();
+
+      if (cssModuleFile) {
+        return loadCssModuleCode(
+          this,
+          id,
+          cssModuleFile,
+          hmr,
+          getGraph(),
+          environmentName,
+        );
+      }
+
       if (!id.startsWith(RESOLVED_VIRTUAL_ID_PREFIX)) return null;
 
       const originalId = id.slice(RESOLVED_VIRTUAL_ID_PREFIX.length);
@@ -145,8 +242,8 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
       if (!parsed) return null;
 
       const result = await graph.createPackageStyleCode(parsed);
-      if (moduleGraph) {
-        hmr.pruneStaleVirtualDependencies(moduleGraph);
+      if (clientModuleGraph) {
+        hmr.pruneStaleVirtualDependencies(clientModuleGraph);
       }
       hmr.replaceVirtualStyleDependency(
         id,
@@ -162,7 +259,7 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
     async configureServer(server: ViteDevServer) {
       const graph = getGraph();
-      moduleGraph = server.moduleGraph;
+      clientModuleGraph = server.environments.client.moduleGraph;
       hmr.installFullReloadGuard(server);
 
       const close = server.close.bind(server);
@@ -173,39 +270,75 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
       server.watcher.add(await graph.getWatchRoots());
 
-      const invalidateStyleGraph = (file: string) => {
+      const invalidatePackageStyleGraph = (file: string) => {
         if (!graph.isSourceGraphFile(file)) return false;
         graph.invalidateFile(file);
         invalidateVirtualModules(server, graph);
         return true;
       };
 
-      const reloadStyleGraph = (file: string) => {
-        if (!invalidateStyleGraph(file)) return;
+      const environmentModuleGraph = {
+        getModuleById(id: string) {
+          for (const environment of Object.values(server.environments)) {
+            const module = environment.moduleGraph.getModuleById(id);
+            if (module) return module;
+          }
+          return undefined;
+        },
+      };
+
+      const reloadCssModuleGraph = (file: string, event: 'add' | 'unlink') => {
+        const isModuleFile = isCssModuleFile(file);
+        const trackedPartial = hmr.hasTrackedCssModuleDependency(
+          file,
+          environmentModuleGraph,
+        );
+        const packageRelated = graph.isSourceGraphFile(file);
+
+        if (!isModuleFile && !trackedPartial && !packageRelated) {
+          return false;
+        }
+
+        if (packageRelated) {
+          invalidatePackageStyleGraph(file);
+        }
+
+        if (event === 'unlink' && (isModuleFile || trackedPartial)) {
+          hmr.removeCssModuleGraphFile(
+            server,
+            file,
+            isModuleFile ? file : null,
+          );
+        }
+
+        return true;
+      };
+
+      const reloadStyleGraph = (
+        file: string,
+        event: 'add' | 'unlink' | 'change' = 'change',
+      ) => {
+        if (event !== 'change') {
+          if (reloadCssModuleGraph(file, event)) {
+            server.ws.send({ type: 'full-reload' });
+            return;
+          }
+        }
+
+        if (!invalidatePackageStyleGraph(file)) return;
         server.ws.send({ type: 'full-reload' });
       };
 
-      server.watcher.on('add', reloadStyleGraph);
-      server.watcher.on('unlink', reloadStyleGraph);
+      server.watcher.on('add', (file) => reloadStyleGraph(file, 'add'));
+      server.watcher.on('unlink', (file) => reloadStyleGraph(file, 'unlink'));
       server.watcher.on('change', async (file) => {
         try {
-          hmr.scheduleStaleVirtualDependencyPrune(server.moduleGraph);
+          hmr.scheduleStaleVirtualDependencyPrune(
+            server.environments.client.moduleGraph,
+          );
+
           if (graph.isStyleConfigFile(file)) {
             reloadStyleGraph(file);
-          } else if (graph.isStyleFile(file)) {
-            const tracked = hmr.hasTrackedStyleDependency(file);
-            if (tracked) {
-              await hmr.handleStyleHotUpdate({
-                file,
-                modules: [],
-                server,
-                timestamp: Date.now(),
-                type: 'update',
-                read: async () => '',
-              });
-            } else {
-              graph.invalidateFileLoadResults(file);
-            }
           } else if (graph.isSourceModuleFile(file)) {
             await hmr.handleSourceModuleChange(server, file);
           }
@@ -219,8 +352,15 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
     hotUpdate: {
       order: 'pre',
-      handler(context: HotUpdateOptions) {
-        return hmr.handleStyleHotUpdate(context);
+      handler(
+        this: { environment: DevEnvironment },
+        context: HotUpdateOptions,
+      ) {
+        return hmr.handleCombinedHotUpdate(
+          context,
+          this.environment.moduleGraph,
+          this.environment.name,
+        );
       },
     },
   } satisfies Plugin;

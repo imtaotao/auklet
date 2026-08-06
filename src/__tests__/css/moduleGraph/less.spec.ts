@@ -174,7 +174,15 @@ describe('ModuleStyleGraph Less entries', () => {
     expect(button.code).toContain('color: blue');
     expect(button.code).not.toContain('@accent');
     expect(button.code).not.toContain(toFsSpecifier(buttonLessPath));
-    expect(collectStyleImports(button.code)).toEqual([]);
+    expect(collectStyleImports(button.code)).toEqual([
+      toFsSpecifier(
+        packagePath(
+          fixture,
+          appPackageRoot,
+          'src/components/Button/tokens.css',
+        ),
+      ),
+    ]);
 
     expect(collectStyleImports(card.code)).toEqual([]);
     expect(card.code).toContain('.card');
@@ -185,6 +193,13 @@ describe('ModuleStyleGraph Less entries', () => {
     expect(module.code).not.toContain(toFsSpecifier(buttonLessPath));
     expect(collectStyleImports(module.code)).toEqual([
       toFsSpecifier(cardCssPath),
+      toFsSpecifier(
+        packagePath(
+          fixture,
+          appPackageRoot,
+          'src/components/Button/tokens.css',
+        ),
+      ),
     ]);
 
     expectWatchFile(

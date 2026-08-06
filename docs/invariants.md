@@ -64,8 +64,13 @@ the same change and make the reason explicit.
   and Vite/dev graph structure.
 - auklet is a style entry generator, not a general CSS bundler. Do not add
   transform behavior inside entry writers.
-- Allowed style transforms are only Less compilation and `styles.prefix`. Both
+- Global style transforms are only Less compilation and `styles.prefix`. Both
   run in `StyleProcessor` and must stay aligned for production and Vite/dev.
+- CSS Modules (`*.module.css` / `*.module.less`) are a separate protocol under
+  `src/css/modules`. They must not enter the global style entry/auto-import
+  graph, must not use `styles.prefix`, and must not be compiled through
+  `StyleProcessor.readStyleFile`. JS build and Vite consume Modules only via
+  `compileCssModule` / `isCssModuleFile`.
 - `styles.shared` is the only same-package exception to component-local style
   imports. It must stay limited to current source-root style files and must not
   permit component-to-component or package-to-package style imports. Nested

@@ -115,6 +115,7 @@ export async function createCssInspectModel(options: {
     context,
     normalizedConfig,
   });
+  await packageContext.prepareStyleLanguage();
   const moduleEntries = normalizedConfig.modules
     ? await createModuleStyleEntryPlans(packageContext)
     : [];

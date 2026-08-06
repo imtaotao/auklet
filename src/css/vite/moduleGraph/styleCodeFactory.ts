@@ -397,25 +397,22 @@ export class StyleCodeFactory {
         undefined,
         {
           applyPrefix: true,
+          preserveLessImportGraph: true,
           mapImportSpecifier: (reference) => {
             if (!context.resolver.isInsideSourceRoot(reference.imported)) {
               return reference.specifier;
             }
-            if (path.extname(reference.imported) === '.less') {
-              throw new Error(
-                `[css] Vite must not emit /@fs for Less: ${reference.imported}`,
-              );
-            }
-            // With prefix, own CSS is expanded below instead of raw /@fs.
+            const importedPath =
+              path.extname(reference.imported) === '.less'
+                ? `${reference.imported.slice(0, -'.less'.length)}.css`
+                : reference.imported;
             if (hasPrefix) return reference.specifier;
-            return toFsSpecifier(reference.imported);
+            return toFsSpecifier(importedPath);
           },
           shouldExpandImport: (reference) => {
             if (!context.resolver.isInsideSourceRoot(reference.imported)) {
               return false;
             }
-            // Less cannot use /@fs. Prefixed own CSS must be processed too so
-            // preserved shared imports match production's prefixed copies.
             return path.extname(reference.imported) === '.less' || hasPrefix;
           },
         },

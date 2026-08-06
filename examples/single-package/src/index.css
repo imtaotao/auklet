@@ -12,3 +12,11 @@
     'Segoe UI',
     sans-serif;
 }
+
+.single-package-demo__modules {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}

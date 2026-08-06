@@ -64,6 +64,8 @@ Check:
 - `docs/css.md` if the supported model or boundaries change.
 - Less compile / `styles.prefix` / Vite `/@fs` rules stay in `StyleProcessor`
   and `styleCodeFactory` (not entry writers).
+- CSS Modules changes belong in `src/css/modules` plus JS/Vite protocol
+  consumers; do not compile Modules through `StyleProcessor` or entry writers.
 
 Tests:
 

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { isAukletConfigFile } from '#auklet/config';
+import { normalizeAukletConfig } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
@@ -106,6 +107,28 @@ export class ModuleStyleGraph {
 
   isSourceModuleFile(file: string) {
     return SOURCE_MODULE_RE.test(normalizeFileKey(file));
+  }
+
+  async resolveSourceRootForFile(file: string) {
+    const packageRoot = this.getFilePackageRoot(file);
+    if (!packageRoot) return null;
+
+    const rawConfig = await this.loadAukletConfig(packageRoot, {
+      cacheBust: true,
+    });
+    const normalizedConfig = normalizeAukletConfig(rawConfig);
+    return path.join(packageRoot, normalizedConfig.source);
+  }
+
+  private getFilePackageRoot(file: string) {
+    if (!this.isSourceGraphFile(file)) return null;
+
+    const normalizedFile = normalizeFileKey(file);
+    const stylePackage = this.packageSource
+      .getPackages()
+      .find((item) => this.isPackageFile(item.packageRoot, normalizedFile));
+
+    return stylePackage?.packageRoot ?? null;
   }
 
   private getFilePackageName(file: string) {

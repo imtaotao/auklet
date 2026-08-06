@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { AukletStyleHmr } from '#auklet/css/vite/hmr';
+import { AukletStyleHmr } from '#auklet/css/vite/hmr/styleHmr';
 import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
 import type { HotUpdateOptions, ViteDevServer } from 'vite';
 
@@ -28,10 +28,6 @@ const componentVirtualId = (name: string) => {
   return packageVirtualId(`components/${name}.css`);
 };
 
-const browserVirtualPath = (id: string) => {
-  return `/@id/${id.replace('\0', '__x00__')}`;
-};
-
 const createModule = (id: string) => ({ id }) satisfies MockModule;
 
 const registerModule = (context: HmrTestContext, id: string) => {
@@ -50,33 +46,21 @@ const trackVirtualStyleDependency = (
   return { id: virtualId, module };
 };
 
-const handleStyleUpdate = async (
+const handleCombinedUpdate = async (
   context: HmrTestContext,
   file = fixture.styleFile,
 ) => {
-  return await context.hmr.handleStyleHotUpdate(
+  return await context.hmr.handleCombinedHotUpdate(
     createContext(context.server, file),
+    context.server.environments.client.moduleGraph,
   );
 };
 
-const expectJsUpdates = (
-  context: HmrTestContext,
-  virtualIds: Array<string>,
-) => {
-  expect(context.send).toHaveBeenCalledWith({
-    type: 'update',
-    updates: virtualIds.map((id) => {
-      const path = browserVirtualPath(id);
-      return {
-        type: 'js-update',
-        path,
-        acceptedPath: path,
-        timestamp: fixture.currentTime,
-        explicitImportRequired: false,
-        isWithinCircularImport: false,
-      };
-    }),
-  });
+const expectReturnedModules = (modules: unknown, virtualIds: Array<string>) => {
+  expect(Array.isArray(modules)).toBe(true);
+  expect((modules as Array<{ id: string }>).map((item) => item.id)).toEqual(
+    virtualIds,
+  );
 };
 
 const createGraph = () => {
@@ -128,21 +112,33 @@ const createServer = () => {
   const modules = new Map<string, MockModule>();
   const getModuleById = vi.fn((id: string) => modules.get(id));
   const invalidateModule = vi.fn();
+  const reloadModule = vi.fn(async () => {});
   const send = vi.fn();
+  const environmentModuleGraph = {
+    getModuleById,
+    invalidateModule,
+  };
+  const clientEnvironment = {
+    moduleGraph: environmentModuleGraph,
+    reloadModule,
+  };
 
   return {
     modules,
     server: {
-      moduleGraph: {
-        getModuleById,
-        invalidateModule,
+      environments: {
+        client: clientEnvironment,
+        ssr: { moduleGraph: environmentModuleGraph },
       },
+      moduleGraph: environmentModuleGraph,
+      reloadModule,
       ws: {
         send,
       },
     } as unknown as ViteDevServer,
     getModuleById,
     invalidateModule,
+    reloadModule,
     send,
   };
 };
@@ -183,24 +179,20 @@ describe('AukletStyleHmr', () => {
     vi.restoreAllMocks();
   });
 
-  test('sends js updates for tracked virtual css dependencies', async () => {
+  test('returns module nodes for tracked virtual css dependencies', async () => {
     const context = createHmrTestContext(graph);
     const trackedDependency = trackVirtualStyleDependency(context);
 
-    const result = await handleStyleUpdate(context);
+    const result = await handleCombinedUpdate(context);
 
-    expect(result).toEqual([]);
     expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
       fixture.styleFile,
     );
-    expect(context.invalidateModule).toHaveBeenCalledWith(
-      trackedDependency.module,
-    );
-    expect(context.invalidateModule).toHaveBeenCalledTimes(1);
-    expectJsUpdates(context, [trackedDependency.id]);
+    expectReturnedModules(result, [trackedDependency.id]);
+    expect(context.send).not.toHaveBeenCalled();
   });
 
-  test('sends js updates for tracked virtual Less dependencies', async () => {
+  test('returns module nodes for tracked virtual Less dependencies', async () => {
     const context = createHmrTestContext(graph);
     const trackedDependency = trackVirtualStyleDependency(
       context,
@@ -208,20 +200,17 @@ describe('AukletStyleHmr', () => {
       fixture.lessFile,
     );
 
-    const result = await handleStyleUpdate(context, fixture.lessFile);
+    const result = await handleCombinedUpdate(context, fixture.lessFile);
 
-    expect(result).toEqual([]);
     expect(graph.isStyleFile).toHaveBeenCalledWith(fixture.lessFile);
     expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
       fixture.lessFile,
     );
-    expect(context.invalidateModule).toHaveBeenCalledWith(
-      trackedDependency.module,
-    );
-    expectJsUpdates(context, [trackedDependency.id]);
+    expectReturnedModules(result, [trackedDependency.id]);
+    expect(context.send).not.toHaveBeenCalled();
   });
 
-  test('sends js updates for tracked virtual css dependencies even when output does not change', async () => {
+  test('returns module nodes for tracked virtual css dependencies even when output does not change', async () => {
     const stableResult = {
       code: 'style-v1',
       watchFiles: [fixture.styleFile],
@@ -247,30 +236,13 @@ describe('AukletStyleHmr', () => {
     const context = createHmrTestContext(graph);
     trackVirtualStyleDependency(context);
 
-    const result = await handleStyleUpdate(context);
+    const result = await handleCombinedUpdate(context);
 
     expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
       fixture.styleFile,
     );
-    expect(context.invalidateModule).toHaveBeenCalledWith({
-      id: componentVirtualId(fixture.componentName),
-    });
-    expect(context.send).toHaveBeenCalledWith({
-      type: 'update',
-      updates: [
-        {
-          type: 'js-update',
-          path: browserVirtualPath(componentVirtualId(fixture.componentName)),
-          acceptedPath: browserVirtualPath(
-            componentVirtualId(fixture.componentName),
-          ),
-          timestamp: fixture.currentTime,
-          explicitImportRequired: false,
-          isWithinCircularImport: false,
-        },
-      ],
-    });
-    expect(result).toEqual([]);
+    expectReturnedModules(result, [componentVirtualId(fixture.componentName)]);
+    expect(context.send).not.toHaveBeenCalled();
   });
 
   test('replaces stale tracked virtual dependencies for the same virtual module', () => {
@@ -285,13 +257,13 @@ describe('AukletStyleHmr', () => {
     expect(
       context.hmr.hasTrackedStyleDependency(
         fixture.styleFile,
-        context.server.moduleGraph,
+        context.server.environments.client.moduleGraph,
       ),
     ).toBe(false);
     expect(
       context.hmr.hasTrackedStyleDependency(
         nextStyleFile,
-        context.server.moduleGraph,
+        context.server.environments.client.moduleGraph,
       ),
     ).toBe(true);
   });
@@ -313,18 +285,20 @@ describe('AukletStyleHmr', () => {
     registerModule(context, secondDependency.id);
     context.modules.delete(firstDependency.id);
 
-    context.hmr.pruneStaleVirtualDependencies(context.server.moduleGraph);
+    context.hmr.pruneStaleVirtualDependencies(
+      context.server.environments.client.moduleGraph,
+    );
 
     expect(
       context.hmr.hasTrackedStyleDependency(
         fixture.styleFile,
-        context.server.moduleGraph,
+        context.server.environments.client.moduleGraph,
       ),
     ).toBe(false);
     expect(
       context.hmr.hasTrackedStyleDependency(
         packageStyleFile,
-        context.server.moduleGraph,
+        context.server.environments.client.moduleGraph,
       ),
     ).toBe(true);
   });
@@ -333,9 +307,15 @@ describe('AukletStyleHmr', () => {
     const context = createHmrTestContext(graph);
     const prune = vi.spyOn(context.hmr, 'pruneStaleVirtualDependencies');
 
-    context.hmr.scheduleStaleVirtualDependencyPrune(context.server.moduleGraph);
-    context.hmr.scheduleStaleVirtualDependencyPrune(context.server.moduleGraph);
-    context.hmr.scheduleStaleVirtualDependencyPrune(context.server.moduleGraph);
+    context.hmr.scheduleStaleVirtualDependencyPrune(
+      context.server.environments.client.moduleGraph,
+    );
+    context.hmr.scheduleStaleVirtualDependencyPrune(
+      context.server.environments.client.moduleGraph,
+    );
+    context.hmr.scheduleStaleVirtualDependencyPrune(
+      context.server.environments.client.moduleGraph,
+    );
 
     expect(prune).toHaveBeenCalledTimes(1);
 
@@ -348,8 +328,12 @@ describe('AukletStyleHmr', () => {
     const context = createHmrTestContext(graph);
     const prune = vi.spyOn(context.hmr, 'pruneStaleVirtualDependencies');
 
-    context.hmr.scheduleStaleVirtualDependencyPrune(context.server.moduleGraph);
-    context.hmr.scheduleStaleVirtualDependencyPrune(context.server.moduleGraph);
+    context.hmr.scheduleStaleVirtualDependencyPrune(
+      context.server.environments.client.moduleGraph,
+    );
+    context.hmr.scheduleStaleVirtualDependencyPrune(
+      context.server.environments.client.moduleGraph,
+    );
     context.hmr.cancelStaleVirtualDependencyPrune();
 
     await vi.advanceTimersByTimeAsync(3000);
@@ -360,7 +344,7 @@ describe('AukletStyleHmr', () => {
   test('ignores files outside the workspace style graph', async () => {
     const context = createHmrTestContext(graph);
 
-    const result = await handleStyleUpdate(context, fixture.outsideFile);
+    const result = await handleCombinedUpdate(context, fixture.outsideFile);
 
     expect(result).toBeUndefined();
     expect(context.send).not.toHaveBeenCalled();
@@ -370,14 +354,14 @@ describe('AukletStyleHmr', () => {
   test('ignores workspace source files that are not styles', async () => {
     const context = createHmrTestContext(graph);
 
-    const result = await handleStyleUpdate(context, fixture.sourceFile);
+    const result = await handleCombinedUpdate(context, fixture.sourceFile);
 
     expect(result).toBeUndefined();
     expect(context.send).not.toHaveBeenCalled();
     expect(context.invalidateModule).not.toHaveBeenCalled();
   });
 
-  test('sends js updates for tracked source module dependencies', async () => {
+  test('reloads tracked source module dependencies through vite reloadModule', async () => {
     const context = createHmrTestContext(graph);
     const trackedDependency = trackVirtualStyleDependency(
       context,
@@ -395,13 +379,11 @@ describe('AukletStyleHmr', () => {
 
     expect(result).toBe(true);
     expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.sourceFile);
-    expect(context.invalidateModule).toHaveBeenCalledWith(
-      trackedDependency.module,
-    );
-    expectJsUpdates(context, [trackedDependency.id]);
+    expect(context.reloadModule).toHaveBeenCalledWith(trackedDependency.module);
+    expect(context.send).not.toHaveBeenCalled();
   });
 
-  test('sends updates when no settled snapshot exists for a tracked source module', async () => {
+  test('reloads tracked source modules when no settled snapshot exists', async () => {
     const virtualId = componentVirtualId(fixture.componentName);
     const graph = {
       createPackageStyleCode: vi.fn(async () => ({
@@ -434,15 +416,9 @@ describe('AukletStyleHmr', () => {
     );
 
     expect(result).toBe(true);
-    expect(context.send).toHaveBeenCalledWith({
-      type: 'update',
-      updates: [
-        expect.objectContaining({
-          path: browserVirtualPath(virtualId),
-          type: 'js-update',
-        }),
-      ],
-    });
+    expect(context.reloadModule).toHaveBeenCalledWith(
+      expect.objectContaining({ id: virtualId }),
+    );
   });
 
   test('parses tracked resolved virtual ids before refreshing source module updates', async () => {
@@ -489,18 +465,10 @@ describe('AukletStyleHmr', () => {
     );
 
     expect(result).toBe(true);
-    expect(context.invalidateModule).toHaveBeenCalledWith({
-      id: virtualId,
-    });
-    expect(context.send).toHaveBeenCalledWith({
-      type: 'update',
-      updates: [
-        expect.objectContaining({
-          path: browserVirtualPath(virtualId),
-          type: 'js-update',
-        }),
-      ],
-    });
+    expect(context.reloadModule).toHaveBeenCalledWith(
+      expect.objectContaining({ id: virtualId }),
+    );
+    expect(context.send).not.toHaveBeenCalled();
     expect(graph.parsePackageStyleId).toHaveBeenCalledWith(
       `${fixture.packageName}/components/${fixture.componentName}.css`,
     );
@@ -600,27 +568,21 @@ describe('AukletStyleHmr', () => {
     expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.sourceFile);
   });
 
-  test('ignores duplicate updates in a short time window', async () => {
+  test('returns module nodes on repeated hot updates', async () => {
     const context = createHmrTestContext(graph);
+    const tracked = trackVirtualStyleDependency(context);
 
-    trackVirtualStyleDependency(context);
-    await handleStyleUpdate(context);
-    context.send.mockClear();
-    vi.mocked(graph.invalidateFileLoadResults).mockClear();
+    await handleCombinedUpdate(context);
+    const result = await handleCombinedUpdate(context);
 
-    const result = await handleStyleUpdate(context);
-
-    expect(result).toEqual([]);
-    expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
-      fixture.styleFile,
-    );
+    expectReturnedModules(result, [tracked.id]);
     expect(context.send).not.toHaveBeenCalled();
   });
 
   test('does not send updates when no virtual dependency is tracked', async () => {
     const context = createHmrTestContext(graph);
 
-    const result = await handleStyleUpdate(context);
+    const result = await handleCombinedUpdate(context);
 
     expect(result).toBeUndefined();
     expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
@@ -636,9 +598,8 @@ describe('AukletStyleHmr', () => {
       sentPayloads.push(payload);
     }) as ViteDevServer['ws']['send'];
     context.hmr.installFullReloadGuard(context.server);
-    (
-      context.hmr as unknown as { suppressFullReloadUntil: number }
-    ).suppressFullReloadUntil = Date.now() + 100;
+    trackVirtualStyleDependency(context);
+    await handleCombinedUpdate(context);
     sentPayloads.length = 0;
 
     context.server.ws.send({ type: 'full-reload' });

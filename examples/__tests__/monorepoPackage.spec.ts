@@ -48,6 +48,12 @@ describe('monorepo package example', () => {
   });
 
   test('keeps module style dependency chains', () => {
+    expect(readDist(ui, 'es/style/module.css')).toBe(
+      lines(
+        '@import "../components/Button/index.css";',
+        '@import "../components/Card/index.css";',
+      ),
+    );
     expect(readDist(ui, 'es/components/Card/style/index.css')).toBe(
       lines(
         '@import "../../Button/style/index.css";',
@@ -125,6 +131,109 @@ describe('monorepo package example', () => {
     expect(readDist(ui, 'es/components/Card/index.js')).toContain(
       'import { Button } from "../Button/index.js";',
     );
+  });
+
+  test('emits CSS Modules assets outside the global style aggregate', () => {
+    expect(readDist(ui, 'es/components/Badge/Badge.module.css')).toMatch(
+      /\.Badge_badge_/,
+    );
+    expect(readDist(ui, 'es/components/Tag/Tag.module.css')).toMatch(
+      /\.Tag_tag_/,
+    );
+    expect(readDist(ui, 'es/components/Tag/Tag.module.css')).toContain(
+      '@import "./tokens.css"',
+    );
+    expect(readDist(ui, 'es/components/Tag/Tag.module.css')).toContain(
+      'color: var(--tag-color)',
+    );
+    expect(readDist(ui, 'es/components/Tag/tokens.css')).toContain(
+      '--tag-color: #7c3aed',
+    );
+    expect(readDist(ui, 'es/components/Badge/index.js')).toContain(
+      'Badge.module.css.js',
+    );
+    expect(readDist(ui, 'es/components/Tag/index.js')).toContain(
+      'Tag.module.less.js',
+    );
+    expect(readDist(ui, 'lib/components/Badge/Badge.module.css.js')).toContain(
+      'require("./Badge.module.css")',
+    );
+    expect(readDist(ui, 'lib/components/Tag/Tag.module.less.js')).toContain(
+      'require("./Tag.module.css")',
+    );
+    expect(readDist(ui, 'index.css')).not.toMatch(/\.Badge_badge_/);
+    expect(readDist(ui, 'index.css')).not.toMatch(/\.Tag_tag_/);
+  });
+
+  test('emits bundle, module, and style files for ui', () => {
+    expect(listDistFiles(ui)).toEqual([
+      'components/Badge/Badge.module.css',
+      'components/Tag/Tag.module.css',
+      'components/Tag/tokens.css',
+      'es/components/Badge/Badge.module.css',
+      'es/components/Badge/Badge.module.css.js',
+      'es/components/Badge/index.d.ts',
+      'es/components/Badge/index.js',
+      'es/components/Badge/style/index.css',
+      'es/components/Button/index.css',
+      'es/components/Button/index.d.ts',
+      'es/components/Button/index.js',
+      'es/components/Button/style/index.css',
+      'es/components/Card/index.css',
+      'es/components/Card/index.d.ts',
+      'es/components/Card/index.js',
+      'es/components/Card/style/index.css',
+      'es/components/Card/tokens.css',
+      'es/components/Tag/Tag.module.css',
+      'es/components/Tag/Tag.module.less.js',
+      'es/components/Tag/index.d.ts',
+      'es/components/Tag/index.js',
+      'es/components/Tag/style/index.css',
+      'es/components/Tag/tokens.css',
+      'es/index.d.ts',
+      'es/index.js',
+      'es/style/external.css',
+      'es/style/index.css',
+      'es/style/module.css',
+      'es/style/themes/dark.css',
+      'es/style/themes/light.css',
+      'es/themes/dark.css',
+      'es/themes/light.css',
+      'index.cjs',
+      'index.css',
+      'index.d.ts',
+      'index.js',
+      'index.mjs',
+      'lib/components/Badge/Badge.module.css',
+      'lib/components/Badge/Badge.module.css.js',
+      'lib/components/Badge/index.d.ts',
+      'lib/components/Badge/index.js',
+      'lib/components/Badge/style/index.css',
+      'lib/components/Button/index.css',
+      'lib/components/Button/index.d.ts',
+      'lib/components/Button/index.js',
+      'lib/components/Button/style/index.css',
+      'lib/components/Card/index.css',
+      'lib/components/Card/index.d.ts',
+      'lib/components/Card/index.js',
+      'lib/components/Card/style/index.css',
+      'lib/components/Card/tokens.css',
+      'lib/components/Tag/Tag.module.css',
+      'lib/components/Tag/Tag.module.less.js',
+      'lib/components/Tag/index.d.ts',
+      'lib/components/Tag/index.js',
+      'lib/components/Tag/style/index.css',
+      'lib/components/Tag/tokens.css',
+      'lib/index.d.ts',
+      'lib/index.js',
+      'lib/style/external.css',
+      'lib/style/index.css',
+      'lib/style/module.css',
+      'lib/style/themes/dark.css',
+      'lib/style/themes/light.css',
+      'lib/themes/dark.css',
+      'lib/themes/light.css',
+    ]);
   });
 
   test('emits bundle, module, and style files', () => {

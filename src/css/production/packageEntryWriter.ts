@@ -56,7 +56,7 @@ export class PackageStyleEntryWriter {
       }
     }
 
-    for (const styleFile of this.packageContext.styleFiles) {
+    for (const styleFile of await this.packageContext.getStyleEntryFiles()) {
       const content = await this.styleProcessor.readStyleFile(styleFile, seen, {
         applyPrefix: true,
       });

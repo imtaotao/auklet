@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "auklet": "link:../..",
+    "less": "catalog:",
     "vite": "catalog:",
     "cross-env": "catalog:"
   }

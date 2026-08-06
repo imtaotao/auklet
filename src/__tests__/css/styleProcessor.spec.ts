@@ -252,22 +252,63 @@ describe('StyleProcessor', () => {
       `
         @import "./base.css";
         @import "#local/alias.css";
-        @import "./theme.module.css";
+        @import "./theme.extra.css";
         @import "./ignored.txt";
         @import "@scope/ui/style.css";
       `,
     );
     const base = project.resolve('base.css');
     const alias = project.resolve('alias.css');
-    const themeModule = project.resolve('theme.module.css');
+    const themeExtra = project.resolve('theme.extra.css');
     project.writeFile('base.css', '.base {}');
     project.writeFile('alias.css', '.alias {}');
-    project.writeFile('theme.module.css', '.theme {}');
+    project.writeFile('theme.extra.css', '.theme {}');
 
     const imported = await processor.collectImportedStyleFiles([entry]);
 
-    expect(imported).toEqual(new Set([base, alias, themeModule]));
+    expect(imported).toEqual(new Set([base, alias, themeExtra]));
   });
+
+  test('rejects CSS Modules files in the global style pipeline', async () => {
+    const moduleFile = project.writeFile(
+      'Button.module.css',
+      '.button { color: red; }',
+    );
+
+    await expect(processor.readStyleFile(moduleFile)).rejects.toThrow(
+      'CSS Modules files are handled by the css/modules protocol',
+    );
+  });
+
+  test('rejects importing CSS Modules from global style entries', async () => {
+    const entry = project.writeFile(
+      'entry.css',
+      `
+        @import "./Button.module.css";
+        .entry { color: red; }
+      `,
+    );
+    project.writeFile('Button.module.css', '.button { color: blue; }');
+
+    await expect(processor.readStyleFile(entry)).rejects.toThrow(
+      'CSS Modules files cannot be imported from global style entries',
+    );
+  });
+
+  test.each(['Button.module.css', 'Button.module.less'])(
+    'rejects plain Less importing %s',
+    async (moduleName) => {
+      const entry = project.writeFile(
+        'entry.less',
+        `@import "./${moduleName}";\n.entry { color: red; }`,
+      );
+      project.writeFile(moduleName, '.button { color: blue; }');
+
+      await expect(processor.readStyleFile(entry)).rejects.toThrow(
+        'CSS Modules files cannot be imported from global style entries',
+      );
+    },
+  );
 
   test('rejects missing local CSS imports', async () => {
     const entry = project.writeFile(
@@ -478,8 +519,94 @@ describe('StyleProcessor', () => {
     expect(content).not.toContain('@color');
   });
 
-  test('inlines Less imports and keeps remaining CSS @import for the graph', async () => {
+  test('preserves Less partial imports as CSS imports when the import graph is preserved', async () => {
     const tokens = project.writeFile(
+      'tokens.less',
+      '@text: green;\n.tokens { color: @text; }',
+    );
+    project.writeFile('base.css', '.base { color: blue; }');
+    const entry = project.writeFile(
+      'entry.less',
+      `
+        @import "./tokens.less";
+        @import "./base.css";
+        .entry { color: red; }
+      `,
+    );
+
+    const content = await processor.readStyleFile(entry, undefined, {
+      preserveLessImportGraph: true,
+      shouldExpandImport: () => false,
+    });
+    const lessImports = await processor.collectLessImportFiles(entry);
+    const imported = await processor.collectImportedStyleFiles([entry]);
+
+    expect(content).toContain('@import "./tokens.css"');
+    expect(content).toMatch(/@import\s+"base\.css"/);
+    expect(content).toContain('.entry');
+    expect(content).toContain('color: red');
+    expect(content).not.toContain('.tokens');
+    expect(content).not.toContain('color: green');
+    expect(content).not.toContain('@import "./tokens.less"');
+    expect(lessImports).toEqual([tokens]);
+    expect(imported).toEqual(new Set([tokens, project.resolve('base.css')]));
+  });
+
+  test.each([
+    ['media', 'screen and (min-width: 640px)'],
+    ['supports', 'supports(display: grid)'],
+    ['layer', 'layer(theme)'],
+  ])(
+    'preserves %s conditions on preserved Less imports',
+    async (_condition, tail) => {
+      project.writeFile(
+        'tokens.less',
+        '@text: green;\n.tokens { color: @text; }',
+      );
+      const entry = project.writeFile(
+        'entry.less',
+        `@import "./tokens.less" ${tail};\n.entry { color: red; }`,
+      );
+
+      const content = await processor.readStyleFile(entry, undefined, {
+        preserveLessImportGraph: true,
+        shouldExpandImport: () => false,
+      });
+
+      expect(content).toContain(`@import "./tokens.css" ${tail}`);
+      expect(content).not.toContain('@import "./tokens.less"');
+      expect(content).not.toContain('.tokens');
+    },
+  );
+
+  test('preserves reference and inline semantics with the Less graph enabled', async () => {
+    project.writeFile(
+      'reference.less',
+      '.reference-only { color: red; }\n.reference-mixin() { border-color: teal; }',
+    );
+    project.writeFile('inline.css', '.inline-only { color: blue; }');
+    const entry = project.writeFile(
+      'entry.less',
+      [
+        '@import (reference) "./reference.less";',
+        '@import (inline) "./inline.css";',
+        '.entry { .reference-mixin(); }',
+      ].join('\n'),
+    );
+
+    const content = await processor.readStyleFile(entry, undefined, {
+      preserveLessImportGraph: true,
+      shouldExpandImport: () => false,
+    });
+
+    expect(content).toContain('border-color: teal');
+    expect(content).toContain('.inline-only');
+    expect(content).not.toContain('.reference-only');
+    expect(content).not.toContain('@import');
+  });
+
+  test('inlines Less imports when preserveLessImportGraph is disabled', async () => {
+    project.writeFile(
       'tokens.less',
       '@text: green;\n.tokens { color: @text; }',
     );
@@ -496,16 +623,11 @@ describe('StyleProcessor', () => {
     const content = await processor.readStyleFile(entry, undefined, {
       shouldExpandImport: () => false,
     });
-    const lessImports = await processor.collectLessImportFiles(entry);
-    const imported = await processor.collectImportedStyleFiles([entry]);
 
     expect(content).toContain('.tokens');
     expect(content).toContain('color: green');
-    // Less rewrites `./base.css` to a bare `base.css` import.
     expect(content).toMatch(/@import\s+"base\.css"/);
     expect(content).not.toContain('@import "./tokens.less"');
-    expect(lessImports).toEqual([tokens]);
-    expect(imported).toEqual(new Set([tokens, project.resolve('base.css')]));
   });
 
   test('allows Less to import CSS and rejects CSS importing Less', async () => {
