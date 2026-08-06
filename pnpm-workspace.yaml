@@ -15,6 +15,8 @@ catalog:
   briefing: 0.0.5
   chokidar: 5.0.0
   cross-env: 10.1.0
+  postcss: 8.5.25
+  postcss-modules: 9.0.1
   conditional-export: 1.1.0
   execa: 9.6.1
   husky: 9.1.7
@@ -22,11 +24,10 @@ catalog:
   lint-staged: 17.0.5
   verdaccio: 6.7.1
   minimist: 1.2.8
-  postcss: 8.5.15
   prettier: 3.8.3
   rimraf: 6.1.3
   semver: 7.8.1
-  tsdown: 0.22.0
-  typescript: 6.0.3
-  vite: 8.0.14
-  vitest: 4.1.7
+  tsdown: 0.22.14
+  typescript: 7.0.2
+  vite: 8.2.0
+  vitest: 4.1.10

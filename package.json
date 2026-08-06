@@ -72,7 +72,6 @@
     "aidly": "catalog:",
     "execa": "catalog:",
     "rimraf": "catalog:",
-    "postcss": "catalog:",
     "chokidar": "catalog:",
     "semver": "catalog:",
     "briefing": "catalog:",
@@ -80,6 +79,8 @@
     "picocolors": "catalog:",
     "typescript": "catalog:",
     "prettier": "catalog:",
+    "postcss": "catalog:",
+    "postcss-modules": "catalog:",
     "conditional-export": "catalog:"
   },
   "devDependencies": {
