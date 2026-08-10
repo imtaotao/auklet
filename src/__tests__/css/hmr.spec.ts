@@ -16,6 +16,7 @@ const fixture = {
   componentName: 'Widget',
   styleFile: '/workspace/packages/package/src/components/Widget/index.css',
   lessFile: '/workspace/packages/package/src/components/Widget/index.less',
+  packageJsonFile: '/workspace/packages/package/package.json',
   sourceFile: '/workspace/packages/package/src/components/Widget/index.tsx',
   outsideFile: '/workspace/README.md',
 };
@@ -92,6 +93,15 @@ const createGraph = () => {
       resultCache.clear();
       return fixture.packageName;
     }),
+    invalidatePackage: vi.fn(() => {
+      version += 1;
+      resultCache.clear();
+    }),
+    invalidateDependencyFile: vi.fn(() => {
+      version += 1;
+      resultCache.clear();
+      return fixture.packageName;
+    }),
     parsePackageStyleId: vi.fn((stylePath: string) => {
       return {
         packageName: fixture.packageName,
@@ -104,6 +114,9 @@ const createGraph = () => {
     isSourceModuleFile: vi.fn((file: string) => file.endsWith('.tsx')),
     isStyleFile: vi.fn(
       (file: string) => file.endsWith('.css') || file.endsWith('.less'),
+    ),
+    isPackageManifestFile: vi.fn((file: string) =>
+      file.endsWith('/package.json'),
     ),
   } as unknown as ModuleStyleGraph;
 };
@@ -185,9 +198,10 @@ describe('AukletStyleHmr', () => {
 
     const result = await handleCombinedUpdate(context);
 
-    expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
+    expect(graph.invalidateDependencyFile).toHaveBeenCalledWith(
       fixture.styleFile,
     );
+    expect(graph.invalidatePackage).not.toHaveBeenCalled();
     expectReturnedModules(result, [trackedDependency.id]);
     expect(context.send).not.toHaveBeenCalled();
   });
@@ -203,11 +217,28 @@ describe('AukletStyleHmr', () => {
     const result = await handleCombinedUpdate(context, fixture.lessFile);
 
     expect(graph.isStyleFile).toHaveBeenCalledWith(fixture.lessFile);
-    expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
+    expect(graph.invalidateDependencyFile).toHaveBeenCalledWith(
       fixture.lessFile,
     );
     expectReturnedModules(result, [trackedDependency.id]);
     expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('invalidates tracked package manifests without rebuilding package contexts', async () => {
+    const context = createHmrTestContext(graph);
+    const trackedDependency = trackVirtualStyleDependency(
+      context,
+      componentVirtualId(fixture.componentName),
+      fixture.packageJsonFile,
+    );
+
+    const result = await handleCombinedUpdate(context, fixture.packageJsonFile);
+
+    expect(graph.invalidateDependencyFile).toHaveBeenCalledWith(
+      fixture.packageJsonFile,
+    );
+    expect(graph.invalidatePackage).not.toHaveBeenCalled();
+    expectReturnedModules(result, [trackedDependency.id]);
   });
 
   test('returns module nodes for tracked virtual css dependencies even when output does not change', async () => {
@@ -221,6 +252,8 @@ describe('AukletStyleHmr', () => {
       getPackageNames: vi.fn(() => [fixture.packageName]),
       invalidateFile: vi.fn(() => fixture.packageName),
       invalidateFileLoadResults: vi.fn(() => fixture.packageName),
+      invalidatePackage: vi.fn(),
+      invalidateDependencyFile: vi.fn(() => fixture.packageName),
       parsePackageStyleId: vi.fn((stylePath: string) => {
         return {
           packageName: fixture.packageName,
@@ -238,7 +271,7 @@ describe('AukletStyleHmr', () => {
 
     const result = await handleCombinedUpdate(context);
 
-    expect(graph.invalidateFileLoadResults).toHaveBeenCalledWith(
+    expect(graph.invalidateDependencyFile).toHaveBeenCalledWith(
       fixture.styleFile,
     );
     expectReturnedModules(result, [componentVirtualId(fixture.componentName)]);
@@ -585,7 +618,9 @@ describe('AukletStyleHmr', () => {
     const result = await handleCombinedUpdate(context);
 
     expect(result).toBeUndefined();
-    expect(graph.invalidateFile).toHaveBeenCalledWith(fixture.styleFile);
+    expect(graph.invalidateDependencyFile).toHaveBeenCalledWith(
+      fixture.styleFile,
+    );
     expect(context.invalidateModule).not.toHaveBeenCalled();
     expect(context.send).not.toHaveBeenCalled();
   });

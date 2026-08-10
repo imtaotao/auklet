@@ -6,11 +6,21 @@ import {
   parseLessSourceImports,
   type LessSourceImport,
 } from '#auklet/css/core/lessImportGraph';
+import {
+  isExternalPackageSpecifier,
+  resolveImporterPackageRoot,
+} from '#auklet/css/core/resolvers/externalLess';
+import {
+  createExternalLessDependencyGraph,
+  resolveExternalLessImportAcrossGraphs,
+  type ExternalLessDependencyGraph,
+} from '#auklet/css/core/externalLessGraph';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
 import { resolveCssModuleStyleImport } from '#auklet/css/modules/resolveCssModuleStyleImport';
 import { normalizeFileKey } from '#auklet/utils';
 
 export type CssModulePartialImportGraphOptions = {
+  packageRoot?: string;
   sourceRoot?: string;
   sources?: Map<string, string>;
 };
@@ -18,6 +28,8 @@ export type CssModulePartialImportGraphOptions = {
 export type CssModulePartialImportGraphEdge = {
   import: LessSourceImport;
   importedFile: string;
+  external: boolean;
+  packageRoot: string;
 };
 
 export type CssModulePartialImportGraphNode = {
@@ -25,11 +37,21 @@ export type CssModulePartialImportGraphNode = {
   source: string;
   extension: '.css' | '.less';
   imports: Array<CssModulePartialImportGraphEdge>;
+  packageRoot: string;
+  externalReferenceContext: boolean;
 };
 
 export type CssModulePartialImportGraph = {
   entryFile: string;
+  consumerPackageRoot: string;
+  hasExternalPackageImports: boolean;
   nodes: ReadonlyMap<string, CssModulePartialImportGraphNode>;
+  packageJsonFiles: ReadonlySet<string>;
+  absentDependencyFiles: ReadonlySet<string>;
+  resolveExternalImport: (
+    specifier: string,
+    importerFile: string,
+  ) => string | null;
 };
 
 const readCssModuleSource = (file: string, sources?: Map<string, string>) => {
@@ -60,11 +82,25 @@ export function createCssModulePartialImportGraph(
   entryFile: string,
   options: CssModulePartialImportGraphOptions = {},
 ) {
+  let hasExternalPackageImports = false;
   const nodes = new Map<string, CssModulePartialImportGraphNode>();
+  const packageJsonFiles = new Set<string>();
+  const absentDependencyFiles = new Set<string>();
+  const externalGraphs: Array<ExternalLessDependencyGraph> = [];
   const visiting = new Set<string>();
   const stack: Array<string> = [];
+  const consumerPackageRoot =
+    resolveImporterPackageRoot({
+      packageRoot: options.packageRoot,
+      sourceRoot: options.sourceRoot,
+      file: entryFile,
+    }) ?? path.resolve(path.dirname(entryFile));
 
-  const visit = (file: string) => {
+  const visit = (
+    file: string,
+    packageRoot: string,
+    externalReferenceContext: boolean,
+  ) => {
     const normalized = path.resolve(file);
     const key = normalizeFileKey(normalized);
     if (nodes.has(key)) return;
@@ -92,14 +128,53 @@ export function createCssModulePartialImportGraph(
           `[css] CSS imports must not use Less options (${parsed.options}): ${parsed.specifier} from ${normalized}`,
         );
       }
-      const importedFile = resolveCssModuleStyleImport(
-        parsed.specifier,
-        normalized,
-        {
-          sourceRoot: options.sourceRoot,
-          allowMissing: hasLessImportOption(parsed.options, 'optional'),
-        },
-      );
+      const external = isExternalPackageSpecifier(parsed.specifier);
+      if (external) {
+        hasExternalPackageImports = true;
+      }
+      const externalGraph = external
+        ? (() => {
+            if (extension !== '.less') {
+              throw new Error(
+                `[css] CSS files must not import external Less: ${parsed.specifier} from ${normalized}`,
+              );
+            }
+            const graph = createExternalLessDependencyGraph({
+              import: parsed,
+              importerFile: normalized,
+              importerPackageRoot: packageRoot,
+            });
+            externalGraphs.push(graph);
+            for (const packageJsonFile of graph.packageJsonFiles) {
+              packageJsonFiles.add(packageJsonFile);
+            }
+            for (const absentFile of graph.absentDependencyFiles) {
+              absentDependencyFiles.add(absentFile);
+            }
+            for (const externalNode of graph.nodes.values()) {
+              const externalKey = normalizeFileKey(externalNode.file);
+              if (nodes.has(externalKey)) continue;
+              nodes.set(externalKey, {
+                file: externalNode.file,
+                source: externalNode.source,
+                extension: '.less',
+                imports: externalNode.imports,
+                packageRoot: externalNode.packageRoot,
+                externalReferenceContext: true,
+              });
+            }
+            return graph;
+          })()
+        : null;
+      if (external && !externalGraph?.entryFile) return [];
+      const importedFile = external
+        ? externalGraph!.entryFile!
+        : resolveCssModuleStyleImport(parsed.specifier, normalized, {
+            sourceRoot: externalReferenceContext
+              ? packageRoot
+              : options.sourceRoot,
+            allowMissing: hasLessImportOption(parsed.options, 'optional'),
+          });
       if (!importedFile) return [];
 
       if (isCssModuleFile(importedFile)) {
@@ -125,12 +200,21 @@ export function createCssModulePartialImportGraph(
         {
           import: parsed,
           importedFile,
+          external,
+          packageRoot:
+            externalGraph?.nodes.get(normalizeFileKey(importedFile))
+              ?.packageRoot ?? packageRoot,
         },
       ];
     });
 
     for (const edge of imports) {
-      visit(edge.importedFile);
+      if (edge.external) continue;
+      visit(
+        edge.importedFile,
+        edge.packageRoot,
+        externalReferenceContext || edge.external,
+      );
     }
 
     stack.pop();
@@ -140,13 +224,26 @@ export function createCssModulePartialImportGraph(
       source,
       extension: extension as '.css' | '.less',
       imports,
+      packageRoot,
+      externalReferenceContext,
     });
   };
 
   const normalizedEntry = path.resolve(entryFile);
-  visit(normalizedEntry);
+  visit(normalizedEntry, consumerPackageRoot, false);
   return {
     entryFile: normalizedEntry,
+    consumerPackageRoot,
+    hasExternalPackageImports,
     nodes,
+    packageJsonFiles,
+    absentDependencyFiles,
+    resolveExternalImport(specifier: string, importerFile: string) {
+      return resolveExternalLessImportAcrossGraphs(
+        externalGraphs,
+        specifier,
+        importerFile,
+      );
+    },
   } satisfies CssModulePartialImportGraph;
 }

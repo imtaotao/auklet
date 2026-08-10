@@ -32,10 +32,14 @@ src/css/
     ├── stylePackageContext.ts        # Collects style build context for one package
     ├── styleProcessor.ts             # Reads, merges, and expands style content
     ├── lessCompiler.ts               # Compiles `.less` sources to CSS
+    ├── lessImportGraph.ts            # Scans Less/@import via postcss-less
+    ├── externalLessGraph.ts          # Shared external Less reference graph
     ├── prefixSelectors.ts            # Applies `styles.prefix` to PostCSS roots
     ├── workspaceStyleResolver.ts     # Resolves workspace/package/node_modules style deps
     ├── styleImports/                 # Infers style deps from TSX imports/re-exports
-    ├── resolvers/                    # Same-package source import candidate resolvers
+    ├── resolvers/
+    │   ├── externalLess.ts           # package.json#exports Less reference resolver
+    │   └── ...                       # Same-package source import candidate resolvers
     ├── styleModuleEntryPlanner.ts    # Plans module-level style entries
     └── style/                        # Entry and dependency semantics
 ```
@@ -191,9 +195,11 @@ Cross-language `@import`:
 
 Supported import behavior (after Less compile when applicable):
 
-- local relative style imports; also `package.json#imports` /
+- local relative style imports; CSS may also use `package.json#imports` /
   `tsconfig.compilerOptions.paths` to files under the source root. Production
-  copies rewrite aliases to relative `.css` output paths;
+  copies rewrite aliases to relative `.css` output paths. Less sources do not
+  resolve `#imports` (use relative paths; external package Less uses exports +
+  `(reference)` as below);
 - unresolved relative / `#...` source-local imports fail (no package fallback);
 - imports must stay inside the source root; theme files follow the same rule;
 - component style imports stay in the same component/module directory, except
@@ -202,6 +208,7 @@ Supported import behavior (after Less compile when applicable):
   root and keep those `@import`s when the shared file is CSS;
 - circular local CSS `@import`s are rejected; duplicate import/content is
   suppressed; rewritten imports keep media/supports/layer tails;
+- Less/`@import` graph scans use `postcss-less` (comments are ignored);
 - generated `@import`s between auklet entries come from `style/entries.ts`.
 
 Vite/dev: virtual CSS never emits `/@fs/**/*.less` (including module entry
@@ -223,9 +230,10 @@ own `.css` files.
 `*.module.css` / `*.module.less` use `src/css/modules`, separate from the global
 style entry pipeline.
 
-- **Compile:** `compileCssModule` yields scoped CSS, locals, and `watchFiles`
-  (module sources and Less partials). Less partials become sibling `.css` assets
-  with preserved `@import` in both production and dev CSS sources.
+- **Compile:** `compileCssModule` yields scoped CSS, locals, `dependencyFiles`,
+  and `watchFiles`. `dependencyFiles` is the complete cache dependency closure;
+  `watchFiles` contains locally editable files. Less partials become sibling
+  `.css` assets with preserved `@import` in both production and dev CSS sources.
 - **Production:** emitted by the JS build (`createCssModulesPlugin`), not
   `build-css` alone — CSS asset plus side-effect shim with locals. Local CSS
   partials referenced by `*.module.css` are emitted as sibling assets so
@@ -249,8 +257,9 @@ style entry pipeline.
   entries from disk rather than reusing `context.read` from the partial file event.
   Dev and production therefore retain the same import graph; production emits
   physical sibling assets while dev serves equivalent virtual CSS assets.
-- **Partial imports:** relative paths only, bounded to the package source root,
-  with the same missing-import, source-root, and cycle errors as global styles.
+- **Partial imports:** local paths are relative and bounded to the package source
+  root, with the same missing-import, source-root, and cycle errors as global
+  styles. The external Less reference exception is described below.
   Plain `.module.less` imports use the sibling-asset protocol. `reference` and
   `inline` stay in the Less compilation input so Less preserves their native
   semantics. A `(css)` import is emitted as a sibling CSS asset and rewritten
@@ -259,14 +268,57 @@ style entry pipeline.
   when the importer is `.less`; every `.css` node rejects optioned imports.
   Alias imports (`#imports`, tsconfig paths) are not supported in module partials.
 
+### External Less references
+
+Plain `.less` and `*.module.less` may consume published token/mixin sources with
+`@import (reference) "package/subpath.less"`. This is a compile-time Less
+dependency, not a sibling CSS asset.
+
+- The package must be declared directly in the importing package's
+  `dependencies`, `devDependencies`, `peerDependencies`, or
+  `optionalDependencies`. Importing the current package by its own
+  `package.json#name` is rejected; use a relative path for in-package Less.
+- Specifiers are resolved as package exports only. npm aliases,
+  `package.json#imports`, and `tsconfig` paths are not supported. The provider
+  `package.json#name` must equal the import/dependency name.
+- The subpath must be public through `package.json#exports`; packages without
+  `exports` and unexported deep imports are rejected.
+- Consumer-side resolution always uses the importing package root, not a nested
+  `package.json` under `src/`.
+- Conditional exports resolve in `less`, `source`, `import`, `default` order,
+  and the selected target must be a published `.less` file inside that package.
+- `(reference)`, `(optional, reference)`, and `(multiple, reference)` are
+  supported. Combining `reference` with `inline`, `css`, or `less` is rejected.
+- Relative imports inside the provider stay inside its package root. A provider
+  may reference another package only with one of the supported `reference`
+  option sets and when it declares that package directly; that package must
+  satisfy the same exports rules. Provider-relative dependencies must remain
+  `.less`; external CSS assets use the existing CSS dependency protocol.
+- Cache / HMR contract for external Less:
+  - Source and workspace-linked provider Less: normal invalidation / HMR (editable
+    targets are watched; installed `node_modules` providers are not). This
+    applies to component virtual CSS and package aggregate virtual entries
+    (`style.css`, `module.css`, and theme entries).
+  - Consumer `package.json` dependency declarations: when a file has external
+    Less imports, both pipelines treat that manifest as a cache input — CSS
+    Modules via `dependencyFiles` (cache + tracker), global package CSS via
+    `cacheInputFiles`. Neither path `addWatchFile`s the consumer manifest. If an
+    invalidation path already fires, styles may refresh; otherwise restart the
+    Vite/dev server.
+  - `pnpm add` / installing a previously missing optional package: restart the
+    Vite/dev server (or reopen the process). Same-session auto-apply after
+    dependency install is not guaranteed. Implementations may record
+    `absentDependencyFiles` probes and try to detect a later install; that is
+    best-effort only, not part of the supported contract.
+
 ### Source import relationships
 
-| Importer        | Plain `.css`                                   | Plain `.less`                                  | `*.module.css` / `*.module.less` |
-| --------------- | ---------------------------------------------- | ---------------------------------------------- | -------------------------------- |
-| Plain `.css`    | Allowed                                        | Rejected                                       | Rejected                         |
-| Plain `.less`   | Allowed                                        | Allowed                                        | Rejected                         |
-| `*.module.css`  | Allowed as a tracked external style dependency | Rejected                                       | Rejected                         |
-| `*.module.less` | Allowed as a tracked external style dependency | Allowed as a tracked external style dependency | Rejected                         |
+| Importer        | Plain `.css`                                   | Plain `.less`                                                 | `*.module.css` / `*.module.less` |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------- | -------------------------------- |
+| Plain `.css`    | Allowed                                        | Rejected                                                      | Rejected                         |
+| Plain `.less`   | Allowed                                        | Allowed locally; exported package Less requires `(reference)` | Rejected                         |
+| `*.module.css`  | Allowed as a tracked external style dependency | Rejected                                                      | Rejected                         |
+| `*.module.less` | Allowed as a tracked style dependency          | Allowed locally; exported package Less requires `(reference)` | Rejected                         |
 
 CSS Modules are imported from JS/TSX to preserve their independent locals maps.
 When a CSS Module imports a plain CSS/Less dependency, both production and dev
@@ -292,7 +344,7 @@ Out of scope:
 - URL rebasing for `url(...)`;
 - Sass/Stylus or other preprocessors beyond Less;
 - general PostCSS plugin pipelines beyond Less, `styles.prefix`, and CSS Modules;
-- compiling dependency / `node_modules` Less sources;
+- emitting external Less sources as standalone CSS assets;
 - arbitrary package CSS bundling beyond configured style dependencies;
 - interpreting conditional CSS import semantics during aggregate expansion;
 - CSS Modules sourcemaps;

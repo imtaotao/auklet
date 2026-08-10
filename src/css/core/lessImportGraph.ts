@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import lessSyntax from 'postcss-less';
 import { toOutputStylePath } from '#auklet/css/core/style/specifier';
 import { toPosixPath } from '#auklet/utils';
 
@@ -12,38 +13,65 @@ export type LessSourceImport = {
   tail: string | null;
 };
 
-const LESS_IMPORT_RE =
-  /@import\s+(?:\(([^)]*)\)\s*)?(?:url\s*\(\s*(?:['"]([^'"]+)['"]|([^)'"\s]+))\s*\)|(['"])([^'"]+)\4)((?:\s+[^;]+)*)\s*;/g;
+// Parse PostCSS at-rule params only. postcss-less walks the tree and skips
+// comments; its import-specific filename/options fields are unreliable with
+// media/layer tails, so params are normalized here.
+const IMPORT_PARAMS_RE =
+  /^(?:\(([^)]*)\)\s*)?(?:url\(\s*(['"])([^'"]+)\2\s*\)|url\(\s*([^)'"\s]+)\s*\)|(['"])([^'"]+)\5)\s*([\s\S]*)$/;
+
+const parseLessImportParams = (params: string) => {
+  const match = params.match(IMPORT_PARAMS_RE);
+  if (!match) return null;
+
+  const options = match[1]?.trim() || null;
+  const urlQuote = match[2] as '"' | "'" | undefined;
+  const urlQuoted = match[3];
+  const urlUnquoted = match[4];
+  const directQuote = match[5] as '"' | "'" | undefined;
+  const directSpecifier = match[6];
+  const specifier = urlQuoted ?? urlUnquoted ?? directSpecifier;
+  if (!specifier || /[\r\n]/.test(specifier)) return null;
+
+  const tail = match[7]?.trim() || null;
+  if (tail?.includes('{')) return null;
+
+  return {
+    options,
+    quote: (directQuote ?? urlQuote ?? '"') as '"' | "'",
+    specifier,
+    tail,
+  };
+};
 
 export function parseLessSourceImports(sourceCode: string) {
+  const root = lessSyntax.parse(sourceCode);
   const imports: Array<LessSourceImport> = [];
 
-  for (const match of sourceCode.matchAll(LESS_IMPORT_RE)) {
-    const fullMatch = match[0];
-    const start = match.index;
-    if (start === undefined) continue;
+  root.walkAtRules('import', (rule) => {
+    const start = rule.source?.start?.offset;
+    const sourceEnd = rule.source?.end?.offset;
+    if (start == null || sourceEnd == null) return;
 
-    const urlQuoted = match[2];
-    const urlUnquoted = match[3];
-    const directQuote = match[4] as '"' | "'" | undefined;
-    const directSpecifier = match[5];
-    const specifier = urlQuoted ?? urlUnquoted ?? directSpecifier;
-    if (!specifier) continue;
+    const parsed = parseLessImportParams(rule.params.trim());
+    if (!parsed) return;
 
-    const quote: '"' | "'" =
-      directQuote ??
-      (urlQuoted && fullMatch.includes(`'${urlQuoted}'`) ? "'" : '"');
-    const tail = match[6]?.trim() || null;
+    let end = sourceEnd;
+    if (sourceCode[end] === ';') end += 1;
+
+    const statement = sourceCode.slice(start, end);
+    // Guard against postcss-less recovering broken no-semicolon imports by
+    // swallowing the following rule block.
+    if (!/;\s*$/.test(statement) || statement.includes('{')) return;
 
     imports.push({
       start,
-      end: start + fullMatch.length,
-      options: match[1]?.trim() || null,
-      quote,
-      specifier,
-      tail,
+      end,
+      options: parsed.options,
+      quote: parsed.quote,
+      specifier: parsed.specifier,
+      tail: parsed.tail,
     });
-  }
+  });
 
   return imports;
 }
@@ -53,7 +81,6 @@ export function assertCssModulePlainImport(
   importerFile: string,
 ) {
   if (!parsed.tail) return;
-
   throw new Error(
     `[css] CSS Modules partial imports do not support conditional @import (${parsed.tail}): ${parsed.specifier} from ${importerFile}`,
   );
@@ -84,6 +111,15 @@ export function rewriteLessImportAsReference(parsed: LessSourceImport) {
   const tail = parsed.tail ? ` ${parsed.tail}` : '';
   return `@import ${options} ${parsed.quote}${parsed.specifier}${parsed.quote}${tail};`;
 }
+
+export const rewriteLessImportSpecifier = (
+  parsed: LessSourceImport,
+  specifier: string,
+) => {
+  const options = parsed.options ? ` (${parsed.options})` : '';
+  const tail = parsed.tail ? ` ${parsed.tail}` : '';
+  return `@import${options} ${parsed.quote}${toPosixPath(specifier)}${parsed.quote}${tail};`;
+};
 
 export function resolveLocalStyleImport(specifier: string, fromDir: string) {
   // Low-level relative-path lookup only. CSS Modules partial imports must go

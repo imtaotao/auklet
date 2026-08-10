@@ -72,6 +72,22 @@ export function normalizeFileKey(file: string) {
   return toPosixPath(realpath);
 }
 
+export function isInsideRoot(file: string, root: string) {
+  const relative = path.relative(root, file);
+  return (
+    relative === '' ||
+    (!relative.startsWith('..') && !path.isAbsolute(relative))
+  );
+}
+
+export function isInstalledNodeModulesPath(file: string) {
+  return normalizeFileKey(file).includes('/node_modules/');
+}
+
+export function isPackageJsonFile(file: string) {
+  return path.basename(normalizeFileKey(file)) === 'package.json';
+}
+
 export function toFsSpecifier(file: string) {
   return path.posix.join('/@fs', normalizeFileKey(file));
 }

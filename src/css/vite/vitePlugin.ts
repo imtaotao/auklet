@@ -43,17 +43,19 @@ const loadCssModuleCode = async (
   environment = 'client',
 ) => {
   const sourceRoot = await graph.resolveSourceRootForFile(moduleFile);
+  const packageRoot = graph.resolvePackageRootForFile(moduleFile);
   const result = await hmr.compileCssModuleForDev(
     moduleFile,
     sourceRoot ?? undefined,
     environment,
+    packageRoot ?? undefined,
   );
   for (const file of result.watchFiles) {
     context.addWatchFile?.(file);
   }
   hmr.replaceCssModuleDependency(
     moduleFile,
-    result.watchFiles,
+    result.dependencyFiles ?? result.watchFiles,
     result.styleAssets,
   );
   const styleAsset = resolveCssModuleStyleAssetVirtualId(virtualId);
@@ -270,9 +272,16 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
       server.watcher.add(await graph.getWatchRoots());
 
+      const isPackageGraphFile = (file: string) =>
+        graph.isSourceGraphFile(file) || graph.isPackageManifestFile(file);
+
       const invalidatePackageStyleGraph = (file: string) => {
-        if (!graph.isSourceGraphFile(file)) return false;
-        graph.invalidateFile(file);
+        if (isPackageGraphFile(file)) {
+          graph.invalidateFile(file);
+          invalidateVirtualModules(server, graph);
+          return true;
+        }
+        if (!graph.invalidateDependencyFile(file)) return false;
         invalidateVirtualModules(server, graph);
         return true;
       };
@@ -293,13 +302,17 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
           file,
           environmentModuleGraph,
         );
-        const packageRelated = graph.isSourceGraphFile(file);
+        const trackedPackageStyle = hmr.hasTrackedStyleDependency(
+          file,
+          environmentModuleGraph,
+        );
+        const packageRelated = isPackageGraphFile(file) || trackedPackageStyle;
 
         if (!isModuleFile && !trackedPartial && !packageRelated) {
           return false;
         }
 
-        if (packageRelated) {
+        if (packageRelated || trackedPackageStyle) {
           invalidatePackageStyleGraph(file);
         }
 

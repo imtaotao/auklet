@@ -1,6 +1,9 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { resolveTsconfigPathsSourceImport } from '#auklet/css/core/resolvers/tsconfigPaths';
+import {
+  matchesTsconfigPathsAlias,
+  resolveTsconfigPathsSourceImport,
+} from '#auklet/css/core/resolvers/tsconfigPaths';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -121,5 +124,21 @@ describe('resolveTsconfigPathsSourceImport', () => {
     project.writeFile(path.join(packageDir, 'tsconfig.json'), '{');
 
     expect(resolveImport()).toEqual([]);
+  });
+
+  test('matches tsconfig path aliases without requiring a source-root hit', () => {
+    writeCompilerOptions(path.join(packageDir, 'tsconfig.json'), {
+      baseUrl: '.',
+      paths: {
+        '@/*': ['./src/*'],
+      },
+    });
+
+    expect(matchesTsconfigPathsAlias(packageRoot, '@/tokens/theme.less')).toBe(
+      true,
+    );
+    expect(matchesTsconfigPathsAlias(packageRoot, 'tokens/theme.less')).toBe(
+      false,
+    );
   });
 });

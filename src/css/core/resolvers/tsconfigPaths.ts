@@ -80,6 +80,21 @@ const toSourceRelativePath = (sourceRoot: string, file: string) => {
   return trimSourceExtension(toPosixPath(relative));
 };
 
+export function matchesTsconfigPathsAlias(
+  packageRoot: string,
+  importPath: string,
+) {
+  const config = readTsconfigPaths(packageRoot);
+  if (!config) return false;
+
+  for (const [pattern, targets] of Object.entries(config.paths)) {
+    for (const target of targets) {
+      if (resolvePattern(pattern, target, importPath)) return true;
+    }
+  }
+  return false;
+}
+
 export function resolveTsconfigPathsSourceImport(
   packageRoot: string,
   sourceRoot: string,

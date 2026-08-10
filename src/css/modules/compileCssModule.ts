@@ -6,6 +6,7 @@ import {
   hasLessImportOption,
   mapPreservedLessImportToCssSpecifier,
   rewriteLessImportAsReference,
+  rewriteLessImportSpecifier,
 } from '#auklet/css/core/lessImportGraph';
 import { assertLessCompileImportsWithinSourceRoot } from '#auklet/css/modules/resolveCssModuleStyleImport';
 import {
@@ -16,11 +17,12 @@ import {
 import { createImportCode } from '#auklet/css/core/style/specifier';
 import { generateScopedName } from '#auklet/css/modules/generateScopedName';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
-import { normalizeFileKey } from '#auklet/utils';
+import { isInstalledNodeModulesPath, normalizeFileKey } from '#auklet/utils';
 
 export type CssModuleRequest = {
   file: string;
   code?: string;
+  packageRoot?: string;
   sourceRoot?: string;
 };
 
@@ -34,6 +36,8 @@ export type CssModuleResult = {
   css: string;
   scopedCss: string;
   locals: Record<string, string>;
+  dependencyFiles?: Array<string>;
+  absentDependencyFiles?: Array<string>;
   watchFiles: Array<string>;
   styleAssets: Array<CssModuleStyleAsset>;
 };
@@ -59,6 +63,7 @@ const collectCssModuleStyleAssets = (
     collected.add(normalized);
     const node = getCssModulePartialImportGraphNode(graph, normalized);
     for (const edge of node.imports) {
+      if (edge.external) continue;
       visit(edge.importedFile);
     }
 
@@ -91,6 +96,7 @@ const createStyleAssetDependencyCollector = (
 
     const dependencies = new Set([node.file]);
     for (const edge of node.imports) {
+      if (edge.external) continue;
       for (const dependency of collect(edge.importedFile)) {
         dependencies.add(dependency);
       }
@@ -114,6 +120,26 @@ const appendUniqueStyleAssets = (
     files.add(key);
     target.push(asset);
   }
+};
+
+const createExternalLessCompileOptions = (
+  graph: CssModulePartialImportGraph,
+) => ({
+  resolveExternalImport: graph.resolveExternalImport,
+});
+
+const isWatchableCssModuleDependency = (
+  graph: CssModulePartialImportGraph,
+  file: string,
+) => {
+  const node = graph.nodes.get(normalizeFileKey(path.resolve(file)));
+  if (!node) {
+    return !isInstalledNodeModulesPath(file);
+  }
+  return (
+    !node.externalReferenceContext ||
+    !isInstalledNodeModulesPath(node.packageRoot)
+  );
 };
 
 const compileModuleCss = (
@@ -166,6 +192,17 @@ const compileModuleLess = async (
   let compileCode = node.source;
 
   for (const edge of [...node.imports].reverse()) {
+    if (edge.external) {
+      const rewritten = rewriteLessImportSpecifier(
+        edge.import,
+        edge.importedFile,
+      );
+      compileCode =
+        compileCode.slice(0, edge.import.start) +
+        rewritten +
+        compileCode.slice(edge.import.end);
+      continue;
+    }
     const importedNode = getCssModulePartialImportGraphNode(
       graph,
       edge.importedFile,
@@ -207,14 +244,28 @@ const compileModuleLess = async (
     }
   }
 
-  const lessResult = await compileLess(file, compileCode);
+  const lessResult = await compileLess(
+    file,
+    compileCode,
+    createExternalLessCompileOptions(graph),
+  );
+  const externalRoots = Array.from(
+    new Set(
+      Array.from(graph.nodes.values())
+        .filter((item) => item.externalReferenceContext)
+        .map((item) => item.packageRoot),
+    ),
+  );
   assertLessCompileImportsWithinSourceRoot(
     lessResult.imports,
     file,
     sourceRoot,
+    externalRoots,
   );
   for (const imported of lessResult.imports) {
-    watchFiles.add(path.resolve(imported));
+    if (isWatchableCssModuleDependency(graph, imported)) {
+      watchFiles.add(path.resolve(imported));
+    }
   }
 
   const styleAssets: Array<CssModuleStyleAsset> = [];
@@ -248,14 +299,21 @@ const compileModuleLess = async (
     );
     appendUniqueStyleAssets(styleAssets, dependencyAssets.styleAssets);
 
-    const partialResult = await compileLess(importedPath, importedNode.source);
+    const partialResult = await compileLess(
+      importedPath,
+      importedNode.source,
+      createExternalLessCompileOptions(graph),
+    );
     assertLessCompileImportsWithinSourceRoot(
       partialResult.imports,
       importedPath,
       sourceRoot,
+      externalRoots,
     );
     for (const imported of partialResult.imports) {
-      watchFiles.add(path.resolve(imported));
+      if (isWatchableCssModuleDependency(graph, imported)) {
+        watchFiles.add(path.resolve(imported));
+      }
     }
     appendUniqueStyleAssets(styleAssets, [
       {
@@ -299,12 +357,35 @@ export async function compileCssModule(
       ? undefined
       : new Map([[normalizeFileKey(file), request.code]]);
   const graph = createCssModulePartialImportGraph(file, {
+    packageRoot: request.packageRoot,
     sourceRoot,
     sources,
   });
+  const dependencyFiles = new Set([
+    ...Array.from(graph.nodes.values(), (node) => node.file),
+    ...graph.packageJsonFiles,
+  ]);
+  // External Less resolution reads consumer dependency declarations. Keep that
+  // package.json in dependencyFiles (cache + tracker), but not in watchFiles —
+  // auklet does not addWatchFile it. A Vite root-watcher change can still reach
+  // the tracker and refresh modules that imported external Less.
+  if (graph.hasExternalPackageImports) {
+    dependencyFiles.add(path.join(graph.consumerPackageRoot, 'package.json'));
+  }
   const watchFiles = new Set(
-    Array.from(graph.nodes.values(), (node) => node.file),
+    Array.from(graph.nodes.values())
+      .filter(
+        (node) =>
+          !node.externalReferenceContext ||
+          !isInstalledNodeModulesPath(node.packageRoot),
+      )
+      .map((node) => node.file),
   );
+  for (const packageJsonFile of graph.packageJsonFiles) {
+    if (!isInstalledNodeModulesPath(packageJsonFile)) {
+      watchFiles.add(packageJsonFile);
+    }
+  }
   const collectDependencies = createStyleAssetDependencyCollector(graph);
   const { css, styleAssets, preservedImportSpecifiers } =
     path.extname(file).toLowerCase() === '.less'
@@ -336,6 +417,8 @@ export async function compileCssModule(
     css: moduleCss,
     scopedCss,
     locals,
+    dependencyFiles: Array.from(dependencyFiles),
+    absentDependencyFiles: Array.from(graph.absentDependencyFiles),
     watchFiles: Array.from(watchFiles),
     styleAssets,
   };

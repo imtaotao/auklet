@@ -15,11 +15,13 @@ import type {
 export class WorkspaceStyleResolver {
   private readonly require: ReturnType<typeof createRequire>;
   readonly sourceRoot: string;
+  readonly packageRoot: string;
 
   constructor(
     private readonly config: ModuleStyleBuildConfig,
     private readonly context: ResolvedModuleStyleBuildContext,
   ) {
+    this.packageRoot = context.packageRoot;
     this.sourceRoot = path.isAbsolute(context.sourceDir)
       ? context.sourceDir
       : path.join(context.packageRoot, context.sourceDir);

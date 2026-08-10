@@ -32,7 +32,7 @@ import {
   createImportCode,
   removeStyleExtension,
 } from '#auklet/css/core/style/specifier';
-import { toFsSpecifier } from '#auklet/utils';
+import { isInstalledNodeModulesPath, toFsSpecifier } from '#auklet/utils';
 
 // 生成 Vite/dev 虚拟 CSS；production writer 共享入口语义，但写入真实文件。
 export class StyleCodeFactory {
@@ -199,7 +199,14 @@ export class StyleCodeFactory {
     const { themeFiles } = context.packageContext;
     const targetThemeNames = themeNames ?? context.packageContext.themeNames;
     const root = context.styleProcessor.createRoot();
-    const watchFiles = [...context.configPaths, ...themeFiles.values()];
+    const selectedThemeFiles = targetThemeNames.flatMap((themeName) => {
+      const themeFile = themeFiles.get(themeName);
+      return themeFile ? [themeFile] : [];
+    });
+    const tracking = await this.collectStyleFilesLessTracking(
+      context,
+      selectedThemeFiles,
+    );
     const dependencyResults: Array<PackageStyleLoadResult> = [];
 
     for (const themeName of targetThemeNames) {
@@ -235,10 +242,7 @@ export class StyleCodeFactory {
     }
 
     return mergeLoadResults(
-      {
-        code: '',
-        watchFiles,
-      },
+      this.toLessTrackingLoadResult(context, tracking),
       ...dependencyResults,
       {
         code: root.nodes?.length ? context.styleProcessor.stringify(root) : '',
@@ -251,6 +255,10 @@ export class StyleCodeFactory {
     const { styleFiles } = context.packageContext;
     const root = context.styleProcessor.createRoot();
     const seen = new Set<string>();
+    const tracking = await this.collectStyleFilesLessTracking(
+      context,
+      styleFiles,
+    );
 
     for (const styleFile of styleFiles) {
       const content = await context.styleProcessor.readStyleFile(
@@ -264,8 +272,8 @@ export class StyleCodeFactory {
     }
 
     return {
+      ...this.toLessTrackingLoadResult(context, tracking),
       code: root.nodes?.length ? context.styleProcessor.stringify(root) : '',
-      watchFiles: [...context.configPaths, ...styleFiles],
     };
   }
 
@@ -276,6 +284,10 @@ export class StyleCodeFactory {
     const hasPrefix = Boolean(context.normalizedConfig.styles.prefix);
     const cssImports: Array<string> = [];
     const processedCodes: Array<string> = [];
+    const tracking = await this.collectStyleFilesLessTracking(
+      context,
+      styleFiles,
+    );
 
     for (const styleFile of await context.packageContext.getStyleEntryFiles()) {
       // Less can never be /@fs. With styles.prefix, own CSS must also go through
@@ -289,10 +301,10 @@ export class StyleCodeFactory {
     }
 
     return {
+      ...this.toLessTrackingLoadResult(context, tracking),
       code: [createImportCode(cssImports), ...processedCodes]
         .filter((code) => code.trim())
         .join('\n'),
-      watchFiles: [...context.configPaths, ...styleFiles],
     };
   }
 
@@ -351,36 +363,22 @@ export class StyleCodeFactory {
       context,
       entry.ownStyleFiles,
     );
-    const sourceWatchFiles = await this.collectSourceStyleWatchFiles(
+    const tracking = await this.collectStyleFilesLessTracking(
       context,
       entry.ownStyleFiles,
     );
+    const sourceTsFiles = sourceFiles.filter((file) =>
+      /\.(ts|tsx)$/.test(file),
+    );
 
     return mergeLoadResults(...moduleStyleResults, {
+      ...this.toLessTrackingLoadResult(context, tracking, {
+        watchFiles: [...moduleStyleWatchFiles, ...sourceTsFiles],
+        cacheInputFiles: moduleStyleCacheInputFiles,
+      }),
       code: [createImportCode(moduleStyleSpecifiers), ownStyleCode]
         .filter((code) => code.trim())
         .join('\n'),
-      watchFiles: [
-        ...context.configPaths,
-        ...sourceWatchFiles.map((item) => item.file),
-        ...moduleStyleWatchFiles,
-        ...sourceFiles.filter((file) => /\.(ts|tsx)$/.test(file)),
-      ],
-      watchFileKinds: [
-        ...context.configPaths.map((file) => ({
-          file,
-          kind: 'dependency' as const,
-        })),
-        ...sourceWatchFiles,
-        ...moduleStyleWatchFiles.map((file) => ({
-          file,
-          kind: 'dependency' as const,
-        })),
-        ...sourceFiles
-          .filter((file) => /\.(ts|tsx)$/.test(file))
-          .map((file) => ({ file, kind: 'dependency' as const })),
-      ],
-      cacheInputFiles: moduleStyleCacheInputFiles,
     });
   }
 
@@ -423,6 +421,120 @@ export class StyleCodeFactory {
     }
 
     return root.nodes?.length ? context.styleProcessor.stringify(root) : '';
+  }
+
+  private async collectStyleFilesLessTracking(
+    context: PackageStyleContext,
+    styleFiles: Array<string>,
+  ) {
+    const sourceWatchFiles = await this.collectSourceStyleWatchFiles(
+      context,
+      styleFiles,
+    );
+    const installedDependencyFiles = new Set(
+      sourceWatchFiles
+        .map((item) => item.file)
+        .filter(
+          (file) =>
+            path.extname(file) === '.less' && isInstalledNodeModulesPath(file),
+        ),
+    );
+    const editableDependencyFiles = new Set<string>();
+    const externalDependencyPackages = new Set<string>();
+    const externalCacheInputFiles = new Set<string>();
+    let hasExternalPackageImports = false;
+
+    for (const item of sourceWatchFiles) {
+      if (
+        await context.styleProcessor.hasExternalLessPackageImports(item.file)
+      ) {
+        hasExternalPackageImports = true;
+      }
+      for (const packageName of await context.styleProcessor.collectLessDependencyPackages(
+        item.file,
+      )) {
+        externalDependencyPackages.add(packageName);
+      }
+      for (const absentFile of await context.styleProcessor.collectLessAbsentDependencyFiles(
+        item.file,
+      )) {
+        externalCacheInputFiles.add(path.resolve(absentFile));
+      }
+      for (const dependency of await context.styleProcessor.collectLessDependencyFiles(
+        item.file,
+      )) {
+        if (isInstalledNodeModulesPath(dependency)) {
+          installedDependencyFiles.add(dependency);
+        } else {
+          editableDependencyFiles.add(dependency);
+        }
+      }
+    }
+
+    // Mirror CSS Modules: consumer package.json is a cache/invalidation input
+    // for external Less, but not an addWatchFile/HMR watch source.
+    if (hasExternalPackageImports) {
+      externalCacheInputFiles.add(
+        path.join(context.context.packageRoot, 'package.json'),
+      );
+    }
+
+    return {
+      editableSourceWatchFiles: sourceWatchFiles.filter(
+        (item) => !installedDependencyFiles.has(item.file),
+      ),
+      editableDependencyFiles: Array.from(editableDependencyFiles),
+      cacheInputFiles: [
+        ...installedDependencyFiles,
+        ...externalCacheInputFiles,
+      ],
+      dependencyPackages: Array.from(externalDependencyPackages),
+    };
+  }
+
+  private toLessTrackingLoadResult(
+    context: PackageStyleContext,
+    tracking: {
+      editableSourceWatchFiles: Array<PackageStyleWatchFile>;
+      editableDependencyFiles: Array<string>;
+      cacheInputFiles: Array<string>;
+      dependencyPackages: Array<string>;
+    },
+    extras?: {
+      watchFiles?: Array<string>;
+      cacheInputFiles?: Array<string>;
+    },
+  ) {
+    const extraWatchFiles = extras?.watchFiles ?? [];
+    return {
+      code: '',
+      watchFiles: [
+        ...context.configPaths,
+        ...tracking.editableSourceWatchFiles.map((item) => item.file),
+        ...tracking.editableDependencyFiles,
+        ...extraWatchFiles,
+      ],
+      watchFileKinds: [
+        ...context.configPaths.map((file) => ({
+          file,
+          kind: 'dependency' as const,
+        })),
+        ...tracking.editableSourceWatchFiles,
+        ...tracking.editableDependencyFiles.map((file) => ({
+          file,
+          kind: 'dependency' as const,
+        })),
+        ...extraWatchFiles.map((file) => ({
+          file,
+          kind: 'dependency' as const,
+        })),
+      ],
+      cacheInputFiles: [
+        ...(extras?.cacheInputFiles ?? []),
+        ...tracking.cacheInputFiles,
+      ],
+      dependencyPackages: tracking.dependencyPackages,
+    };
   }
 
   private async collectSourceStyleWatchFiles(

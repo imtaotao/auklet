@@ -20,6 +20,7 @@ export function createCommonConfig(context: BuildContext, deps: TsdownDeps) {
     deps,
     plugins: [
       createCssModulesPlugin({
+        packageRoot: context.packageRoot,
         sourceRoot: path.join(context.packageRoot, context.source),
       }),
     ],

@@ -172,6 +172,34 @@ describe('StyleModuleEntryPlanner diagnostics', () => {
       '[css] shared CSS import must target non-module source CSS: internal/syntaxHighlight.css imports themes/light.css.',
     );
   });
+
+  test('allows exported external Less references from package styles', async () => {
+    project.writePackageJson({
+      name: '@scope/ui',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: {
+        './theme.less': {
+          less: './src/theme.less',
+          default: './src/theme.less',
+        },
+      },
+    });
+    project.writeFile(
+      'node_modules/tokens/src/theme.less',
+      '@brand: teal;\n.entry-color() { color: @brand; }',
+    );
+    project.writeFile(
+      'src/components/Button/index.less',
+      '@import (reference) "tokens/theme.less";\n.button { .entry-color(); }',
+    );
+
+    await expect(createPlanner(project)).resolves.toBeInstanceOf(
+      StyleModuleEntryPlanner,
+    );
+  });
 });
 
 const createPlanner = async (

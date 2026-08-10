@@ -133,7 +133,20 @@ describe('monorepo package example', () => {
     );
   });
 
-  test('emits CSS Modules assets outside the global style aggregate', () => {
+  test('compiles external Less references for plain Less and CSS Modules', () => {
+    expect(readDist(ui, 'es/components/Button/index.css')).toContain(
+      'color: #2563eb',
+    );
+    expect(readDist(ui, 'es/components/Button/index.css')).toContain(
+      'border-radius: var(--demo-radius)',
+    );
+    expect(readDist(ui, 'es/components/Button/index.css')).not.toContain(
+      '@demo/theme/tokens.less',
+    );
+    expect(readDist(ui, 'es/components/Button/index.css')).not.toContain(
+      '@import',
+    );
+
     expect(readDist(ui, 'es/components/Badge/Badge.module.css')).toMatch(
       /\.Badge_badge_/,
     );
@@ -144,7 +157,10 @@ describe('monorepo package example', () => {
       '@import "./tokens.css"',
     );
     expect(readDist(ui, 'es/components/Tag/Tag.module.css')).toContain(
-      'color: var(--tag-color)',
+      'color: #2563eb',
+    );
+    expect(readDist(ui, 'es/components/Tag/Tag.module.css')).not.toContain(
+      '@demo/theme/tokens.less',
     );
     expect(readDist(ui, 'es/components/Tag/tokens.css')).toContain(
       '--tag-color: #7c3aed',

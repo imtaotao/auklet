@@ -178,15 +178,40 @@ describe('css/modules protocol', () => {
     );
   });
 
-  test('rejects alias-like CSS Modules partial imports', async () => {
+  test('rejects package.json#imports in CSS Modules partial imports', async () => {
     const file = project.writeFile(
       'Button.module.css',
       '@import "#styles/tokens.css";\n.button {}',
     );
 
     await expect(compileCssModule({ file })).rejects.toThrow(
-      '[css] CSS Modules partial imports must be relative paths:',
+      '[css] CSS Modules partial imports do not support package.json#imports:',
     );
+  });
+
+  test('rejects tsconfig path aliases used as external Less references in CSS Modules', async () => {
+    project.writeJson('package.json', { name: 'consumer' });
+    project.writeJson('tsconfig.json', {
+      compilerOptions: {
+        baseUrl: '.',
+        paths: {
+          '@/*': ['./src/*'],
+        },
+      },
+    });
+    project.writeFile('src/tokens/theme.less', '@brand: teal;');
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import (reference) "@/tokens/theme.less";\n.tag { color: @brand; }',
+    );
+
+    await expect(
+      compileCssModule({
+        file,
+        packageRoot: project.root,
+        sourceRoot: project.resolve('src'),
+      }),
+    ).rejects.toThrow('do not support tsconfig paths');
   });
 
   test('rejects CSS Modules partial imports outside source root', async () => {
@@ -371,6 +396,393 @@ describe('css/modules protocol', () => {
     expect(result.styleAssets).toEqual([]);
   });
 
+  test('resolves exported external Less references and tracks their full chain without watching installed files', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { '@scope/tokens': '1.0.0' },
+    });
+    project.writeJson('node_modules/@scope/tokens/package.json', {
+      name: '@scope/tokens',
+      exports: {
+        './theme.less': {
+          less: './src/theme.less',
+          default: './src/theme.less',
+        },
+      },
+    });
+    const themeFile = project.writeFile(
+      'node_modules/@scope/tokens/src/theme.less',
+      '@import "./palette.less";\n.tag-color() { color: @brand; }\n.unused { color: red; }',
+    );
+    const paletteFile = project.writeFile(
+      'node_modules/@scope/tokens/src/palette.less',
+      '@brand: teal;',
+    );
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import (reference) "@scope/tokens/theme.less";\n.tag { .tag-color(); }',
+    );
+
+    const result = await compileCssModule({
+      file,
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    });
+
+    expect(result.css).toContain('color: teal');
+    expect(result.css).not.toContain('.unused');
+    expect(result.dependencyFiles).toEqual(
+      expect.arrayContaining([
+        themeFile,
+        paletteFile,
+        project.resolve('package.json'),
+        project.resolve('node_modules/@scope/tokens/package.json'),
+      ]),
+    );
+    expect(result.watchFiles).not.toContain(themeFile);
+    expect(result.watchFiles).not.toContain(paletteFile);
+    expect(result.watchFiles).not.toContain(project.resolve('package.json'));
+  });
+
+  test('rejects external Less imports without reference or an exported path', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: {
+        './public.less': './public.less',
+      },
+    });
+    project.writeFile('node_modules/tokens/public.less', '@brand: teal;');
+    const withoutReference = project.writeFile(
+      'src/WithoutReference.module.less',
+      '@import "tokens/public.less";\n.tag { color: @brand; }',
+    );
+    const privatePath = project.writeFile(
+      'src/PrivatePath.module.less',
+      '@import (reference) "tokens/private.less";\n.tag {}',
+    );
+
+    await expect(
+      compileCssModule({
+        file: withoutReference,
+        packageRoot: project.root,
+        sourceRoot: project.resolve('src'),
+      }),
+    ).rejects.toThrow('external Less imports must use (reference)');
+    await expect(
+      compileCssModule({
+        file: privatePath,
+        packageRoot: project.root,
+        sourceRoot: project.resolve('src'),
+      }),
+    ).rejects.toThrow('external Less import is not exported');
+  });
+
+  test('resolves nested external package references through each provider exports map', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      dependencies: { palette: '1.0.0' },
+      exports: { './theme.less': './theme.less' },
+    });
+    project.writeFile(
+      'node_modules/tokens/theme.less',
+      '@import (reference) "palette/base.less";\n.tag-color() { color: @brand; }',
+    );
+    project.writeJson('node_modules/tokens/node_modules/palette/package.json', {
+      name: 'palette',
+      exports: { './base.less': './base.less' },
+    });
+    const paletteFile = project.writeFile(
+      'node_modules/tokens/node_modules/palette/base.less',
+      '@brand: purple;',
+    );
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import (reference) "tokens/theme.less";\n.tag { .tag-color(); }',
+    );
+
+    const result = await compileCssModule({
+      file,
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    });
+
+    expect(result.css).toContain('color: purple');
+    expect(result.dependencyFiles).toContain(paletteFile);
+  });
+
+  test.each(['optional, reference', 'multiple, reference'])(
+    'allows supported external Less option combination (%s)',
+    async (options) => {
+      project.writeJson('package.json', {
+        name: 'consumer',
+        dependencies: { tokens: '1.0.0' },
+      });
+      project.writeJson('node_modules/tokens/package.json', {
+        name: 'tokens',
+        exports: { '.': './theme.less' },
+      });
+      project.writeFile(
+        'node_modules/tokens/theme.less',
+        '.tag-color() { color: teal; }',
+      );
+      const file = project.writeFile(
+        'src/Tag.module.less',
+        `@import (${options}) "tokens";\n.tag { .tag-color(); }`,
+      );
+
+      const result = await compileCssModule({
+        file,
+        packageRoot: project.root,
+        sourceRoot: project.resolve('src'),
+      });
+
+      expect(result.css).toContain('color: teal');
+    },
+  );
+
+  test.each(['inline, reference', 'css, reference', 'less, reference'])(
+    'rejects unsupported external Less option combination (%s)',
+    async (options) => {
+      project.writeJson('package.json', {
+        name: 'consumer',
+        dependencies: { tokens: '1.0.0' },
+      });
+      project.writeJson('node_modules/tokens/package.json', {
+        name: 'tokens',
+        exports: { './theme.less': './theme.less' },
+      });
+      project.writeFile('node_modules/tokens/theme.less', '@brand: teal;');
+      const file = project.writeFile(
+        'src/Tag.module.less',
+        `@import (${options}) "tokens/theme.less";\n.tag {}`,
+      );
+
+      await expect(
+        compileCssModule({
+          file,
+          packageRoot: project.root,
+          sourceRoot: project.resolve('src'),
+        }),
+      ).rejects.toThrow(
+        'external Less reference imports must not use inline, css, or less options',
+      );
+    },
+  );
+
+  test('watches workspace-linked external Less while keeping installed packages cache-only', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: 'workspace:*' },
+    });
+    project.writeJson('packages/tokens/package.json', {
+      name: 'tokens',
+      exports: { './theme.less': './theme.less' },
+    });
+    const themeFile = project.writeFile(
+      'packages/tokens/theme.less',
+      '.tag-color() { color: teal; }',
+    );
+    const link = project.resolve('node_modules/tokens');
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    fs.symlinkSync(project.resolve('packages/tokens'), link, 'dir');
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import (reference) "tokens/theme.less";\n.tag { .tag-color(); }',
+    );
+
+    const result = await compileCssModule({
+      file,
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    });
+
+    expect(result.watchFiles).toContain(themeFile);
+    expect(result.watchFiles).toContain(
+      project.resolve('packages/tokens/package.json'),
+    );
+  });
+
+  test('keeps missing optional external Less imports optional', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      optionalDependencies: { tokens: '1.0.0' },
+    });
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import (optional, reference) "tokens/theme.less";\n.tag { color: teal; }',
+    );
+
+    const result = await compileCssModule({
+      file,
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    });
+
+    expect(result.css).toContain('color: teal');
+    expect(result.dependencyFiles).toContain(project.resolve('package.json'));
+    expect(result.watchFiles).not.toContain(project.resolve('package.json'));
+    expect(result.absentDependencyFiles).toContain(
+      project.resolve('node_modules/tokens/package.json'),
+    );
+  });
+
+  test('infers package root for direct compileCssModule external imports', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: { '.': './theme.less' },
+    });
+    project.writeFile(
+      'node_modules/tokens/theme.less',
+      '.tag-color() { color: teal; }',
+    );
+    const file = project.writeFile(
+      'src/components/Tag/Tag.module.less',
+      '@import (reference) "tokens";\n.tag { .tag-color(); }',
+    );
+
+    const result = await compileCssModule({ file });
+
+    expect(result.css).toContain('color: teal');
+  });
+
+  test('rejects external export symlinks that escape the provider package', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: { './theme.less': './theme.less' },
+    });
+    const outside = project.writeFile('outside.less', '@brand: red;');
+    fs.symlinkSync(
+      outside,
+      project.resolve('node_modules/tokens/theme.less'),
+      'file',
+    );
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import (reference) "tokens/theme.less";\n.tag {}',
+    );
+
+    await expect(
+      compileCssModule({
+        file,
+        packageRoot: project.root,
+        sourceRoot: project.resolve('src'),
+      }),
+    ).rejects.toThrow('inside its package');
+  });
+
+  test('rejects provider relative imports that escape its package root', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: { './theme.less': './theme.less' },
+    });
+    project.writeFile(
+      'node_modules/tokens/theme.less',
+      '@import (reference) "../../outside.less";',
+    );
+    project.writeFile('outside.less', '@brand: red;');
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import (reference) "tokens/theme.less";\n.tag {}',
+    );
+
+    await expect(
+      compileCssModule({
+        file,
+        packageRoot: project.root,
+        sourceRoot: project.resolve('src'),
+      }),
+    ).rejects.toThrow('must stay inside the provider package');
+  });
+
+  test('rejects circular external package references', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { first: '1.0.0' },
+    });
+    project.writeJson('node_modules/first/package.json', {
+      name: 'first',
+      dependencies: { second: '1.0.0' },
+      exports: { './tokens.less': './tokens.less' },
+    });
+    project.writeFile(
+      'node_modules/first/tokens.less',
+      '@import (reference) "second/tokens.less";',
+    );
+    project.writeJson('node_modules/first/node_modules/second/package.json', {
+      name: 'second',
+      dependencies: { first: '1.0.0' },
+      exports: { './tokens.less': './tokens.less' },
+    });
+    project.writeFile(
+      'node_modules/first/node_modules/second/tokens.less',
+      '@import (reference) "first/tokens.less";',
+    );
+    const secondFirst = project.resolve(
+      'node_modules/first/node_modules/second/node_modules/first',
+    );
+    fs.mkdirSync(path.dirname(secondFirst), { recursive: true });
+    fs.symlinkSync(project.resolve('node_modules/first'), secondFirst, 'dir');
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import (reference) "first/tokens.less";\n.tag {}',
+    );
+
+    await expect(
+      compileCssModule({
+        file,
+        packageRoot: project.root,
+        sourceRoot: project.resolve('src'),
+      }),
+    ).rejects.toThrow('circular external Less import');
+  });
+
+  test.each(['once, reference', 'reference, unknown'])(
+    'rejects unpromised external Less option combination (%s)',
+    async (options) => {
+      project.writeJson('package.json', {
+        name: 'consumer',
+        dependencies: { tokens: '1.0.0' },
+      });
+      project.writeJson('node_modules/tokens/package.json', {
+        name: 'tokens',
+        exports: { '.': './theme.less' },
+      });
+      project.writeFile('node_modules/tokens/theme.less', '@brand: teal;');
+      const file = project.writeFile(
+        'src/Tag.module.less',
+        `@import (${options}) "tokens";\n.tag {}`,
+      );
+
+      await expect(
+        compileCssModule({
+          file,
+          packageRoot: project.root,
+          sourceRoot: project.resolve('src'),
+        }),
+      ).rejects.toThrow('only support');
+    },
+  );
+
   test('preserves Less inline import semantics for CSS files', async () => {
     project.writeFile('src/tokens.css', ':root { --tag-color: teal; }');
     const file = project.writeFile(
@@ -453,9 +865,7 @@ describe('css/modules protocol', () => {
       const result = await compileCssModule({ file });
       const tokenClass = expectedScopedName('token', file);
 
-      expect(
-        result.css.match(new RegExp(`\\.${tokenClass}\\b`, 'g')),
-      ).toHaveLength(expectedCount);
+      expect(result.css.split(`.${tokenClass}`).length - 1).toBe(expectedCount);
       expect(result.styleAssets).toEqual([]);
     },
   );
@@ -512,6 +922,52 @@ describe('css/modules protocol', () => {
         project.resolve('src/tokens.less'),
         project.resolve('src/theme.less'),
         project.resolve('src/base.css'),
+      ]),
+    );
+  });
+
+  test('excludes external Less references from style asset dependency closure', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: { './theme.less': './theme.less' },
+    });
+    const externalTheme = project.writeFile(
+      'node_modules/tokens/theme.less',
+      '@brand: teal;\n.unused { color: red; }',
+    );
+    project.writeFile(
+      'src/tokens.less',
+      '@import (reference) "tokens/theme.less";\n:root { --tag-color: @brand; }',
+    );
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      '@import "./tokens.less";\n.tag { color: var(--tag-color); }',
+    );
+
+    const result = await compileCssModule({
+      file,
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    });
+
+    expect(result.styleAssets).toEqual([
+      {
+        file: project.resolve('src/tokens.less'),
+        css: expect.stringContaining('--tag-color: teal'),
+        dependencies: [project.resolve('src/tokens.less')],
+      },
+    ]);
+    expect(result.styleAssets.map((asset) => asset.file)).not.toContain(
+      externalTheme,
+    );
+    expect(result.dependencyFiles).toEqual(
+      expect.arrayContaining([
+        externalTheme,
+        project.resolve('node_modules/tokens/package.json'),
       ]),
     );
   });

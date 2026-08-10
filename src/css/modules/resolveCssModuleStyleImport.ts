@@ -11,6 +11,11 @@ export const resolveCssModuleStyleImport = (
   importerFile: string,
   options?: { sourceRoot?: string; allowMissing?: boolean },
 ) => {
+  if (specifier.startsWith('#')) {
+    throw new Error(
+      `[css] CSS Modules partial imports do not support package.json#imports: ${specifier} from ${importerFile}`,
+    );
+  }
   if (!specifier.startsWith('.')) {
     throw new Error(
       `[css] CSS Modules partial imports must be relative paths: ${specifier} from ${importerFile}`,
@@ -58,11 +63,17 @@ export const assertLessCompileImportsWithinSourceRoot = (
   imports: Array<string>,
   importerFile: string,
   sourceRoot?: string,
+  allowedRoots: Array<string> = [],
 ) => {
   if (!sourceRoot) return;
 
   for (const imported of imports) {
-    if (isInsideSourceRoot(imported, sourceRoot)) continue;
+    if (
+      isInsideSourceRoot(imported, sourceRoot) ||
+      allowedRoots.some((root) => isInsideSourceRoot(imported, root))
+    ) {
+      continue;
+    }
 
     const relative = path.relative(path.dirname(importerFile), imported);
     const specifier = relative.startsWith('.') ? relative : `./${relative}`;

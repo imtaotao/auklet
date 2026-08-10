@@ -46,6 +46,7 @@ const resolveCssModuleFile = (source: string, importer?: string) => {
 };
 
 export type CssModulesPluginOptions = {
+  packageRoot?: string;
   sourceRoot: string;
 };
 
@@ -90,6 +91,9 @@ const createCssSideEffectCode = (
 
 export function createCssModulesPlugin(options: CssModulesPluginOptions) {
   const sourceRoot = path.resolve(options.sourceRoot);
+  const packageRoot = path.resolve(
+    options.packageRoot ?? path.dirname(sourceRoot),
+  );
   const cache = new Map<string, CssModuleResult>();
   const cssOutputByEntryId = new Map<string, string>();
   const cssOutputByModuleFile = new Map<string, string>();
@@ -118,7 +122,11 @@ export function createCssModulesPlugin(options: CssModulesPluginOptions) {
     const key = normalizeFileKey(file);
     const cached = cache.get(key);
     if (cached) return cached;
-    const result = await compileCssModule({ file, sourceRoot });
+    const result = await compileCssModule({
+      file,
+      packageRoot,
+      sourceRoot,
+    });
     cache.set(key, result);
     compiledByModuleFile.set(key, result);
     return result;

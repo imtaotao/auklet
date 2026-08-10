@@ -7,12 +7,18 @@
     "dev": "auk build-css --watch"
   },
   "files": [
-    "dist"
+    "dist",
+    "tokens.less"
   ],
   "publishConfig": {
     "registry": "http://127.0.0.1:4873"
   },
   "exports": {
+    "./tokens.less": {
+      "less": "./tokens.less",
+      "source": "./tokens.less",
+      "default": "./tokens.less"
+    },
     "./style.css": "./dist/index.css",
     "./themes/*.css": {
       "import": "./dist/es/themes/*.css",

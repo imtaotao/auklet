@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createServer as createViteServer } from 'vite';
@@ -534,6 +535,169 @@ describe('aukletStylePlugin Vite server integration', () => {
     expect(context.send).not.toHaveBeenCalled();
   });
 
+  test('invalidates inactive global Less consumers for provider content and exports changes', async () => {
+    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    fixture.writeJson('packages/app/package.json', {
+      name: '@scope/app',
+      dependencies: { '@scope/tokens': 'workspace:*' },
+    });
+    fixture.writeJson('packages/tokens/package.json', {
+      name: '@scope/tokens',
+      exports: { './theme.less': './src/theme.less' },
+    });
+    fixture.writeFile(
+      'packages/app/src/components/App/index.tsx',
+      'export function App() { return null; }',
+    );
+    fixture.writeFile(
+      'packages/app/src/components/App/index.less',
+      '@import (reference) "@scope/tokens/theme.less";\n.app { .app-color(); }',
+    );
+    const providerFile = fixture.writeFile(
+      'packages/tokens/src/theme.less',
+      '.app-color() { color: teal; }',
+    );
+    const providerPackageJson = fixture.resolve('packages/tokens/package.json');
+    const link = fixture.resolve('packages/app/node_modules/@scope/tokens');
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    fs.symlinkSync(fixture.resolve('packages/tokens'), link, 'dir');
+
+    const virtualId = '\0auklet-css:@scope/app/components/App.css';
+    const context = createServer([virtualId]);
+    const plugin = aukletStylePlugin({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+    const addWatchFile = vi.fn();
+    await plugin.configureServer?.(context.server);
+    const first = await plugin.load?.call({ addWatchFile }, virtualId);
+    expect(first).toContain('color: teal');
+    expect(addWatchFile).toHaveBeenCalledWith(providerFile);
+    expect(addWatchFile).toHaveBeenCalledWith(providerPackageJson);
+
+    fixture.writeFile(
+      'packages/tokens/src/theme.less',
+      '.app-color() { color: purple; }',
+    );
+    const updates = await runHotUpdate(plugin, context.server, providerFile);
+    expect(updates?.map((item) => item.id)).toContain(virtualId);
+
+    const second = await plugin.load?.call(
+      { addWatchFile: vi.fn() },
+      virtualId,
+    );
+    expect(second).toContain('color: purple');
+    expect(second).not.toContain('color: teal');
+
+    context.server.environments.client.moduleGraph.getModuleById = vi.fn(
+      () => undefined,
+    );
+    fixture.writeFile(
+      'packages/tokens/src/theme.less',
+      '.app-color() { color: orange; }',
+    );
+    expect(
+      await runHotUpdate(plugin, context.server, providerFile),
+    ).toBeUndefined();
+    const inactiveRefresh = await plugin.load?.call(
+      { addWatchFile },
+      virtualId,
+    );
+    expect(inactiveRefresh).toContain('color: orange');
+    expect(inactiveRefresh).not.toContain('color: purple');
+
+    fixture.writeFile(
+      'packages/tokens/src/alternate.less',
+      '.app-color() { color: green; }',
+    );
+    fixture.writeJson('packages/tokens/package.json', {
+      name: '@scope/tokens',
+      exports: { './theme.less': './src/alternate.less' },
+    });
+    expect(
+      await runHotUpdate(plugin, context.server, providerPackageJson),
+    ).toBeUndefined();
+    const remapped = await plugin.load?.call({ addWatchFile }, virtualId);
+    expect(remapped).toContain('color: green');
+    expect(remapped).not.toContain('color: orange');
+  });
+
+  test('reloads workspace provider manifests on add and unlink', async () => {
+    fixture.writeFile('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+    fixture.writeJson('packages/app/package.json', { name: '@scope/app' });
+    const providerPackageJson = fixture.writeJson(
+      'packages/tokens/package.json',
+      { name: '@scope/tokens' },
+    );
+    const context = createServer();
+    const plugin = aukletStylePlugin({
+      root: fixture.root,
+      mode: 'monorepo',
+    });
+
+    await plugin.configureServer?.(context.server);
+    await runChange(context.handlers.get('unlink'), providerPackageJson);
+    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+
+    context.send.mockClear();
+    await runChange(context.handlers.get('add'), providerPackageJson);
+    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+  });
+
+  test('package mode remaps inactive global Less consumers when provider exports change', async () => {
+    fixture.writeJson('package.json', {
+      name: '@scope/app',
+      dependencies: { tokens: 'workspace:*' },
+    });
+    fixture.writeJson('vendor/tokens/package.json', {
+      name: 'tokens',
+      exports: { './theme.less': './theme.less' },
+    });
+    fixture.writeFile(
+      'src/components/App/index.tsx',
+      'export function App() { return null; }',
+    );
+    fixture.writeFile(
+      'src/components/App/index.less',
+      '@import (reference) "tokens/theme.less";\n.app { .app-color(); }',
+    );
+    fixture.writeFile(
+      'vendor/tokens/theme.less',
+      '.app-color() { color: teal; }',
+    );
+    const providerPackageJson = fixture.resolve('vendor/tokens/package.json');
+    const link = fixture.resolve('node_modules/tokens');
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    fs.symlinkSync(fixture.resolve('vendor/tokens'), link, 'dir');
+
+    const virtualId = '\0auklet-css:@scope/app/components/App.css';
+    const context = createServer([virtualId]);
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const addWatchFile = vi.fn();
+    await plugin.configureServer?.(context.server);
+    const first = await plugin.load?.call({ addWatchFile }, virtualId);
+    expect(first).toContain('color: teal');
+    expect(addWatchFile).toHaveBeenCalledWith(providerPackageJson);
+
+    context.server.environments.client.moduleGraph.getModuleById = vi.fn(
+      () => undefined,
+    );
+    fixture.writeFile(
+      'vendor/tokens/alternate.less',
+      '.app-color() { color: purple; }',
+    );
+    fixture.writeJson('vendor/tokens/package.json', {
+      name: 'tokens',
+      exports: { './theme.less': './alternate.less' },
+    });
+    expect(
+      await runHotUpdate(plugin, context.server, providerPackageJson),
+    ).toBeUndefined();
+    const remapped = await plugin.load?.call({ addWatchFile }, virtualId);
+    expect(remapped).toContain('color: purple');
+    expect(remapped).not.toContain('color: teal');
+  });
+
   test('invalidates css request cache even when tracked virtual css modules are no longer live', async () => {
     fixture.writeJson(path.join('packages/app/package.json'), {
       name: '@scope/app',
@@ -898,6 +1062,31 @@ describe('aukletStylePlugin Vite server integration', () => {
     expect(context.invalidateModule).toHaveBeenCalled();
     expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
   });
+
+  test('reloads root package manifests on add and unlink but ignores nested manifests', async () => {
+    const virtualId = '\0auklet-css:@scope/app/style.css';
+    const context = createServer([virtualId]);
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const packageJsonFile = fixture.resolve('package.json');
+    const nestedPackageJsonFile = fixture.writeJson('src/vendor/package.json', {
+      name: 'nested',
+    });
+
+    await plugin.configureServer?.(context.server);
+
+    await runChange(context.handlers.get('unlink'), packageJsonFile);
+    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+    context.send.mockClear();
+
+    await runChange(context.handlers.get('add'), packageJsonFile);
+    expect(context.send).toHaveBeenCalledWith({ type: 'full-reload' });
+    context.send.mockClear();
+    context.invalidateModule.mockClear();
+
+    await runChange(context.handlers.get('add'), nestedPackageJsonFile);
+    expect(context.send).not.toHaveBeenCalled();
+    expect(context.invalidateModule).not.toHaveBeenCalled();
+  });
 });
 
 describe('aukletStylePlugin CSS Modules integration', () => {
@@ -963,6 +1152,67 @@ describe('aukletStylePlugin CSS Modules integration', () => {
     expect(addWatchFile).toHaveBeenCalledWith(
       path.join(packageRoot, 'src/tokens.less'),
     );
+  });
+
+  test('hot updates workspace external Less and watches its exports manifest', async () => {
+    fixture.writeJson('package.json', {
+      name: '@scope/app',
+      dependencies: { tokens: 'workspace:*' },
+    });
+    fixture.writeJson('packages/tokens/package.json', {
+      name: 'tokens',
+      exports: { '.': './tokens.less' },
+    });
+    const tokensFile = fixture.writeFile(
+      'packages/tokens/tokens.less',
+      '.tag-color() { color: teal; }',
+    );
+    const packageJsonFile = fixture.resolve('packages/tokens/package.json');
+    const link = fixture.resolve('node_modules/tokens');
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    fs.symlinkSync(fixture.resolve('packages/tokens'), link, 'dir');
+    const moduleFile = fixture.writeFile(
+      'src/Tag.module.less',
+      '@import (reference) "tokens";\n.tag { .tag-color(); }',
+    );
+
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const addWatchFile = vi.fn();
+    const { localsVirtualId, styleVirtualId } =
+      cssModuleVirtualIdsForFile(moduleFile);
+    const context = createServer([localsVirtualId, styleVirtualId]);
+    const first = await plugin.load?.call({ addWatchFile }, styleVirtualId);
+
+    expect(readPluginLoadCode(first)).toContain('color: teal');
+    expect(addWatchFile).toHaveBeenCalledWith(tokensFile);
+    expect(addWatchFile).toHaveBeenCalledWith(packageJsonFile);
+
+    fixture.writeFile(
+      'packages/tokens/tokens.less',
+      '.tag-color() { color: purple; }',
+    );
+    const updated = await runHotUpdate(plugin, context.server, tokensFile);
+    expect(updated?.map((item) => item.id)).toEqual([styleVirtualId]);
+    const second = await plugin.load?.call({ addWatchFile }, styleVirtualId);
+    expect(readPluginLoadCode(second)).toContain('color: purple');
+
+    fixture.writeFile(
+      'packages/tokens/alternate.less',
+      '.tag-color() { color: orange; }',
+    );
+    fixture.writeJson('packages/tokens/package.json', {
+      name: 'tokens',
+      exports: { '.': './alternate.less' },
+    });
+    const remapped = await runHotUpdate(
+      plugin,
+      context.server,
+      packageJsonFile,
+    );
+    expect(remapped?.map((item) => item.id)).toEqual([styleVirtualId]);
+    const third = await plugin.load?.call({ addWatchFile }, styleVirtualId);
+    expect(readPluginLoadCode(third)).toContain('color: orange');
+    expect(readPluginLoadCode(third)).not.toContain('color: purple');
   });
 
   test('hotUpdate returns module nodes for tracked CSS Modules files', async () => {

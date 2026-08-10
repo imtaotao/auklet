@@ -168,17 +168,29 @@ export class ModuleStyleGraphRequestCache {
 
   invalidatePackage(packageName: string) {
     this.bumpGraphVersion();
+    const invalidatedPackages = this.invalidateLoadResults(packageName);
     this.contexts.delete(packageName);
     this.settledContexts.delete(packageName);
-    this.invalidateLoadResults(packageName);
+    for (const invalidatedPackage of invalidatedPackages) {
+      if (invalidatedPackage === packageName) continue;
+      this.invalidateStyleContentCaches(invalidatedPackage);
+    }
   }
 
   invalidatePackageLoadResults(packageName: string) {
     this.bumpGraphVersion();
-    this.settledContexts
-      .get(packageName)
-      ?.packageContext.invalidateStyleContentCaches();
-    this.invalidateLoadResults(packageName);
+    const invalidatedPackages = this.invalidateLoadResults(packageName);
+    for (const invalidatedPackage of invalidatedPackages) {
+      this.invalidateStyleContentCaches(invalidatedPackage);
+    }
+  }
+
+  hasTrackedPackageLoadResults(packageName: string) {
+    return (
+      (this.loadResultsByPackage.get(packageName)?.size ?? 0) > 0 ||
+      (this.loadResultDependents.get(packageName)?.size ?? 0) > 0 ||
+      this.settledContexts.has(packageName)
+    );
   }
 
   readPersistentLoadResult(
@@ -358,6 +370,7 @@ export class ModuleStyleGraphRequestCache {
       ...(this.loadResultDependents.get(packageName) ?? []),
     ];
     const processedKeys = new Set<string>();
+    const invalidatedPackages = new Set([packageName]);
 
     while (pendingKeys.length) {
       const key = pendingKeys.pop();
@@ -366,6 +379,7 @@ export class ModuleStyleGraphRequestCache {
 
       const dependentPackageName = this.discardLoadResult(key);
       if (!dependentPackageName) continue;
+      invalidatedPackages.add(dependentPackageName);
 
       for (const dependentKey of Array.from(
         this.loadResultDependents.get(dependentPackageName) ?? [],
@@ -374,6 +388,13 @@ export class ModuleStyleGraphRequestCache {
         pendingKeys.push(dependentKey);
       }
     }
+    return invalidatedPackages;
+  }
+
+  private invalidateStyleContentCaches(packageName: string) {
+    this.settledContexts
+      .get(packageName)
+      ?.packageContext.invalidateStyleContentCaches();
   }
 
   private discardLoadResult(key: string) {

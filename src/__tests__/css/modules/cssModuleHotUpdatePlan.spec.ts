@@ -320,8 +320,13 @@ describe('CssModuleDevCompileCache', () => {
     project.writeFile('src/Button.module.css', '.button { color: red; }');
     const file = project.resolve('src/Button.module.css');
     const cache = new CssModuleDevCompileCache();
+    const read = vi.fn(() => '.button { color: red; }');
 
-    const pending = cache.compile(file);
+    const pending = cache.compile(file, {
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+      read,
+    });
     cache.invalidateModuleFile(file);
     releaseSlowCompile();
     const pendingResult = await pending;
@@ -329,6 +334,12 @@ describe('CssModuleDevCompileCache', () => {
     expect(pendingResult.locals).toEqual({ button: 'Button_button_new' });
     expect(cache.peekLocals(file)).toEqual({ button: 'Button_button_new' });
     expect(compileSpy).toHaveBeenCalledTimes(2);
+    expect(compileSpy.mock.calls[1]?.[0]).toMatchObject({
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+      code: '.button { color: red; }',
+    });
+    expect(read).toHaveBeenCalledTimes(2);
     compileSpy.mockRestore();
   });
 
@@ -382,6 +393,48 @@ describe('CssModuleDevCompileCache', () => {
 
     expect(compileSpy).toHaveBeenCalledTimes(2);
     compileSpy.mockRestore();
+  });
+
+  test('best-effort: optional package probe can invalidate a cache hit after install', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      optionalDependencies: { tokens: '1.0.0' },
+    });
+    const file = project.writeFile(
+      'src/Tag.module.less',
+      [
+        '@brand: teal;',
+        '@import (optional, reference) "tokens/theme.less";',
+        '.tag { color: @brand; }',
+      ].join('\n'),
+    );
+    const cache = new CssModuleDevCompileCache();
+    const compileOptions = {
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    };
+
+    const first = await cache.compile(file, compileOptions);
+    expect(first.css).toContain('color: teal');
+    expect(first.absentDependencyFiles).toContain(
+      project.resolve('node_modules/tokens/package.json'),
+    );
+
+    const cached = await cache.compile(file, compileOptions);
+    expect(cached.css).toContain('color: teal');
+
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: { './theme.less': './theme.less' },
+    });
+    project.writeFile('node_modules/tokens/theme.less', '@brand: purple;');
+
+    const next = await cache.compile(file, compileOptions);
+    expect(next.css).toContain('color: purple');
+    expect(next.css).not.toContain('color: teal');
+    expect(next.absentDependencyFiles ?? []).not.toContain(
+      project.resolve('node_modules/tokens/package.json'),
+    );
   });
 
   test('invalidateWatchFile clears cached locals until the module is loaded again', async () => {

@@ -76,6 +76,7 @@
     "minimist": "catalog:",
     "picocolors": "catalog:",
     "postcss": "catalog:",
+    "postcss-less": "catalog:",
     "postcss-modules": "catalog:",
     "prettier": "catalog:",
     "rimraf": "catalog:",
@@ -85,6 +86,7 @@
   },
   "devDependencies": {
     "@types/less": "catalog:",
+    "@types/postcss-less": "catalog:",
     "@types/minimist": "catalog:",
     "@types/node": "catalog:",
     "@types/prettier": "catalog:",

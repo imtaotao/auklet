@@ -15,6 +15,9 @@ catalogs:
     '@types/node':
       specifier: 22.17.0
       version: 22.17.0
+    '@types/postcss-less':
+      specifier: 4.0.7
+      version: 4.0.7
     '@types/prettier':
       specifier: 3.0.0
       version: 3.0.0
@@ -63,6 +66,9 @@ catalogs:
     postcss:
       specifier: 8.5.25
       version: 8.5.25
+    postcss-less:
+      specifier: 6.0.0
+      version: 6.0.0
     postcss-modules:
       specifier: 9.0.1
       version: 9.0.1
@@ -125,6 +131,9 @@ importers:
       postcss:
         specifier: 'catalog:'
         version: 8.5.25
+      postcss-less:
+        specifier: 'catalog:'
+        version: 6.0.0(postcss@8.5.25)
       postcss-modules:
         specifier: 'catalog:'
         version: 9.0.1(postcss@8.5.25)
@@ -153,6 +162,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.17.0
+      '@types/postcss-less':
+        specifier: 'catalog:'
+        version: 4.0.7
       '@types/prettier':
         specifier: 'catalog:'
         version: 3.0.0
@@ -651,6 +663,9 @@ packages:
 
   '@types/node@22.17.0':
     resolution: {integrity: sha512-bbAKTCqX5aNVryi7qXVMi+OkB3w/OyblodicMbvE38blyAz7GxXf6XYhklokijuPwwVg9sDLKRxt0ZHXQwZVfQ==}
+
+  '@types/postcss-less@4.0.7':
+    resolution: {integrity: sha512-trNnU5PNmvMGysyge5Tc7W4CpaU+HHVu9XcGFX9eBlIGcg+NJP6lLJcUna6jjh8/TMjAe0k5mY0+jNRkZLYoaQ==}
 
   '@types/prettier@3.0.0':
     resolution: {integrity: sha512-mFMBfMOz8QxhYVbuINtswBp9VL2b4Y0QqYHwqLz3YbgtfAcat2Dl6Y1o4e22S/OVE6Ebl9m7wWiMT2lSbAs1wA==}
@@ -2158,6 +2173,12 @@ packages:
     resolution: {integrity: sha512-8OEwKp5juEvb/MjpIc4hjqfgCNysrS94RIOMXYvpYCdm/jglrKEiAYmiumbmGhCvs+IcInsphYDFwqrjr7398w==}
     hasBin: true
 
+  postcss-less@6.0.0:
+    resolution: {integrity: sha512-FPX16mQLyEjLzEuuJtxA8X3ejDLNGGEG503d2YGZR5Ask1SpDN8KmZUMpzCvyalWRywAn1n1VOA5dcqfCLo5rg==}
+    engines: {node: '>=12'}
+    peerDependencies:
+      postcss: ^8.3.5
+
   postcss-modules-extract-imports@3.1.0:
     resolution: {integrity: sha512-k3kNe0aNFQDAZGbin48pL2VNidTF0w4/eASDsxlyspobzU3wZQLOGj7L9gfRe0Jo9/4uud09DsjFNH7winGv8Q==}
     engines: {node: ^10 || ^12 || >= 14}
@@ -3178,6 +3199,10 @@ snapshots:
   '@types/node@22.17.0':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/postcss-less@4.0.7':
+    dependencies:
+      postcss: 8.5.25
 
   '@types/prettier@3.0.0':
     dependencies:
@@ -4736,6 +4761,10 @@ snapshots:
       safe-stable-stringify: 2.5.0
       sonic-boom: 4.2.1
       thread-stream: 3.1.0
+
+  postcss-less@6.0.0(postcss@8.5.25):
+    dependencies:
+      postcss: 8.5.25
 
   postcss-modules-extract-imports@3.1.0(postcss@8.5.25):
     dependencies:

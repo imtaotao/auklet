@@ -88,6 +88,7 @@ export async function planCssModuleHotUpdate(options: {
   moduleGraph: ModuleGraphLookup;
   compileCache: CssModuleDevCompileCache;
   resolveSourceRoot: (file: string) => Promise<string | null | undefined>;
+  resolvePackageRoot?: (file: string) => string | null | undefined;
   read?: () => string | Promise<string>;
 }) {
   const affectedModules = collectAffectedCssModuleFiles(options);
@@ -106,6 +107,7 @@ export async function planCssModuleHotUpdate(options: {
       ? options.read
       : undefined;
     const result = await options.compileCache.compile(moduleFile, {
+      packageRoot: options.resolvePackageRoot?.(moduleFile) ?? undefined,
       sourceRoot: (await options.resolveSourceRoot(moduleFile)) ?? undefined,
       force: true,
       read,

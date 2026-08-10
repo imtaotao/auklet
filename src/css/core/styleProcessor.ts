@@ -16,6 +16,11 @@ import {
   rewriteLessImportAsReference,
 } from '#auklet/css/core/lessImportGraph';
 import type { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
+import {
+  isExternalPackageSpecifier,
+  resolveImporterPackageRoot,
+} from '#auklet/css/core/resolvers/externalLess';
+import { createLessExternalImportPlan } from '#auklet/css/core/externalLessGraph';
 
 export type StyleFileImportReference = {
   importer: string;
@@ -44,8 +49,15 @@ export type StyleProcessorOptions = {
   prefix?: string;
 };
 
+type StyleLessResult = LessCompileResult & {
+  externalDependencyFiles: Array<string>;
+  externalDependencyPackages: Array<string>;
+  externalAbsentDependencyFiles: Array<string>;
+  hasExternalPackageImports: boolean;
+};
+
 export class StyleProcessor {
-  private readonly lessCache = new Map<string, LessCompileResult>();
+  private readonly lessCache = new Map<string, StyleLessResult>();
   private readonly prefix?: string;
 
   constructor(
@@ -69,13 +81,42 @@ export class StyleProcessor {
   }
 
   async collectLessImportFiles(styleFile: string) {
+    return (await this.collectLessDependencyFiles(styleFile)).filter(
+      (imported) =>
+        this.config.styleExtensions.includes(path.extname(imported)),
+    );
+  }
+
+  async collectLessDependencyFiles(styleFile: string) {
     if (path.extname(styleFile) !== '.less' || !fs.existsSync(styleFile)) {
       return [] as Array<string>;
     }
     const result = await this.getLessResult(styleFile);
-    return result.imports.filter((imported) =>
-      this.config.styleExtensions.includes(path.extname(imported)),
-    );
+    return result.imports;
+  }
+
+  async collectLessDependencyPackages(styleFile: string) {
+    if (path.extname(styleFile) !== '.less' || !fs.existsSync(styleFile)) {
+      return [] as Array<string>;
+    }
+    const result = await this.getLessResult(styleFile);
+    return result.externalDependencyPackages;
+  }
+
+  async collectLessAbsentDependencyFiles(styleFile: string) {
+    if (path.extname(styleFile) !== '.less' || !fs.existsSync(styleFile)) {
+      return [] as Array<string>;
+    }
+    const result = await this.getLessResult(styleFile);
+    return result.externalAbsentDependencyFiles;
+  }
+
+  async hasExternalLessPackageImports(styleFile: string) {
+    if (path.extname(styleFile) !== '.less' || !fs.existsSync(styleFile)) {
+      return false;
+    }
+    const result = await this.getLessResult(styleFile);
+    return result.hasExternalPackageImports;
   }
 
   createRoot() {
@@ -221,10 +262,14 @@ export class StyleProcessor {
       );
       if (path.extname(styleFile) === '.less') {
         const result = await this.getLessResult(styleFile);
+        const externalDependencies = new Set(
+          result.externalDependencyFiles.map((file) => path.resolve(file)),
+        );
         for (const imported of result.imports) {
           if (!this.config.styleExtensions.includes(path.extname(imported))) {
             continue;
           }
+          if (externalDependencies.has(path.resolve(imported))) continue;
           imports.push({
             importer: path.resolve(styleFile),
             imported: path.resolve(imported),
@@ -321,7 +366,15 @@ export class StyleProcessor {
       }
       // Less inlines partials before CSS @import remains; still guard the
       // Less import closure (including modules: false package builds).
-      for (const imported of await this.collectLessImportFiles(normalized)) {
+      if (path.extname(normalized) !== '.less') continue;
+      const lessResult = await this.getLessResult(normalized);
+      const externalDependencies = new Set(
+        lessResult.externalDependencyFiles.map((file) => path.resolve(file)),
+      );
+      for (const imported of lessResult.imports.filter((file) =>
+        this.config.styleExtensions.includes(path.extname(file)),
+      )) {
+        if (externalDependencies.has(path.resolve(imported))) continue;
         this.assertSourceRootLocalStyleImport(
           {
             importer: normalized,
@@ -356,6 +409,7 @@ export class StyleProcessor {
   ) {
     const sourceCode = fs.readFileSync(stylePath, 'utf8');
     const parsedImports = parseLessSourceImports(sourceCode);
+    const externalPlan = this.createExternalLessPlan(stylePath, sourceCode);
     const preservedImports: Array<{
       specifier: string;
       tail: string | null;
@@ -363,6 +417,9 @@ export class StyleProcessor {
     let compileCode = sourceCode;
 
     for (const parsed of [...parsedImports].reverse()) {
+      if (isExternalPackageSpecifier(parsed.specifier)) {
+        continue;
+      }
       const { reference, isLocalStyleImport } =
         this.resolveStyleImportReference(parsed.specifier, stylePath);
       this.assertNotCssModuleFile(reference.imported, {
@@ -394,7 +451,9 @@ export class StyleProcessor {
       }
     }
 
-    const result = await compileLess(stylePath, compileCode);
+    const result = await compileLess(stylePath, compileCode, {
+      resolveExternalImport: externalPlan.resolveImport,
+    });
     const root = this.parseCss(result.css, stylePath);
 
     if (preservedImports.length) {
@@ -441,8 +500,21 @@ export class StyleProcessor {
     const cached = this.lessCache.get(key);
     if (cached) return cached;
 
-    const code = fs.readFileSync(stylePath, 'utf8');
-    const result = await compileLess(stylePath, code);
+    const source = fs.readFileSync(stylePath, 'utf8');
+    const externalPlan = this.createExternalLessPlan(stylePath, source);
+    const compiled = await compileLess(stylePath, source, {
+      resolveExternalImport: externalPlan.resolveImport,
+    });
+    const result = {
+      ...compiled,
+      externalDependencyFiles: externalPlan.dependencyFiles,
+      externalDependencyPackages: externalPlan.packageNames,
+      externalAbsentDependencyFiles: externalPlan.absentDependencyFiles,
+      hasExternalPackageImports: externalPlan.hasExternalPackageImports,
+      imports: Array.from(
+        new Set([...compiled.imports, ...externalPlan.dependencyFiles]),
+      ),
+    };
     for (const imported of result.imports) {
       this.assertNotCssModuleFile(path.resolve(imported), {
         specifier: imported,
@@ -451,6 +523,21 @@ export class StyleProcessor {
     }
     this.lessCache.set(key, result);
     return result;
+  }
+
+  private createExternalLessPlan(stylePath: string, source: string) {
+    const packageRoot =
+      resolveImporterPackageRoot({
+        packageRoot: this.resolver.packageRoot,
+        sourceRoot: this.resolver.sourceRoot,
+        file: stylePath,
+      }) ?? path.dirname(stylePath);
+    return createLessExternalImportPlan({
+      entryFile: stylePath,
+      packageRoot,
+      source,
+      sourceRoot: this.resolver.sourceRoot,
+    });
   }
 
   private parseCss(code: string, from: string) {

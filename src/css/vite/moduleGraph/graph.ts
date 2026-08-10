@@ -4,6 +4,10 @@ import { normalizeAukletConfig } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
 import { SOURCE_MODULE_RE } from '#auklet/css/constants';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
+import {
+  findPackageRootForFile,
+  readPackageName,
+} from '#auklet/css/core/resolvers/externalLess';
 import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
 import { StyleCodeFactory } from '#auklet/css/vite/moduleGraph/styleCodeFactory';
 import { ModuleStyleGraphRequestCache } from '#auklet/css/vite/moduleGraph/requestCache';
@@ -14,7 +18,7 @@ import type {
   ModuleStyleGraphOptions,
   PackageStyleId,
 } from '#auklet/css/vite/moduleGraph/types';
-import { normalizeFileKey } from '#auklet/utils';
+import { isPackageJsonFile, normalizeFileKey } from '#auklet/utils';
 
 // package style graph 的对外门面，负责 package source、watch 边界和请求分发。
 export class ModuleStyleGraph {
@@ -66,6 +70,18 @@ export class ModuleStyleGraph {
     return this.config.styleExtensions.includes(path.extname(file));
   }
 
+  isPackageManifestFile(file: string) {
+    if (!isPackageJsonFile(file)) return false;
+    const normalizedFile = normalizeFileKey(file);
+    return this.packageSource
+      .getPackages()
+      .some(
+        (item) =>
+          normalizeFileKey(path.join(item.packageRoot, 'package.json')) ===
+          normalizedFile,
+      );
+  }
+
   getPackageNames() {
     return this.packageSource.getPackageNames();
   }
@@ -97,6 +113,25 @@ export class ModuleStyleGraph {
     return packageName;
   }
 
+  invalidateDependencyFile(file: string) {
+    const workspacePackage = this.getFilePackageName(file);
+    if (workspacePackage) {
+      this.requestCache.invalidatePackageLoadResults(workspacePackage);
+      return workspacePackage;
+    }
+
+    const dependencyPackage = this.resolveExternalDependencyPackageName(file);
+    if (
+      !dependencyPackage ||
+      !this.requestCache.hasTrackedPackageLoadResults(dependencyPackage)
+    ) {
+      return null;
+    }
+
+    this.requestCache.invalidatePackageLoadResults(dependencyPackage);
+    return dependencyPackage;
+  }
+
   invalidateFile(file: string) {
     const packageName = this.getFilePackageName(file);
     if (!packageName) return null;
@@ -120,26 +155,49 @@ export class ModuleStyleGraph {
     return path.join(packageRoot, normalizedConfig.source);
   }
 
+  resolvePackageRootForFile(file: string) {
+    return this.getFilePackageRoot(file);
+  }
+
   private getFilePackageRoot(file: string) {
-    if (!this.isSourceGraphFile(file)) return null;
-
-    const normalizedFile = normalizeFileKey(file);
-    const stylePackage = this.packageSource
-      .getPackages()
-      .find((item) => this.isPackageFile(item.packageRoot, normalizedFile));
-
-    return stylePackage?.packageRoot ?? null;
+    return this.getFileStylePackage(file)?.packageRoot ?? null;
   }
 
   private getFilePackageName(file: string) {
-    if (!this.isSourceGraphFile(file)) return null;
+    return this.getFileStylePackage(file)?.packageName ?? null;
+  }
+
+  private getFileStylePackage(file: string) {
+    if (!this.isSourceGraphFile(file) && !this.isPackageManifestFile(file)) {
+      return null;
+    }
 
     const normalizedFile = normalizeFileKey(file);
-    const stylePackage = this.packageSource
-      .getPackages()
-      .find((item) => this.isPackageFile(item.packageRoot, normalizedFile));
+    return (
+      this.packageSource
+        .getPackages()
+        .find((item) => this.isPackageFile(item.packageRoot, normalizedFile)) ??
+      null
+    );
+  }
 
-    return stylePackage?.packageName ?? null;
+  private resolveExternalDependencyPackageName(file: string) {
+    const packageRoot = findPackageRootForFile(file);
+    if (!packageRoot) return null;
+
+    const normalizedPackageRoot = normalizeFileKey(packageRoot);
+    if (
+      this.packageSource
+        .getPackages()
+        .some(
+          (item) =>
+            normalizeFileKey(item.packageRoot) === normalizedPackageRoot,
+        )
+    ) {
+      return null;
+    }
+
+    return readPackageName(packageRoot);
   }
 
   private isPackageFile(packageRoot: string, file: string) {

@@ -28,6 +28,8 @@ describe('StyleProcessor', () => {
     project = createVirtualProject('auklet-style-');
 
     const resolver = {
+      packageRoot: project.root,
+      sourceRoot: project.root,
       resolveSourceStyleDependency(specifier: string, fromDir: string) {
         if (specifier.startsWith('.')) return path.resolve(fromDir, specifier);
         if (specifier.startsWith('#local/')) {
@@ -603,6 +605,195 @@ describe('StyleProcessor', () => {
     expect(content).toContain('.inline-only');
     expect(content).not.toContain('.reference-only');
     expect(content).not.toContain('@import');
+  });
+
+  test('compiles exported external Less references without emitting provider selectors', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: {
+        './theme.less': {
+          less: './src/theme.less',
+          default: './src/theme.less',
+        },
+      },
+    });
+    project.writeFile(
+      'node_modules/tokens/src/theme.less',
+      '@import "./palette.less";\n.entry-color() { color: @brand; }\n.provider { color: red; }',
+    );
+    project.writeFile('node_modules/tokens/src/palette.less', '@brand: teal;');
+    const entry = project.writeFile(
+      'entry.less',
+      '@import (reference) "tokens/theme.less";\n.entry { .entry-color(); }',
+    );
+
+    const content = await processor.readStyleFile(entry, undefined, {
+      preserveLessImportGraph: true,
+      shouldExpandImport: () => false,
+    });
+
+    expect(content).toContain('color: teal');
+    expect(content).not.toContain('.provider');
+    expect(content).not.toContain('@import');
+
+    processor.clearLessCache();
+    const flattened = await processor.readStyleFile(entry);
+    expect(flattened).toContain('color: teal');
+    expect(flattened).not.toContain('.provider');
+
+    const invalid = project.writeFile(
+      'invalid.less',
+      '@import "tokens/theme.less";\n.invalid {}',
+    );
+    await expect(processor.readStyleFile(invalid)).rejects.toThrow(
+      'external Less imports must use (reference)',
+    );
+  });
+
+  test('uses the consumer package root even when a nested package.json exists', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('src/vendor/package.json', {
+      name: 'vendor',
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: { './theme.less': './theme.less' },
+    });
+    project.writeFile(
+      'node_modules/tokens/theme.less',
+      '.app-color() { color: teal; }',
+    );
+    const entry = project.writeFile(
+      'src/vendor/entry.less',
+      '@import (reference) "tokens/theme.less";\n.app { .app-color(); }',
+    );
+
+    await expect(processor.readStyleFile(entry)).resolves.toContain(
+      'color: teal',
+    );
+  });
+
+  test('rejects tsconfig path aliases for external Less references', async () => {
+    project.writeJson('package.json', { name: 'consumer' });
+    project.writeJson('tsconfig.json', {
+      compilerOptions: {
+        baseUrl: '.',
+        paths: {
+          '@/*': ['./src/*'],
+        },
+      },
+    });
+    project.writeFile('src/tokens/theme.less', '@brand: teal;');
+    const entry = project.writeFile(
+      'src/entry.less',
+      '@import (reference) "@/tokens/theme.less";\n.app { color: @brand; }',
+    );
+
+    await expect(processor.readStyleFile(entry)).rejects.toThrow(
+      'do not support tsconfig paths',
+    );
+  });
+
+  test('rejects package.json#imports for Less references with a clear error', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      imports: {
+        '#tokens/*.less': './tokens/*.less',
+      },
+    });
+    project.writeFile('tokens/theme.less', '@brand: teal;');
+    const entry = project.writeFile(
+      'entry.less',
+      '@import (reference) "#tokens/theme.less";\n.app { color: @brand; }',
+    );
+
+    await expect(processor.readStyleFile(entry)).rejects.toThrow(
+      '[css] external Less imports do not support package.json#imports:',
+    );
+  });
+
+  test('still allows Less files to import CSS through package.json#imports', async () => {
+    project.writeFile('base.css', '.base { color: blue; }');
+    const entry = project.writeFile(
+      'entry.less',
+      '@import "#local/base.css";\n.entry { color: red; }',
+    );
+
+    const content = await processor.readStyleFile(entry);
+    expect(content).toContain('.base');
+    expect(content).toContain('.entry');
+  });
+
+  test('exposes absent probe files for optional missing external Less packages', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      optionalDependencies: { tokens: '1.0.0' },
+    });
+    const entry = project.writeFile(
+      'src/entry.less',
+      [
+        '@brand: teal;',
+        '@import (optional, reference) "tokens/theme.less";',
+        '.app { color: @brand; }',
+      ].join('\n'),
+    );
+
+    expect(await processor.hasExternalLessPackageImports(entry)).toBe(true);
+    expect(await processor.collectLessDependencyPackages(entry)).toContain(
+      'tokens',
+    );
+    expect(await processor.collectLessAbsentDependencyFiles(entry)).toContain(
+      project.resolve('node_modules/tokens/package.json'),
+    );
+    await expect(processor.readStyleFile(entry)).resolves.toContain(
+      'color: teal',
+    );
+  });
+
+  test('enforces optional, extensionless, and provider boundaries for external Less', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+      optionalDependencies: { missing: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: { '.': './theme.less' },
+    });
+    project.writeFile(
+      'node_modules/tokens/theme.less',
+      '@import (reference) "../../outside.less";',
+    );
+    project.writeFile('outside.less', '@brand: red;');
+    const optional = project.writeFile(
+      'optional.less',
+      '@import (optional, reference) "missing/theme.less";\n.optional { color: teal; }',
+    );
+    const extensionless = project.writeFile(
+      'extensionless.less',
+      '@import "tokens";\n.extensionless {}',
+    );
+    const escaping = project.writeFile(
+      'escaping.less',
+      '@import (reference) "tokens";\n.escaping {}',
+    );
+
+    await expect(processor.readStyleFile(optional)).resolves.toContain(
+      'color: teal',
+    );
+    await expect(processor.readStyleFile(extensionless)).rejects.toThrow(
+      'external Less imports must use (reference)',
+    );
+    await expect(processor.readStyleFile(escaping)).rejects.toThrow(
+      'must stay inside the provider package',
+    );
   });
 
   test('inlines Less imports when preserveLessImportGraph is disabled', async () => {

@@ -129,10 +129,11 @@ export class AukletStyleHmr {
     moduleFile: string,
     sourceRoot?: string,
     environment = 'client',
+    packageRoot?: string,
   ) {
     return this.cssModuleCompileCaches
       .forEnvironment(environment)
-      .compile(moduleFile, { sourceRoot });
+      .compile(moduleFile, { packageRoot, sourceRoot });
   }
 
   hasTrackedCssModuleDependency(file: string, moduleGraph?: ModuleGraphLookup) {
@@ -190,6 +191,12 @@ export class AukletStyleHmr {
       compileCache: this.cssModuleCompileCaches.forEnvironment(environment),
       resolveSourceRoot: (moduleFile) =>
         this.graph().resolveSourceRootForFile(moduleFile),
+      resolvePackageRoot: (moduleFile) => {
+        const graph = this.graph();
+        return typeof graph.resolvePackageRootForFile === 'function'
+          ? graph.resolvePackageRootForFile(moduleFile)
+          : null;
+      },
     });
     const packagePlan = planPackageStyleHotUpdate({
       graph: this.graph(),

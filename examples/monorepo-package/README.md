@@ -5,7 +5,10 @@ A component-oriented monorepo for module CSS output.
 Packages:
 
 - `@demo/theme`: shared theme CSS package.
-- `@demo/ui`: component package with `Button`, `Card`, package themes, and external style dependencies on `@demo/theme`.
+- `@demo/ui`: component package with `Button`, `Card`, package themes, and
+  external style dependencies on `@demo/theme`. Plain `Button/index.less` and
+  `Tag.module.less` both consume `@demo/theme/tokens.less` via
+  `@import (reference)`.
 - `@demo/reexports`: component package demonstrating CSS auto import from `.tsx` named re-export syntax. Its `.ts` re-export file is intentionally ignored by CSS auto import.
 
 ```bash

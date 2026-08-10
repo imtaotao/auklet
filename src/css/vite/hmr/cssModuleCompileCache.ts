@@ -9,9 +9,11 @@ import { normalizeFileKey } from '#auklet/utils';
 type CssModuleCompileCacheEntry = {
   result: CssModuleResult;
   watchSnapshot: Map<string, number>;
+  absentDependencyFiles: Array<string>;
 };
 
 export type CssModuleDevCompileOptions = {
+  packageRoot?: string;
   sourceRoot?: string;
   force?: boolean;
   read?: () => string | Promise<string>;
@@ -117,13 +119,19 @@ export class CssModuleDevCompileCache {
     const readResult = options.read ? await options.read() : undefined;
     const result = await compileCssModule({
       file: key,
+      packageRoot: options.packageRoot,
       sourceRoot: options.sourceRoot,
       code: readResult,
     });
     if (this.getGeneration(key) === generation) {
       this.entries.set(key, {
         result,
-        watchSnapshot: this.snapshotWatchFiles(result.watchFiles),
+        watchSnapshot: this.snapshotWatchFiles(
+          result.dependencyFiles ?? result.watchFiles,
+        ),
+        absentDependencyFiles: (result.absentDependencyFiles ?? []).map(
+          (file) => path.resolve(file),
+        ),
       });
       return result;
     }
@@ -146,7 +154,9 @@ export class CssModuleDevCompileCache {
     }
 
     return this.compile(key, {
+      packageRoot: options.packageRoot,
       sourceRoot: options.sourceRoot,
+      read: options.read,
     });
   }
 
@@ -165,6 +175,10 @@ export class CssModuleDevCompileCache {
   }
 
   private isStale(entry: CssModuleCompileCacheEntry) {
+    // Best-effort only: supported contract is restart after dependency install.
+    for (const file of entry.absentDependencyFiles) {
+      if (fs.existsSync(file)) return true;
+    }
     for (const [file, mtime] of entry.watchSnapshot) {
       if (!fs.existsSync(file)) return true;
       if (fs.statSync(file).mtimeMs !== mtime) return true;

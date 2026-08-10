@@ -10,7 +10,7 @@ import type {
   TrackedVirtualStyleFileKind,
 } from '#auklet/css/vite/hmr/shared';
 import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
-import { normalizeFileKey } from '#auklet/utils';
+import { isPackageJsonFile, normalizeFileKey } from '#auklet/utils';
 import { createAukletLogger } from '#auklet/logger';
 
 const RESOLVED_VIRTUAL_ID_PREFIX = '\0auklet-css:';
@@ -150,6 +150,27 @@ const invalidateTrackedVirtualPackages = (
   }
 };
 
+const invalidatePackageStyleCaches = (
+  graph: ModuleStyleGraph,
+  file: string,
+  options: {
+    fallback: 'file' | 'load-results';
+    isSourceGraphFile: boolean;
+  },
+) => {
+  if (typeof graph.invalidateDependencyFile === 'function') {
+    graph.invalidateDependencyFile(file);
+    return true;
+  }
+  if (!options.isSourceGraphFile) return false;
+  if (options.fallback === 'file') {
+    graph.invalidateFile(file);
+  } else {
+    graph.invalidateFileLoadResults(file);
+  }
+  return true;
+};
+
 const sameStyleLoadResult = (
   left: Awaited<ReturnType<ModuleStyleGraph['createPackageStyleCode']>>,
   right: Awaited<ReturnType<ModuleStyleGraph['createPackageStyleCode']>>,
@@ -206,11 +227,20 @@ export function planPackageStyleHotUpdate(options: {
   moduleGraph: ModuleGraphLookup;
 }) {
   const { graph, tracker, file, moduleGraph } = options;
-  if (!graph.isStyleFile(file)) {
+  const isStyleFile = graph.isStyleFile(file);
+  const isWorkspaceManifest =
+    !isStyleFile &&
+    typeof graph.isPackageManifestFile === 'function' &&
+    graph.isPackageManifestFile(file);
+  const isPackageManifest =
+    isWorkspaceManifest || (!isStyleFile && isPackageJsonFile(file));
+
+  if (!isStyleFile && !isPackageManifest) {
     return null;
   }
 
-  const isSourceGraphFile = graph.isSourceGraphFile(file);
+  const isSourceGraphFile =
+    graph.isSourceGraphFile(file) || isWorkspaceManifest;
   const trackedEntries = getTrackedStyleFileEntries(
     graph,
     tracker,
@@ -218,9 +248,10 @@ export function planPackageStyleHotUpdate(options: {
     moduleGraph,
   );
   if (!trackedEntries.length) {
-    if (isSourceGraphFile) {
-      graph.invalidateFile(file);
-    }
+    invalidatePackageStyleCaches(graph, file, {
+      fallback: 'file',
+      isSourceGraphFile,
+    });
     return null;
   }
 
@@ -250,9 +281,13 @@ export async function collectPackageStyleHotUpdateModules(options: {
 }) {
   const { plan } = options;
 
-  if (plan.isSourceGraphFile) {
-    options.graph.invalidateFileLoadResults(options.file);
-  } else {
+  if (
+    !invalidatePackageStyleCaches(options.graph, options.file, {
+      fallback: 'load-results',
+      isSourceGraphFile: plan.isSourceGraphFile,
+    }) &&
+    plan.dependencyEntries.length
+  ) {
     invalidateTrackedVirtualPackages(options.graph, plan.dependencyEntries);
   }
 
