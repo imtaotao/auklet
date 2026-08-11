@@ -30,6 +30,11 @@
     "./shared/chip.module.less": {
       "import": "./dist/es/shared/chip.module.less.js",
       "default": "./dist/es/shared/chip.module.less.js"
+    },
+    "./shared/helpers.css": "./dist/es/shared/helpers.css",
+    "./shared/tokens.less": {
+      "less": "./dist/es/shared/tokens.less",
+      "default": "./dist/es/shared/tokens.less"
     }
   },
   "devDependencies": {

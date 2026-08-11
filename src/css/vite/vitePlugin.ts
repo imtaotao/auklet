@@ -14,7 +14,10 @@ import {
   findPackageRootForFile,
   isExternalPackageSpecifier,
 } from '#auklet/css/core/resolvers/externalLess';
-import { isCssModuleSpecifier } from '#auklet/css/core/resolvers/externalPackageStyle';
+import {
+  isCssModuleSpecifier,
+  isPlainStyleSpecifier,
+} from '#auklet/css/core/resolvers/externalPackageStyle';
 import { createCssModuleLocalsViteLoadCode } from '#auklet/css/modules/compileCssModule';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
 import {
@@ -24,6 +27,7 @@ import {
 import {
   invalidateWorkspaceSharedOutputResolveCache,
   resolveWorkspaceSharedOutputModule,
+  resolveWorkspaceSharedOutputPlainStyle,
 } from '#auklet/css/modules/resolveWorkspaceSharedOutputModule';
 import { createCssModuleDevStyleSource } from '#auklet/css/vite/cssModuleStyleSource';
 import {
@@ -215,23 +219,34 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
             findPackageRootForFile(importer))
           : null;
 
-        // Workspace shared.output: resolve exports→shim to producer source so
-        // existing CSS Modules HMR applies. Installed packages keep the shim.
-        // Gate first — resolveId is hot; skip non package Modules imports.
-        if (
-          importerPackageRoot &&
-          isExternalPackageSpecifier(cleanId) &&
-          isCssModuleSpecifier(cleanId)
-        ) {
-          const sharedOutputSource = await resolveWorkspaceSharedOutputModule({
-            source: cleanId,
-            importerPackageRoot,
-          });
-          if (sharedOutputSource) {
-            return {
-              id: toCssModuleVirtualId(sharedOutputSource),
-              moduleSideEffects: true,
-            };
+        // Workspace shared.output: resolve exports→dist/shim to producer source.
+        // Installed packages keep published artifacts. Gate first — resolveId is hot.
+        if (importerPackageRoot && isExternalPackageSpecifier(cleanId)) {
+          if (isCssModuleSpecifier(cleanId)) {
+            const sharedOutputSource = await resolveWorkspaceSharedOutputModule(
+              {
+                source: cleanId,
+                importerPackageRoot,
+              },
+            );
+            if (sharedOutputSource) {
+              return {
+                id: toCssModuleVirtualId(sharedOutputSource),
+                moduleSideEffects: true,
+              };
+            }
+          } else if (isPlainStyleSpecifier(cleanId)) {
+            const sharedOutputPlain =
+              await resolveWorkspaceSharedOutputPlainStyle({
+                source: cleanId,
+                importerPackageRoot,
+              });
+            if (sharedOutputPlain) {
+              return {
+                id: toPackageStyleVirtualId(sharedOutputPlain),
+                moduleSideEffects: true,
+              };
+            }
           }
         }
 
@@ -345,6 +360,9 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
         return close();
       }) as ViteDevServer['close'];
 
+      // Warm before first Less (reference) compile — sync remap needs this cache.
+      await graph.warmSharedOutputRemapCaches();
+
       server.watcher.add(await graph.getWatchRoots());
 
       const isPackageGraphFile = (file: string) =>
@@ -431,6 +449,9 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
                 findPackageRootForFile(file) ??
                 undefined,
             );
+            // Full-graph warm is correct (deps may mirror the changed config).
+            // Optimization later: warm only the invalidated packageRoot (+ deps).
+            await graph.warmSharedOutputRemapCaches();
             reloadStyleGraph(file);
           } else if (graph.isSourceModuleFile(file)) {
             await hmr.handleSourceModuleChange(server, file);

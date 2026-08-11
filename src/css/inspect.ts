@@ -212,10 +212,17 @@ const createSharedOutputInspectRows = (
     const missingFiles = distChecks
       .filter((item) => item.entry === entry.exportSubpath && !item.exists)
       .map((item) => item.file);
+    const publishTarget =
+      entry.kind === 'module'
+        ? (entry.jsFiles[0] ?? entry.jsRelative ?? entry.assetRelative)
+        : (entry.assetFiles[0] ?? entry.assetRelative);
     return {
       source: entry.sourceRelative,
-      js: entry.jsFiles[0] ?? entry.jsRelative,
-      css: entry.cssFiles[0] ?? entry.cssRelative,
+      js: publishTarget,
+      css:
+        entry.kind === 'module'
+          ? (entry.assetFiles[0] ?? entry.assetRelative)
+          : publishTarget,
       exportOk: exportCheck?.ok ?? false,
       distOk: missingFiles.length === 0,
       exportReason: exportCheck?.reason,

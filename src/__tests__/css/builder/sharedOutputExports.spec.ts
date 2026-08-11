@@ -22,7 +22,7 @@ describe('checkSharedOutputExports', () => {
     project.cleanup();
   });
 
-  const createEntries = () => {
+  const createModuleEntries = () => {
     project.writeFile('src/shared/chip.module.less', '.chip { color: red; }\n');
     return createSharedOutputEntries({
       packageRoot: project.root,
@@ -34,7 +34,7 @@ describe('checkSharedOutputExports', () => {
   };
 
   test('passes when exportSubpath maps to the published JS shim', () => {
-    const entries = createEntries();
+    const entries = createModuleEntries();
     project.writePackageJson({
       name: '@scope/ui',
       exports: {
@@ -51,14 +51,55 @@ describe('checkSharedOutputExports', () => {
       {
         exportSubpath: './shared/chip.module.less',
         exportTarget: './dist/es/shared/chip.module.less.js',
-        expectedJsRelative: 'dist/es/shared/chip.module.less.js',
+        expectedTargetRelative: 'dist/es/shared/chip.module.less.js',
         ok: true,
       },
     ]);
   });
 
+  test('passes when plain css/less exports map to dist assets', () => {
+    project.writeFile('src/shared/helpers.css', '.helper {}\n');
+    project.writeFile('src/shared/tokens.less', '@brand-color: #111827;\n');
+    const entries = createSharedOutputEntries({
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+      outputDir: 'dist',
+      outputFormats: ['es', 'lib'],
+      patterns: ['./src/shared/**/*.{css,less}'],
+    });
+    project.writePackageJson({
+      name: '@scope/ui',
+      exports: {
+        './shared/helpers.css': './dist/es/shared/helpers.css',
+        './shared/tokens.less': {
+          less: './dist/es/shared/tokens.less',
+          default: './dist/es/shared/tokens.less',
+        },
+      },
+    });
+
+    expect(
+      checkSharedOutputExports({ packageRoot: project.root, entries }),
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          exportSubpath: './shared/helpers.css',
+          exportTarget: './dist/es/shared/helpers.css',
+          expectedTargetRelative: 'dist/es/shared/helpers.css',
+          ok: true,
+        },
+        {
+          exportSubpath: './shared/tokens.less',
+          exportTarget: './dist/es/shared/tokens.less',
+          expectedTargetRelative: 'dist/es/shared/tokens.less',
+          ok: true,
+        },
+      ]),
+    );
+  });
+
   test('fails when the subpath is missing from exports', () => {
-    const entries = createEntries();
+    const entries = createModuleEntries();
     project.writePackageJson({
       name: '@scope/ui',
       exports: {
@@ -72,7 +113,7 @@ describe('checkSharedOutputExports', () => {
       {
         exportSubpath: './shared/chip.module.less',
         exportTarget: null,
-        expectedJsRelative: 'dist/es/shared/chip.module.less.js',
+        expectedTargetRelative: 'dist/es/shared/chip.module.less.js',
         ok: false,
         reason: 'subpath is not exported',
       },
@@ -80,7 +121,7 @@ describe('checkSharedOutputExports', () => {
   });
 
   test('fails when export target points at source instead of the JS shim', () => {
-    const entries = createEntries();
+    const entries = createModuleEntries();
     project.writePackageJson({
       name: '@scope/ui',
       exports: {
@@ -94,7 +135,7 @@ describe('checkSharedOutputExports', () => {
       {
         exportSubpath: './shared/chip.module.less',
         exportTarget: './src/shared/chip.module.less',
-        expectedJsRelative: 'dist/es/shared/chip.module.less.js',
+        expectedTargetRelative: 'dist/es/shared/chip.module.less.js',
         ok: false,
         reason: 'export target should be ./dist/es/shared/chip.module.less.js',
       },
@@ -102,7 +143,7 @@ describe('checkSharedOutputExports', () => {
   });
 
   test('fails when export target is a bare jsRelative without dist/es|lib', () => {
-    const entries = createEntries();
+    const entries = createModuleEntries();
     project.writePackageJson({
       name: '@scope/ui',
       exports: {
@@ -116,7 +157,7 @@ describe('checkSharedOutputExports', () => {
       {
         exportSubpath: './shared/chip.module.less',
         exportTarget: './shared/chip.module.less.js',
-        expectedJsRelative: 'dist/es/shared/chip.module.less.js',
+        expectedTargetRelative: 'dist/es/shared/chip.module.less.js',
         ok: false,
         reason: 'export target should be ./dist/es/shared/chip.module.less.js',
       },
@@ -124,7 +165,7 @@ describe('checkSharedOutputExports', () => {
   });
 
   test('fails when package.json#exports is missing', () => {
-    const entries = createEntries();
+    const entries = createModuleEntries();
     project.writePackageJson({
       name: '@scope/ui',
     });
@@ -135,7 +176,7 @@ describe('checkSharedOutputExports', () => {
       {
         exportSubpath: './shared/chip.module.less',
         exportTarget: null,
-        expectedJsRelative: 'dist/es/shared/chip.module.less.js',
+        expectedTargetRelative: 'dist/es/shared/chip.module.less.js',
         ok: false,
         reason: 'package.json#exports is missing',
       },

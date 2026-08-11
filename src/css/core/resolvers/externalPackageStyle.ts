@@ -1,42 +1,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-import {
-  findPathInExports,
-  parseModuleId,
-  type Exports,
-} from 'conditional-export';
+import { findPathInExports, parseModuleId } from 'conditional-export';
 import {
   assertExternalLessSupportsSpecifier,
   ExternalLessResolutionError,
   findPackageRootForFile,
   readPackageName,
 } from '#auklet/css/core/resolvers/externalLess';
+import {
+  findDependencyPackageRoot,
+  isDirectDependency,
+  readPackageJson,
+  STYLE_PACKAGE_EXPORT_CONDITIONS,
+} from '#auklet/css/core/resolvers/packageDependency';
 import { matchesTsconfigPathsAlias } from '#auklet/css/core/resolvers/tsconfigPaths';
 import { isInsideRoot } from '#auklet/utils';
-
-const DEFAULT_STYLE_EXPORT_CONDITIONS = [
-  'less',
-  'source',
-  'style',
-  'import',
-  'default',
-];
-const DEPENDENCY_FIELDS = [
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'optionalDependencies',
-] as const;
-
-type PackageJson = {
-  name?: string;
-  exports?: Exports;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  peerDependencies?: Record<string, string>;
-  optionalDependencies?: Record<string, string>;
-};
 
 export type ExternalPackageStyleResolution = {
   file: string;
@@ -48,28 +26,6 @@ export type ExternalPackageStyleResolution = {
 export type ResolveExternalPackageStyleOptions = {
   extensions: Array<string>;
   conditions?: Array<string>;
-};
-
-const readPackageJson = (packageJsonFile: string) => {
-  try {
-    return JSON.parse(fs.readFileSync(packageJsonFile, 'utf8')) as PackageJson;
-  } catch {
-    return null;
-  }
-};
-
-const findDependencyPackageRoot = (
-  importerPackageRoot: string,
-  packageName: string,
-) => {
-  const require = createRequire(path.join(importerPackageRoot, 'package.json'));
-  for (const searchPath of require.resolve.paths(packageName) ?? []) {
-    const candidate = path.join(searchPath, packageName);
-    const packageJsonFile = path.join(candidate, 'package.json');
-    if (!fs.existsSync(packageJsonFile)) continue;
-    return fs.realpathSync.native(candidate);
-  }
-  return null;
 };
 
 const assertDirectDependency = (
@@ -84,10 +40,7 @@ const assertDirectDependency = (
       `[css] external package style imports cannot target the importing package itself: ${packageName}. Use a relative path instead.`,
     );
   }
-  const declared = DEPENDENCY_FIELDS.some((field) =>
-    Object.hasOwn(packageJson?.[field] ?? {}, packageName),
-  );
-  if (declared) return;
+  if (packageJson && isDirectDependency(packageName, packageJson)) return;
   throw new ExternalLessResolutionError(
     'not-direct-dependency',
     `[css] external package style must be a direct dependency: ${packageName} from ${packageJsonFile}`,
@@ -182,7 +135,7 @@ export function resolveExternalPackageStyleImport(
     );
   }
 
-  const conditions = options.conditions ?? DEFAULT_STYLE_EXPORT_CONDITIONS;
+  const conditions = options.conditions ?? STYLE_PACKAGE_EXPORT_CONDITIONS;
   const target = (() => {
     try {
       return findPathInExports(

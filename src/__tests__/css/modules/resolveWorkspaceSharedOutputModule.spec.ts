@@ -3,17 +3,26 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createServer as createViteServer } from 'vite';
 import { loadAukletConfig } from '#auklet/configLoader';
+import { resolveExternalLessImport } from '#auklet/css/core/resolvers/externalLess';
+import {
+  remapSharedOutputDistAssetToSource,
+  remapWorkspaceSharedOutputLessFile,
+} from '#auklet/css/core/style/sharedOutput';
 import { compileCssModule } from '#auklet/css/modules/compileCssModule';
 import { createGenerateScopedName } from '#auklet/css/modules/generateScopedName';
 import {
   invalidateWorkspaceSharedOutputResolveCache,
+  loadProducerSharedOutputCache,
   resolveWorkspaceSharedOutputModule,
+  resolveWorkspaceSharedOutputPlainStyle,
+  warmWorkspaceSharedOutputCaches,
 } from '#auklet/css/modules/resolveWorkspaceSharedOutputModule';
 import {
   toCssModuleStyleVirtualId,
   toCssModuleVirtualId,
 } from '#auklet/css/vite/hmr/cssModule';
 import { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
+import { normalizeFileKey } from '#auklet/utils';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -117,6 +126,276 @@ describe('resolveWorkspaceSharedOutputModule', () => {
       }),
     ).toBeNull();
     expect(uiRoot).toBeTruthy();
+  });
+
+  test('maps workspace exports→dist plain css/less to producer source', async () => {
+    const { appRoot } = linkWorkspaceUi();
+    const helpers = project.writeFile(
+      'packages/ui/src/shared/helpers.css',
+      '.helper { display: block; }\n',
+    );
+    const tokens = project.writeFile(
+      'packages/ui/src/shared/tokens.less',
+      '@brand: #111;\n',
+    );
+    project.writeJson('packages/ui/package.json', {
+      name: '@scope/ui',
+      version: '0.0.1',
+      type: 'module',
+      exports: {
+        './shared/helpers.css': './dist/es/shared/helpers.css',
+        './shared/tokens.less': {
+          less: './dist/es/shared/tokens.less',
+          default: './dist/es/shared/tokens.less',
+        },
+      },
+    });
+    project.writeFile(
+      'packages/ui/auklet.config.js',
+      `export const config = {
+        source: 'src',
+        styles: {
+          shared: {
+            output: ['./src/shared/helpers.css', './src/shared/tokens.less'],
+          },
+        },
+      };`,
+    );
+    project.writeJson('packages/app/package.json', {
+      name: '@scope/app',
+      type: 'module',
+      dependencies: { '@scope/ui': 'workspace:*' },
+    });
+
+    expect(
+      await resolveWorkspaceSharedOutputPlainStyle({
+        source: '@scope/ui/shared/helpers.css',
+        importerPackageRoot: appRoot,
+      }),
+    ).toBe(helpers);
+    expect(
+      await resolveWorkspaceSharedOutputPlainStyle({
+        source: '@scope/ui/shared/tokens.less',
+        importerPackageRoot: appRoot,
+      }),
+    ).toBe(tokens);
+  });
+
+  test('plain workspace resolve / Less remap follow config output (not hardcoded dist/)', async () => {
+    const { uiRoot, appRoot } = linkWorkspaceUi();
+    const helpers = project.writeFile(
+      'packages/ui/src/shared/helpers.css',
+      '.helper { display: block; }\n',
+    );
+    const tokens = project.writeFile(
+      'packages/ui/src/shared/tokens.less',
+      '@brand: #111;\n',
+    );
+    const publishedHelpers = project.writeFile(
+      'packages/ui/build/es/shared/helpers.css',
+      '.helper { display: block; }\n',
+    );
+    const publishedTokens = project.writeFile(
+      'packages/ui/build/es/shared/tokens.less',
+      '@brand: #111;\n',
+    );
+    project.writeJson('packages/ui/package.json', {
+      name: '@scope/ui',
+      version: '0.0.1',
+      type: 'module',
+      exports: {
+        './shared/helpers.css': './build/es/shared/helpers.css',
+        './shared/tokens.less': {
+          less: './build/es/shared/tokens.less',
+          default: './build/es/shared/tokens.less',
+        },
+      },
+    });
+    project.writeFile(
+      'packages/ui/auklet.config.js',
+      `export const config = {
+        source: 'src',
+        output: 'build',
+        styles: {
+          shared: {
+            output: ['./src/shared/helpers.css', './src/shared/tokens.less'],
+          },
+        },
+      };`,
+    );
+    project.writeJson('packages/app/package.json', {
+      name: '@scope/app',
+      type: 'module',
+      dependencies: { '@scope/ui': 'workspace:*' },
+    });
+
+    expect(
+      await resolveWorkspaceSharedOutputPlainStyle({
+        source: '@scope/ui/shared/helpers.css',
+        importerPackageRoot: appRoot,
+      }),
+    ).toBe(helpers);
+
+    await loadProducerSharedOutputCache(uiRoot);
+    expect(
+      remapSharedOutputDistAssetToSource({
+        packageRoot: uiRoot,
+        sourceRoot: path.join(uiRoot, 'src'),
+        outputDir: 'build',
+        outputFormats: ['es', 'lib'],
+        resolvedFile: publishedHelpers,
+        plainFileKeys: [helpers, tokens].map(normalizeFileKey),
+      }),
+    ).toBe(helpers);
+    expect(
+      remapWorkspaceSharedOutputLessFile({
+        packageRoot: uiRoot,
+        resolvedFile: publishedTokens,
+        sourceRelative: 'shared/tokens.less',
+      }),
+    ).toBe(tokens);
+    expect(
+      resolveExternalLessImport('@scope/ui/shared/tokens.less', appRoot).file,
+    ).toBe(tokens);
+  });
+
+  test('Less (reference) remaps after Vite warm without prior JS shared.output import', async () => {
+    const { uiRoot, appRoot } = linkWorkspaceUi();
+    const tokens = project.writeFile(
+      'packages/ui/src/shared/tokens.less',
+      '@brand: #111;\n',
+    );
+    const publishedTokens = project.writeFile(
+      'packages/ui/dist/es/shared/tokens.less',
+      '@brand: stale;\n',
+    );
+    project.writeJson('packages/ui/package.json', {
+      name: '@scope/ui',
+      version: '0.0.1',
+      type: 'module',
+      exports: {
+        './shared/tokens.less': {
+          less: './dist/es/shared/tokens.less',
+          default: './dist/es/shared/tokens.less',
+        },
+      },
+    });
+    project.writeFile(
+      'packages/ui/auklet.config.js',
+      `export const config = {
+        source: 'src',
+        styles: { shared: { output: './src/shared/tokens.less' } },
+      };`,
+    );
+    project.writeJson('packages/app/package.json', {
+      name: '@scope/app',
+      type: 'module',
+      dependencies: { '@scope/ui': 'workspace:*' },
+    });
+    project.writeFile(
+      'packages/app/auklet.config.js',
+      `export const config = { source: 'src' };`,
+    );
+
+    // Cold: sync Less remap must not guess src/ without a warm cache.
+    invalidateWorkspaceSharedOutputResolveCache();
+    expect(
+      resolveExternalLessImport('@scope/ui/shared/tokens.less', appRoot).file,
+    ).toBe(fs.realpathSync.native(publishedTokens));
+
+    // Vite configureServer warms graph packages + workspace deps — no JS import.
+    const plugin = aukletStylePlugin({ root: appRoot, mode: 'package' });
+    const server = await createViteServer({
+      configFile: false,
+      logLevel: 'silent',
+      root: appRoot,
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [plugin],
+    });
+    try {
+      expect(
+        resolveExternalLessImport('@scope/ui/shared/tokens.less', appRoot).file,
+      ).toBe(tokens);
+    } finally {
+      await server.close();
+    }
+
+    // Explicit warm API (same as graph.warmSharedOutputRemapCaches) for output:build.
+    invalidateWorkspaceSharedOutputResolveCache();
+    project.writeFile(
+      'packages/ui/auklet.config.js',
+      `export const config = {
+        source: 'src',
+        output: 'build',
+        styles: { shared: { output: './src/shared/tokens.less' } },
+      };`,
+    );
+    project.writeJson('packages/ui/package.json', {
+      name: '@scope/ui',
+      version: '0.0.1',
+      type: 'module',
+      exports: {
+        './shared/tokens.less': {
+          less: './build/es/shared/tokens.less',
+          default: './build/es/shared/tokens.less',
+        },
+      },
+    });
+    const publishedBuildTokens = project.writeFile(
+      'packages/ui/build/es/shared/tokens.less',
+      '@brand: stale-build;\n',
+    );
+    await warmWorkspaceSharedOutputCaches({ packageRoots: [uiRoot, appRoot] });
+    expect(
+      resolveExternalLessImport('@scope/ui/shared/tokens.less', appRoot).file,
+    ).toBe(tokens);
+    expect(publishedBuildTokens).toBeTruthy();
+  });
+
+  test('installed package Less (reference) stays on published dist', async () => {
+    const installedRoot = project.resolve('packages/installed-app');
+    const publishedTokens = project.writeFile(
+      'packages/installed-app/node_modules/@scope/ui/dist/es/shared/tokens.less',
+      '@brand: published;\n',
+    );
+    project.writeFile(
+      'packages/installed-app/node_modules/@scope/ui/src/shared/tokens.less',
+      '@brand: source;\n',
+    );
+    project.writeJson(
+      'packages/installed-app/node_modules/@scope/ui/package.json',
+      {
+        name: '@scope/ui',
+        exports: {
+          './shared/tokens.less': {
+            less: './dist/es/shared/tokens.less',
+            default: './dist/es/shared/tokens.less',
+          },
+        },
+      },
+    );
+    project.writeFile(
+      'packages/installed-app/node_modules/@scope/ui/auklet.config.js',
+      `export const config = {
+        source: 'src',
+        styles: { shared: { output: './src/shared/tokens.less' } },
+      };`,
+    );
+    project.writeJson('packages/installed-app/package.json', {
+      name: '@scope/installed-app',
+      dependencies: { '@scope/ui': '0.0.1' },
+    });
+
+    await warmWorkspaceSharedOutputCaches({
+      packageRoots: [
+        path.join(installedRoot, 'node_modules/@scope/ui'),
+        installedRoot,
+      ],
+    });
+    expect(
+      resolveExternalLessImport('@scope/ui/shared/tokens.less', installedRoot)
+        .file,
+    ).toBe(fs.realpathSync.native(publishedTokens));
   });
 
   test('caches producer config+glob until invalidate', async () => {

@@ -39,7 +39,9 @@ src/css/
     ├── workspaceStyleResolver.ts     # Resolves workspace/package/node_modules style deps
     ├── styleImports/                 # Infers style deps from TSX imports/re-exports
     ├── resolvers/
+    │   ├── packageDependency.ts      # Shared dep/package.json resolve helpers
     │   ├── externalLess.ts           # package.json#exports Less reference resolver
+    │   ├── externalPackageStyle.ts   # package style exports resolver
     │   └── ...                       # Same-package source import candidate resolvers
     ├── styleModuleEntryPlanner.ts    # Plans module-level style entries
     └── style/                        # Entry and dependency semantics
@@ -164,36 +166,59 @@ The supported input surface is intentionally narrow:
   modules for that pipeline are always CSS (`.less` → `.css`).
 - CSS Modules sources are `*.module.css` / `*.module.less` and follow the
   Modules protocol above; they are not global style entries.
-- `styles.prefix` wraps selectors on the current package's own style rules
-  (host must provide the matching container for `:root` / `html` / `body`).
+- `styles.prefix` wraps selectors for mount-point isolation (see table below).
+  Host must provide the matching container for `:root` / `html` / `body`.
 - Current package theme entries come from `styles.themes` (may point at `.less`).
 - Controlled same-package shared fragments come from `styles.shared` under the
   source root. Prefer `.css` shared when the `@import` edge must be preserved;
   Less→Less shared is inlined by Less. Patterns are resolved with `fast-glob`.
   - object form only: `{ inner?, output? }` (string / `string[]` is rejected).
-  - `inner`: same-package component-style `@import` allowlist.
-  - `output`: CSS Modules globs only (`*.module.css` / `*.module.less`).
-    Requires `modules: true`. `auk build` / `auk build-css` compile each match
-    into `dist/es|lib/<relative>` via `compileCssModule` (same scoped-class hash
-    as the JS CSS Modules plugin), emit sibling style assets, and write a locals
-    JS shim (`*.module.css.js` / `*.module.less.js`) that side-effect imports
-    already-scoped CSS as `*.scoped.css` (not `*.module.css`, so Vite/webpack do
-    not re-run CSS Modules on the published file). Cross-package sibling plain
-    CSS assets land under `shared-package/<pkg>/...` (same layout as the JS CSS
-    Modules plugin) with rewritten `@import` paths. Cross-package `.less` in
-    Modules must use `@import (reference)`. Directory prefixes of
-    `output` globs stay out of package/module global `styleFiles` (CSS Modules
-    matches are already excluded). Plain sibling helpers under those prefixes
-    remain on the same-package `@import` allowlist. Use `inner` if a file in
-    that tree must also appear as a global shared fragment entry. Globs whose
-    exclude root is the source root (e.g. `./src/**/*.module.css`) are rejected.
+  - `inner`: same-package component-style `@import` allowlist for **plain**
+    `.css` / `.less` only (not `*.module.*`). Prefix: see table below.
+  - `output`: publishable shared styles — CSS Modules and/or plain `.css` /
+    `.less`. Prefix: see table below (none of these kinds apply it).
+    - Modules (`*.module.css` / `*.module.less`): require `modules: true`.
+      Compile via `compileCssModule` into `{output}/es|lib` as `*.scoped.css` +
+      JS locals shim. Cross-package sibling plain CSS assets land under
+      `shared-package/<pkg>/...`. Cross-package `.less` in Modules must use
+      `@import (reference)`.
+    - Plain `.css` / `.less`: copy as-is to `{output}/es|lib/<sourceRelative>`
+      (**Less is not compiled**, so tokens stay usable for
+      `@import (reference)`). `modules: true` is not required when output has
+      only plain files.
+    - Directory prefixes of `output` globs stay out of package/module global
+      `styleFiles`. Use `inner` if a plain file in that tree must also appear as
+      a global shared fragment. Globs whose exclude root is the source root are
+      rejected.
+
+### `styles.prefix` rules
+
+`styles.prefix` applies only to **this package's own** global-style rules. It
+does not rewrite other packages' published CSS, and it does not run on CSS
+Modules or any `styles.shared.output` kind.
+
+| Style surface                                          | Applies this package's `styles.prefix`?                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| Own global source styles (component / package entries) | Yes                                                                                   |
+| `styles.themes`                                        | Yes                                                                                   |
+| `styles.shared.inner` (plain `.css` / `.less`)         | Yes                                                                                   |
+| `styles.shared.output` — CSS Modules                   | No                                                                                    |
+| `styles.shared.output` — plain `.css` / `.less`        | No                                                                                    |
+| CSS Modules (`*.module.*`) anywhere                    | No                                                                                    |
+| `styles.dependencies` / other-package built CSS        | No                                                                                    |
+| External Less `@import (reference)` tokens / mixins    | No — tokens are not selectors; rules you write in **own** files follow the rows above |
+
+Producer vs consumer: a package that publishes via `shared.output` ships
+unprefixed assets. A consumer's `styles.prefix` still applies only to that
+consumer's own rows in the table — it does **not** re-prefix the imported
+dependency CSS.
+
 - External package style entries come from `styles.dependencies` and always
   reference the dependency's built CSS (not its Less sources).
 - `auk inspect css` plans CSS entries and **validates** `styles.shared.output`:
-  lists each entry, checks `package.json#exports` maps the `./<sourceRelative>`
-  subpath to a published JS shim under `dist/es` or `dist/lib` only (bare
-  `shared/foo.module.*.js` is not accepted), checks dist JS/CSS exist, and exits
-  `1` when export or dist checks fail.
+  Modules exports must target a JS shim under `{output}/es|lib`; plain css/less
+  exports must target the mirrored asset under `{output}/es|lib`. Dist presence
+  is checked; exit `1` when export or dist checks fail.
 - Module auto imports are inferred from `.tsx` named imports/re-exports only.
 - Same-package source specifiers may use relative paths, `package.json#imports`,
   or `tsconfig` paths, and must stay inside the current package source root.
@@ -243,7 +268,8 @@ Vite/dev: virtual CSS never emits `/@fs/**/*.less` (including module entry
 lists). `.less` is compiled in the processor; dev watch covers `.less` and Less
 partials. When `styles.prefix` is set, own-package CSS entries and preserved
 same-package imports also go through `StyleProcessor` (not raw `/@fs`) so selector
-prefixing matches production copies. Dependency CSS is never prefixed.
+prefixing matches production copies. Dependency CSS is never prefixed (see
+[`styles.prefix` rules](#stylesprefix-rules)).
 
 Graph shape caveat with `styles.prefix`: production still preserves `@import`
 edges to already-prefixed copies (`SourceStyleFileWriter` does not expand).
@@ -313,25 +339,24 @@ style entry pipeline.
   when the importer is `.less`; every `.css` node rejects optioned imports.
   Alias imports (`#imports`, tsconfig paths) are not supported in module partials.
 
-### Cross-package published CSS Modules (`styles.shared.output`)
+### Cross-package published shared styles (`styles.shared.output`)
 
-`styles.shared.output` uses the CSS Modules protocol (`compileCssModule`). It
-does **not** apply `styles.prefix`. By contrast, `styles.shared.inner` stays on
-the global style path and **does** receive `styles.prefix` with other own-package
-CSS/Less.
+`styles.shared.output` publishes selected source-root styles into
+`{output}/es|lib` (default `output` is `dist`; no `styles.prefix`; see
+[`styles.prefix` rules](#stylesprefix-rules)). By contrast,
+`styles.shared.inner` is plain css/less only on the global style path and
+**does** receive `styles.prefix`.
 
-Producer packages **compile** (not mirror-copy) CSS Modules into publishable
-artifacts:
+| Kind                             | Emit                                          | Export target                    | `modules: true` |
+| -------------------------------- | --------------------------------------------- | -------------------------------- | --------------- |
+| `*.module.css` / `*.module.less` | `compileCssModule` → `*.scoped.css` + JS shim | JS shim under `{output}/es\|lib` | Required        |
+| plain `.css`                     | copy as-is                                    | `{output}/es\|lib/<rel>.css`     | Not required    |
+| plain `.less`                    | copy as-is (**not** compiled)                 | `{output}/es\|lib/<rel>.less`    | Not required    |
 
-1. Configure `styles.shared.output` (e.g.
-   `'./src/shared/**/*.module.{less,css}'`) with `modules: true`.
-2. Run `auk build` or `auk build-css` to emit under `dist/es` and `dist/lib`:
-   - `<rel>.scoped.css` — already-hashed CSS + preserved sibling `@import`s
-   - sibling plain CSS (and local Less→CSS) assets from the module graph
-     (cross-package plain CSS under `shared-package/<pkg>/...`)
-   - `<rel>.module.css.js` / `<rel>.module.less.js` locals shim (`dist/es` ESM,
-     `dist/lib` CJS — same split as in-package CSS Modules)
-3. Point `package.json#exports` at the **JS shim** (not the source `.module.*`):
+Configure `styles.shared.output` (e.g.
+`'./src/shared/**/*.{module.css,module.less,css,less}'`), run `auk build` /
+`auk build-css`, and point `package.json#exports` at the published targets
+(paths must use the package's configured `output`, e.g. `dist` or `build`):
 
 ```json
 {
@@ -339,14 +364,31 @@ artifacts:
     "./shared/chip.module.less": {
       "import": "./dist/es/shared/chip.module.less.js",
       "default": "./dist/es/shared/chip.module.less.js"
+    },
+    "./shared/helpers.css": "./dist/es/shared/helpers.css",
+    "./shared/tokens.less": {
+      "less": "./dist/es/shared/tokens.less",
+      "default": "./dist/es/shared/tokens.less"
     }
   }
 }
 ```
 
-Consumers `import styles from 'pkg/shared/chip.module.less'`. When exports point
-at the shim, resolve releases it as plain JS (`external` / fall-through); class
-hashes match the producer build.
+Consumers: Modules via `import styles from 'pkg/shared/chip.module.less'`;
+plain CSS via package style import; plain Less **tokens / mixins** via
+`@import (reference) "pkg/shared/tokens.less"` (JS `import` of `.less` still
+compiles — see table below). In a pnpm workspace, Vite pre-warms producer
+`styles.shared.output` caches so Modules / plain CSS / Less `(reference)` all
+remap exports→`{output}/es|lib` to producer **source** for HMR (no need to JS
+import another shared file first); installed / prod keep published artifacts.
+
+That in-memory cache stores a **snapshot of the producer's `shared.output` glob
+result** (plus `source` / `output` / formats), filled at Vite start and refreshed
+when the producer's `auklet.config.*` changes. **Editing, adding, or removing
+matched style files without touching config does not rebuild the list** — already
+cached paths still remap and HMR; newly added files may not remap until config
+reload / server restart. That staleness is an accepted trade-off (sync Less
+remap cannot re-glob on every import).
 
 #### Producer JS import + `shared.output` (same file)
 
@@ -366,7 +408,7 @@ published CSS paths.
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `import x from 'pkg/.../*.module.css\|less'`             | Prefer exports → published JS shim. Source `.module.*` exports still compile with the same hash formula, but skip the shim publish contract. |
 | `import 'pkg/.../*.css'` / `import 'pkg/.../*.less'`     | Resolve exports; Less compiles to CSS; side-effect / asset via `packageStyleImportPlugin` / Vite.                                            |
-| Less `@import (reference) "pkg/..."`                     | Existing external Less reference protocol.                                                                                                   |
+| Less `@import (reference) "pkg/..."`                     | Token / mixin sources: keep `(reference)` so the published `.less` is not compiled away.                                                     |
 | Global component CSS `@import "pkg/..."` (non-reference) | Rejected; use `styles.dependencies` for built CSS.                                                                                           |
 
 #### Secondary CSS Modules risk
@@ -387,19 +429,19 @@ Scoped names come from `generateScopedName` over
 **`packageName + source-relative path + local class`** (not the absolute path),
 so producer builds, consumer workspace HMR, and published shims share one hash.
 
-| Surface                                                    | Class hash                                      | Dev / HMR                                                                                                                                                                                                                                                                                                                |
-| ---------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Published JS shim (`dist/es` / `dist/lib` `*.module.*.js`) | Producer hash; locals align with `*.scoped.css` | **Installed / non-workspace:** load shim; rebuild producer after shared source changes. **pnpm workspace:** Vite resolves exports→`shared.output` to producer **source** and uses existing Modules HMR. Producer `auklet.config.js` / `.mjs` changes invalidate the in-memory resolve cache (style source HMR does not). |
-| Source `.module.*` export (not shim)                       | Same hash formula when compiled                 | Prefer exporting the JS shim; exporting source skips the publish contract.                                                                                                                                                                                                                                               |
+| Surface                                                            | Class hash                                      | Dev / HMR                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Published JS shim (`{output}/es` / `{output}/lib` `*.module.*.js`) | Producer hash; locals align with `*.scoped.css` | **Installed / non-workspace:** load shim; rebuild producer after shared source changes. **pnpm workspace:** Vite resolves exports→`shared.output` to producer **source** and uses existing Modules HMR. Producer `auklet.config.js` / `.mjs` changes invalidate the in-memory resolve cache (style source HMR does not). |
+| Source `.module.*` export (not shim)                               | Same hash formula when compiled                 | Prefer exporting the JS shim; exporting source skips the publish contract.                                                                                                                                                                                                                                               |
 
 #### `auk inspect css` and exports
 
 `auk inspect css` lists each `shared.output` entry and verifies:
 
 - `package.json#exports` exposes `./<sourceRelative>` (e.g.
-  `./shared/chip.module.less`) to an accepted JS shim under `dist/es` or
-  `dist/lib` (not a bare `*.module.*.js` path);
-- expected dist JS and `*.scoped.css` files exist.
+  `./shared/chip.module.less`) to an accepted JS shim under `{output}/es` or
+  `{output}/lib` (not a bare `*.module.*.js` path);
+- expected published JS and `*.scoped.css` files exist.
 
 Exit code is `1` when any export or dist check fails (avoids “export exists,
 dist missing” or “export points at the wrong file”). It does not auto-write

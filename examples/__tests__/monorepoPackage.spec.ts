@@ -200,6 +200,8 @@ describe('monorepo package example', () => {
     expect(esCss).toContain('@import');
     expect(esCss).toMatch(/helpers\.css/);
     expect(helpers).toContain('.helper-reset');
+    expect(readDist(ui, 'es/shared/tokens.less')).toContain('@chip-accent');
+    expect(readDist(ui, 'lib/shared/tokens.less')).toContain('@chip-accent');
     expect(esJs).toBe(
       `import "./chip.scoped.css";\nexport default ${JSON.stringify({
         chip: expectedClass,
@@ -247,6 +249,7 @@ describe('monorepo package example', () => {
       'es/shared/chip.module.less.js',
       'es/shared/chip.scoped.css',
       'es/shared/helpers.css',
+      'es/shared/tokens.less',
       'es/style/external.css',
       'es/style/index.css',
       'es/style/module.css',
@@ -284,6 +287,7 @@ describe('monorepo package example', () => {
       'lib/shared/chip.module.less.js',
       'lib/shared/chip.scoped.css',
       'lib/shared/helpers.css',
+      'lib/shared/tokens.less',
       'lib/style/external.css',
       'lib/style/index.css',
       'lib/style/module.css',

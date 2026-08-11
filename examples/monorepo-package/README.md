@@ -8,8 +8,9 @@ Packages:
 - `@demo/ui`: component package with `Button`, `Card`, package themes, and
   external style dependencies on `@demo/theme`. Plain `Button/index.less` and
   `Tag.module.less` both consume `@demo/theme/tokens.less` via
-  `@import (reference)`. Also publishes `styles.shared.output` chip Modules
-  (`@demo/ui/shared/chip.module.less` → JS shim + `*.scoped.css`).
+  `@import (reference)`. Also publishes `styles.shared.output`: chip Modules
+  (`…/chip.module.less` → shim + `*.scoped.css`), plain `helpers.css`, and
+  `tokens.less` (copied as-is for reference).
 - `@demo/dashboard`: consumes `@demo/ui` styles and the shared chip Modules
   export (library package, not a Vite app).
 - `@demo/reexports`: component package demonstrating CSS auto import from `.tsx` named re-export syntax. Its `.ts` re-export file is intentionally ignored by CSS auto import.

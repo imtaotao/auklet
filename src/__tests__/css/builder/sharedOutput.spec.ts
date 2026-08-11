@@ -70,7 +70,7 @@ describe('styles.shared.output', () => {
     expect(project.exists('dist/shared/chip.module.less')).toBe(false);
   });
 
-  test('requires modules: true', async () => {
+  test('requires modules: true when output includes CSS Modules', async () => {
     project.writeFile('src/shared/chip.module.css', '.chip { color: red; }\n');
 
     await expect(
@@ -87,7 +87,41 @@ describe('styles.shared.output', () => {
           },
         },
       }).build(),
-    ).rejects.toThrow('styles.shared.output requires modules: true');
+    ).rejects.toThrow(
+      'styles.shared.output CSS Modules entries require modules: true',
+    );
+  });
+
+  test('copies plain css/less to dist without compiling Less', async () => {
+    const lessSource =
+      '@brand-color: #111827;\n.token { color: @brand-color; }\n';
+    project.writeFile(
+      'src/shared/helpers.css',
+      '.helper { display: block; }\n',
+    );
+    project.writeFile('src/shared/tokens.less', lessSource);
+
+    await new ModuleStyleBuilder({
+      packageRoot: project.root,
+      aukletConfig: {
+        source: 'src',
+        output: 'dist',
+        modules: false,
+        styles: {
+          shared: {
+            output: ['./src/shared/helpers.css', './src/shared/tokens.less'],
+          },
+        },
+      },
+    }).build();
+
+    expect(project.readFile('dist/es/shared/helpers.css')).toContain('.helper');
+    expect(project.readFile('dist/lib/shared/helpers.css')).toContain(
+      '.helper',
+    );
+    expect(project.readFile('dist/es/shared/tokens.less')).toBe(lessSource);
+    expect(project.readFile('dist/lib/shared/tokens.less')).toBe(lessSource);
+    expect(project.exists('dist/es/shared/tokens.css')).toBe(false);
   });
 
   test('keeps shared.output helpers out of global style/module.css', async () => {
@@ -175,8 +209,8 @@ describe('styles.shared.output', () => {
     expect(esCss).not.toContain('node_modules');
   });
 
-  test('rejects non-module matches', async () => {
-    project.writeFile('src/shared/helpers.css', '.helper {}\n');
+  test('rejects unsupported shared.output extensions', async () => {
+    project.writeFile('src/shared/readme.md', '# shared\n');
 
     await expect(
       new ModuleStyleBuilder({
@@ -184,14 +218,14 @@ describe('styles.shared.output', () => {
         aukletConfig: {
           source: 'src',
           output: 'dist',
-          modules: true,
+          modules: false,
           styles: {
             shared: {
-              output: './src/shared/**/*.{css,less}',
+              output: './src/shared/**/*',
             },
           },
         },
       }).build(),
-    ).rejects.toThrow('must match CSS Modules files only');
+    ).rejects.toThrow('must match CSS Modules');
   });
 });

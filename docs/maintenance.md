@@ -161,28 +161,51 @@ Check:
   `auklet.config.*` change (`invalidateWorkspaceSharedOutputResolveCache`).
   Vite `resolveId` gates with `isExternalPackageSpecifier` +
   `isCssModuleSpecifier` before calling resolve.
-- `shared.output` does not apply `styles.prefix` (Modules); `shared.inner` does
-  (global `StyleProcessor`). Document in `docs/css.md` / invariants / README.
+- `shared.output` supports Modules + plain css/less (Less copied as-is; no
+  prefix). `shared.inner` is plain css/less only (gets prefix). Document in
+  `docs/css.md` / invariants / README.
+- Plain `shared.output` workspace resolve:
+  `resolveWorkspaceSharedOutputPlainStyle` + Less
+  `remapWorkspaceSharedOutputLessFile`. Do **not** hardcode `dist/` — use
+  producer `normalizedConfig.output` + CSS `outputFormats` (`es`/`lib`);
+  resolve mirrors export subpath under `sourceRoot`.
+- Vite `configureServer` / config reload:
+  `ModuleStyleGraph.warmSharedOutputRemapCaches` →
+  `warmWorkspaceSharedOutputCaches` (graph packages + workspace-editable
+  deps) so Less `(reference)` sync remap does not rely on a prior JS
+  `shared.output` import. Cold cache → published path (no `src/` guess).
+  Config change currently re-warms the full graph (correct; can later narrow
+  to the invalidated `packageRoot` + its workspace deps).
+- One resolve cache only (`sharedOutputResolveCache` in `sharedOutput.ts`);
+  Modules / plain / Less remap share it. It caches a **glob snapshot**, not live
+  FS: invalidate/re-warm on `auklet.config.*` only. File add/remove under an
+  unchanged glob may leave the membership list stale until config reload /
+  restart (accepted; document in `docs/css.md`). `SharedOutputEntry` uses
+  `assetRelative`/`assetFiles` (no mirrored `cssRelative`/`cssFiles`).
+  Dep helpers + `STYLE_PACKAGE_EXPORT_CONDITIONS` live in
+  `resolvers/packageDependency.ts`.
 - `resolveSharedOutputExcludeRoots` rejects globs whose exclude root is the
   source root (too wide).
 - `src/css/inspect.ts` shared output listing and export/dist checks
   (`findPathInExports` must use `exportSubpath` with a `./` prefix; accepted
-  targets are `dist/es|lib/...` only, not bare `jsRelative`).
+  targets are `{output}/{format}/...` only, not bare `jsRelative`).
 - Prefer exporting the published JS shim (not source `.module.*`); shims load as
   JS and import `*.scoped.css`. Hash is stable either way, but source exports
   skip the publish contract.
 - Docs must stay aligned: compile (not mirror), secondary Modules + `*.scoped.css`,
-  inspect export validation, workspace source HMR vs installed shim rebuild.
+  inspect export validation, workspace source HMR vs installed shim rebuild,
+  `{output}/es|lib` (not a literal `dist/` only).
 - Examples that publish or consume shared Modules.
 
 Tests:
 
 - Config object-only and invalid values.
-- Producer compile into `dist/es|lib` with hash parity and `*.scoped.css`.
+- Producer compile into `{output}/es|lib` with hash parity and `*.scoped.css`.
 - JS import + `shared.output` dual path: scoped CSS only (`cssModulesTsdown`).
 - Hash formula + cwd stability (`generateScopedName.spec.ts`).
-- Workspace exports→source + Modules HMR
-  (`resolveWorkspaceSharedOutputModule.spec.ts`).
+- Workspace exports→source + Modules HMR; plain resolve / Less remap with
+  `output: 'build'`; Less `(reference)` after Vite warm without prior JS
+  import; installed stays on dist (`resolveWorkspaceSharedOutputModule.spec.ts`).
 - Resolve cache: same package loads config once; invalidate reloads
   (`resolveWorkspaceSharedOutputModule.spec.ts`).
 - Example monorepo: shim content / hash assertions for published chip.

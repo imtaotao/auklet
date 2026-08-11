@@ -180,24 +180,28 @@ export const config = defineConfig({
 ```
 
 Source styles may be `.css` or `.less` (compiled by auklet; outputs stay CSS).
-`styles.prefix` wraps selectors on this package's own rules for mount-point
-isolation; dependency CSS from `styles.dependencies` is never prefixed. The host
-must provide a matching container when prefixed rules target `:root`, `html`, or
-`body`. `styles.shared` is `{ inner?, output? }` only. `inner` declares
-same-package fragments component styles may import (fast-glob patterns); prefer
-`.css` shared when the `@import` edge must stay in the graph. Shared files cannot
-import component or theme styles. `output` selects CSS Modules that `auk build` /
-`build-css` **compile** into `dist/es|lib` as `*.scoped.css` + JS locals shims
-(same hashes as the JS CSS Modules plugin; no `styles.prefix`, unlike `inner`).
-Export the **JS shim** from
-`package.json#exports` (not the source file). `auk inspect css` verifies those
-exports and dist files (exit `1` on failure). Publishing as `*.module.css` would
-let consumers re-run CSS Modules and desync locals; exporting source `.module.*`
-can also drift hashes. Class hashes use package name + source-relative path so
-workspace consumers can HMR producer `shared.output` sources without rebuilding
-first; installed/published consumers still load the JS shim. Details:
-`docs/css.md`. Component-to-component style imports are rejected; built package
-style entries still use `styles.dependencies`.
+`styles.prefix` is mount-point isolation for **this package's own** global
+rules (host must provide a matching container for `:root` / `html` / `body`):
+
+| Style surface                                                      | Gets this package's `styles.prefix`? |
+| ------------------------------------------------------------------ | ------------------------------------ |
+| Own global source styles / `styles.themes` / `styles.shared.inner` | Yes                                  |
+| `styles.shared.output` (Modules + plain css/less)                  | No                                   |
+| CSS Modules (`*.module.*`)                                         | No                                   |
+| `styles.dependencies` / other-package built CSS                    | No                                   |
+
+Full table (incl. Less `reference`): `docs/css.md` → `styles.prefix` rules.
+`styles.shared` is `{ inner?, output? }` only. `inner` is same-package **plain**
+`.css` / `.less` (fast-glob). `output` publishes into `{output}/es|lib`
+(default `dist`): CSS Modules → `*.scoped.css` + JS shim (`modules: true` when
+Modules are included); plain `.css` / `.less` → copy as-is (Less **not**
+compiled — consume tokens with `@import (reference)`; a JS `import` of `.less`
+still compiles). Export Modules shims or plain published assets from
+`package.json#exports`. `auk inspect css` verifies those exports and files
+(exit `1` on failure). Workspace consumers can resolve `shared.output` exports
+back to producer source for HMR; installed packages load published artifacts.
+Details: `docs/css.md`. Component-to-component style imports are rejected; built
+package style entries still use `styles.dependencies`.
 
 CSS Modules (`*.module.css` / `*.module.less`) import from JS/TS and compile
 outside the global style entry graph. They skip `styles.prefix` and ship with
@@ -214,13 +218,13 @@ Details: `docs/css.md`.
 Several style options use `*` / `**`, but they are **not the same kind of
 pattern**. Treat them by what they match:
 
-| Config                             | Example                                 | Kind          | Engine / rules                                                                                               | Matches                                              |
-| ---------------------------------- | --------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| `styles.shared.inner`              | `'./src/internal/**/*.{css,less}'`      | File glob     | `fast-glob` under the package root; must stay under `source`; gets `styles.prefix`                           | Files on disk (same-package `@import` allowlist)     |
-| `styles.shared.output`             | `'./src/shared/**/*.module.{less,css}'` | File glob     | Same as `inner`; CSS Modules only; needs `modules: true`; no `styles.prefix`; emits `*.scoped.css` + JS shim | Files on disk (compile into `dist/es\|lib`)          |
-| `styles.dependencies.*.components` | `'/components/**.css'`                  | Path template | Lightweight `*` / `**` rewrite from JS/TSX imports                                                           | Specifiers such as `@scope/ui/components/Button.css` |
-| `styles.dependencies.*.entry`      | `'/style.css'`                          | Literal path  | No wildcards                                                                                                 | Fixed package style entry                            |
-| `styles.dependencies.*.themes`     | `{ light: '/themes/light.css' }`        | Literal path  | No wildcards                                                                                                 | Fixed theme entry per theme name                     |
+| Config                             | Example                                                 | Kind          | Engine / rules                                                                                             | Matches                                              |
+| ---------------------------------- | ------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `styles.shared.inner`              | `'./src/internal/**/*.{css,less}'`                      | File glob     | `fast-glob` under the package root; plain css/less only; gets `styles.prefix`                              | Files on disk (same-package `@import` allowlist)     |
+| `styles.shared.output`             | `'./src/shared/**/*.{module.css,module.less,css,less}'` | File glob     | Modules and/or plain css/less; no `styles.prefix`; Modules → shim+scoped; plain → copy (Less not compiled) | Files on disk under `{output}/es\|lib`               |
+| `styles.dependencies.*.components` | `'/components/**.css'`                                  | Path template | Lightweight `*` / `**` rewrite from JS/TSX imports                                                         | Specifiers such as `@scope/ui/components/Button.css` |
+| `styles.dependencies.*.entry`      | `'/style.css'`                                          | Literal path  | No wildcards                                                                                               | Fixed package style entry                            |
+| `styles.dependencies.*.themes`     | `{ light: '/themes/light.css' }`                        | Literal path  | No wildcards                                                                                               | Fixed theme entry per theme name                     |
 
 Notes:
 

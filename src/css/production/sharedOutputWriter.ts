@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
-import { createSharedOutputEntries } from '#auklet/css/core/style/sharedOutput';
+import {
+  createSharedOutputEntries,
+  sharedOutputRequiresModules,
+  type SharedOutputEntry,
+} from '#auklet/css/core/style/sharedOutput';
 import type { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import { compileCssModule } from '#auklet/css/modules/compileCssModule';
 import {
@@ -42,8 +46,8 @@ const writeTextFile = (file: string, source: string) => {
   fs.writeFileSync(file, source);
 };
 
-// Compiles styles.shared.output CSS Modules into dist/es|lib with the same
-// scoped-class hashing as the JS CSS Modules plugin.
+// Emits styles.shared.output: Modules → scoped.css + shim; plain css/less →
+// copy as-is under dist/es|lib (Less is not compiled).
 export class SharedStyleOutputWriter {
   private readonly config: ModuleStyleBuildConfig;
   private readonly context: ResolvedModuleStyleBuildContext;
@@ -59,14 +63,21 @@ export class SharedStyleOutputWriter {
     const patterns = this.packageContext.normalizedConfig.styles.shared.output;
     if (!patterns.length) return [];
 
-    if (!this.packageContext.normalizedConfig.modules) {
+    const sourceRoot = this.packageContext.sourceRoot;
+    const packageRoot = this.context.packageRoot;
+    if (
+      sharedOutputRequiresModules({
+        packageRoot,
+        sourceRoot,
+        patterns,
+      }) &&
+      !this.packageContext.normalizedConfig.modules
+    ) {
       throw new Error(
-        '[css] styles.shared.output requires modules: true so entries can be emitted under dist/es|lib.',
+        '[css] styles.shared.output CSS Modules entries require modules: true.',
       );
     }
 
-    const sourceRoot = this.packageContext.sourceRoot;
-    const packageRoot = this.context.packageRoot;
     const entries = createSharedOutputEntries({
       packageRoot,
       sourceRoot,
@@ -80,74 +91,114 @@ export class SharedStyleOutputWriter {
     const emittedCss = new Set<string>();
 
     for (const entry of entries) {
-      const result = await compileCssModule({
-        file: entry.sourceFile,
-        packageRoot,
-        sourceRoot,
-      });
-
-      for (const format of this.config.output.outputFormats) {
-        const formatRoot = path.join(
-          packageRoot,
-          this.context.outputDir,
-          format,
-        );
-        const cssFile = path.join(formatRoot, entry.cssRelative);
-        const jsFile = path.join(formatRoot, entry.jsRelative);
-
-        for (const asset of result.styleAssets) {
-          const assetRelative = toCssModuleOutputFileName({
-            file: asset.file,
+      if (entry.kind === 'module') {
+        written.push(
+          ...(await this.writeModuleEntry(
+            entry,
+            packageRoot,
             sourceRoot,
-            consumerPackageRoot: packageRoot,
-          });
-          const assetFile = path.join(formatRoot, assetRelative);
-          const assetKey = `${format}:${assetRelative}`;
-          if (!emittedCss.has(assetKey)) {
-            emittedCss.add(assetKey);
-            writeTextFile(
-              assetFile,
-              rewriteCssModuleOutputImportSpecifiers({
-                css: asset.css,
-                importerFile: asset.file,
-                styleAssets: result.styleAssets,
-                sourceRoot,
-                consumerPackageRoot: packageRoot,
-              }),
-            );
-            written.push(assetFile);
-          }
-        }
+            emittedCss,
+          )),
+        );
+        continue;
+      }
 
-        const cssKey = `${format}:${entry.cssRelative}`;
-        if (!emittedCss.has(cssKey)) {
-          emittedCss.add(cssKey);
-          // Entry Modules use *.scoped.css; override importer output so
-          // rewritten @import paths stay aligned with the published file.
+      written.push(...this.writePlainEntry(entry, packageRoot));
+    }
+
+    return written;
+  }
+
+  private writePlainEntry(entry: SharedOutputEntry, packageRoot: string) {
+    const source = fs.readFileSync(entry.sourceFile, 'utf8');
+    const written: Array<string> = [];
+    for (const format of this.config.output.outputFormats) {
+      const outFile = path.join(
+        packageRoot,
+        this.context.outputDir,
+        format,
+        entry.assetRelative,
+      );
+      writeTextFile(outFile, source);
+      written.push(outFile);
+    }
+    return written;
+  }
+
+  private async writeModuleEntry(
+    entry: SharedOutputEntry,
+    packageRoot: string,
+    sourceRoot: string,
+    emittedCss: Set<string>,
+  ) {
+    const result = await compileCssModule({
+      file: entry.sourceFile,
+      packageRoot,
+      sourceRoot,
+    });
+    const written: Array<string> = [];
+    const jsRelative = entry.jsRelative;
+    if (!jsRelative) {
+      throw new Error(
+        `[css] shared.output module entry is missing jsRelative: ${entry.sourceRelative}`,
+      );
+    }
+
+    for (const format of this.config.output.outputFormats) {
+      const formatRoot = path.join(packageRoot, this.context.outputDir, format);
+      const cssFile = path.join(formatRoot, entry.assetRelative);
+      const jsFile = path.join(formatRoot, jsRelative);
+
+      for (const asset of result.styleAssets) {
+        const assetRelative = toCssModuleOutputFileName({
+          file: asset.file,
+          sourceRoot,
+          consumerPackageRoot: packageRoot,
+        });
+        const assetFile = path.join(formatRoot, assetRelative);
+        const assetKey = `${format}:${assetRelative}`;
+        if (!emittedCss.has(assetKey)) {
+          emittedCss.add(assetKey);
           writeTextFile(
-            cssFile,
+            assetFile,
             rewriteCssModuleOutputImportSpecifiers({
-              css: result.css,
-              importerFile: entry.sourceFile,
-              importerOutputFileName: entry.cssRelative,
+              css: asset.css,
+              importerFile: asset.file,
               styleAssets: result.styleAssets,
               sourceRoot,
               consumerPackageRoot: packageRoot,
             }),
           );
-          written.push(cssFile);
+          written.push(assetFile);
         }
-
-        const cssImportPath = toCssModuleOutputImportPath(
-          entry.jsRelative,
-          entry.cssRelative,
-        );
-        writeTextFile(
-          jsFile,
-          createLocalsShimCode(cssImportPath, result.locals, format),
-        );
-        written.push(jsFile);
       }
+
+      const cssKey = `${format}:${entry.assetRelative}`;
+      if (!emittedCss.has(cssKey)) {
+        emittedCss.add(cssKey);
+        writeTextFile(
+          cssFile,
+          rewriteCssModuleOutputImportSpecifiers({
+            css: result.css,
+            importerFile: entry.sourceFile,
+            importerOutputFileName: entry.assetRelative,
+            styleAssets: result.styleAssets,
+            sourceRoot,
+            consumerPackageRoot: packageRoot,
+          }),
+        );
+        written.push(cssFile);
+      }
+
+      const cssImportPath = toCssModuleOutputImportPath(
+        jsRelative,
+        entry.assetRelative,
+      );
+      writeTextFile(
+        jsFile,
+        createLocalsShimCode(cssImportPath, result.locals, format),
+      );
+      written.push(jsFile);
     }
 
     return written;

@@ -9,6 +9,10 @@ import {
   readPackageName,
 } from '#auklet/css/core/resolvers/externalLess';
 import { resolveStyleSourceRootForFile } from '#auklet/css/core/resolvers/externalPackageStyle';
+import {
+  listWorkspaceEditableDependencyPackageRoots,
+  warmWorkspaceSharedOutputCaches,
+} from '#auklet/css/modules/resolveWorkspaceSharedOutputModule';
 import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
 import { StyleCodeFactory } from '#auklet/css/vite/moduleGraph/styleCodeFactory';
 import { ModuleStyleGraphRequestCache } from '#auklet/css/vite/moduleGraph/requestCache';
@@ -89,6 +93,24 @@ export class ModuleStyleGraph {
 
   getWatchRoots() {
     return this.packageSource.getWatchRoots();
+  }
+
+  // Pre-warm shared.output remap caches for graph packages + workspace deps so
+  // Less @import (reference) can sync-remap without a prior JS import.
+  async warmSharedOutputRemapCaches() {
+    const roots = new Set<string>();
+    for (const item of this.packageSource.getPackages()) {
+      roots.add(path.resolve(item.packageRoot));
+      for (const dependencyRoot of listWorkspaceEditableDependencyPackageRoots(
+        item.packageRoot,
+      )) {
+        roots.add(dependencyRoot);
+      }
+    }
+    await warmWorkspaceSharedOutputCaches({
+      packageRoots: roots,
+      loadAukletConfig: this.loadAukletConfig,
+    });
   }
 
   createPackageStyleCode(parsed: PackageStyleId) {

@@ -89,9 +89,9 @@ export class StylePackageContext {
       styleFiles: styleLikeFiles,
       patterns: normalizedConfig.styles.shared.inner,
     });
-    // output globs only match *.module.* (already stripped from styleLikeFiles).
-    // Exclude those directory trees so sibling helpers (e.g. helpers.css) do not
-    // become package/module global entries; keep them on the @import allowlist.
+    // Exclude output glob directory trees so those files do not become
+    // package/module global entries (Modules are already stripped; plain
+    // css/less helpers stay on the @import allowlist when needed).
     const sharedOutputExcludeRoots = resolveSharedOutputExcludeRoots({
       packageRoot: context.packageRoot,
       sourceRoot: this.sourceRoot,

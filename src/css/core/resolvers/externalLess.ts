@@ -1,30 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import { findPathInExports, parseModuleId } from 'conditional-export';
 import {
-  findPathInExports,
-  parseModuleId,
-  type Exports,
-} from 'conditional-export';
+  findDependencyPackageRoot,
+  isDirectDependency,
+  listDependencyPackageJsonCandidates,
+  readPackageJson,
+} from '#auklet/css/core/resolvers/packageDependency';
 import { matchesTsconfigPathsAlias } from '#auklet/css/core/resolvers/tsconfigPaths';
+import { remapWorkspaceSharedOutputLessFile } from '#auklet/css/core/style/sharedOutput';
 import { isInsideRoot } from '#auklet/utils';
 
 const LESS_EXPORT_CONDITIONS = ['less', 'source', 'import', 'default'];
-const DEPENDENCY_FIELDS = [
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'optionalDependencies',
-] as const;
-
-type PackageJson = {
-  name?: string;
-  exports?: Exports;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-  peerDependencies?: Record<string, string>;
-  optionalDependencies?: Record<string, string>;
-};
 
 export type ExternalLessResolution = {
   file: string;
@@ -80,14 +67,6 @@ export function isRejectedPackageImportsLessSpecifier(
     .includes('reference');
 }
 
-const readPackageJson = (packageJsonFile: string) => {
-  try {
-    return JSON.parse(fs.readFileSync(packageJsonFile, 'utf8')) as PackageJson;
-  } catch {
-    return null;
-  }
-};
-
 export const findPackageRootForFile = (file: string) => {
   let current = path.extname(file) ? path.dirname(file) : path.resolve(file);
   const root = path.parse(current).root;
@@ -113,42 +92,11 @@ export function readPackageName(packageRoot: string) {
   return readPackageJson(path.join(packageRoot, 'package.json'))?.name ?? null;
 }
 
-const findDependencyPackageRoot = (
-  importerPackageRoot: string,
-  packageName: string,
-) => {
-  const require = createRequire(path.join(importerPackageRoot, 'package.json'));
-  for (const searchPath of require.resolve.paths(packageName) ?? []) {
-    const candidate = path.join(searchPath, packageName);
-    const packageJsonFile = path.join(candidate, 'package.json');
-    if (!fs.existsSync(packageJsonFile)) continue;
-    return fs.realpathSync.native(candidate);
-  }
-  return null;
-};
-
 export function collectExternalLessPackageJsonCandidates(
   importerPackageRoot: string,
   packageName: string,
 ) {
-  const candidates = new Set<string>();
-  const require = createRequire(path.join(importerPackageRoot, 'package.json'));
-  for (const searchPath of require.resolve.paths(packageName) ?? []) {
-    candidates.add(
-      path.resolve(path.join(searchPath, packageName, 'package.json')),
-    );
-  }
-  candidates.add(
-    path.resolve(
-      path.join(
-        importerPackageRoot,
-        'node_modules',
-        packageName,
-        'package.json',
-      ),
-    ),
-  );
-  return Array.from(candidates);
+  return listDependencyPackageJsonCandidates(importerPackageRoot, packageName);
 }
 
 const assertDirectDependency = (
@@ -163,10 +111,7 @@ const assertDirectDependency = (
       `[css] external Less imports cannot target the importing package itself: ${packageName}. Use a relative path instead.`,
     );
   }
-  const declared = DEPENDENCY_FIELDS.some((field) =>
-    Object.hasOwn(packageJson?.[field] ?? {}, packageName),
-  );
-  if (declared) return;
+  if (packageJson && isDirectDependency(packageName, packageJson)) return;
   throw new ExternalLessResolutionError(
     'not-direct-dependency',
     `[css] external Less package must be a direct dependency: ${packageName} from ${packageJsonFile}`,
@@ -265,8 +210,14 @@ export const resolveExternalLessImport = (
     );
   }
 
+  const remapped = remapWorkspaceSharedOutputLessFile({
+    packageRoot,
+    resolvedFile: realFile,
+    sourceRelative: parsed.path || null,
+  });
+
   return {
-    file: realFile,
+    file: remapped ?? realFile,
     packageName: packageJson.name,
     packageRoot,
     packageJsonFile,

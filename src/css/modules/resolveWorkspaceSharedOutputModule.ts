@@ -1,14 +1,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { findPathInExports, parseModuleId } from 'conditional-export';
 import { normalizeAukletConfig } from '#auklet/config';
 import { loadAukletConfig } from '#auklet/configLoader';
+import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { isExternalPackageSpecifier } from '#auklet/css/core/resolvers/externalLess';
-import { isCssModuleSpecifier } from '#auklet/css/core/resolvers/externalPackageStyle';
-import { listSharedOutputModuleFiles } from '#auklet/css/core/style/sharedOutput';
+import {
+  isCssModuleSpecifier,
+  isPlainStyleSpecifier,
+} from '#auklet/css/core/resolvers/externalPackageStyle';
+import {
+  findDependencyPackageRoot,
+  isDirectDependency,
+  isWorkspaceEditablePackageRoot,
+  listDirectDependencyPackageNames,
+  readPackageJson,
+  STYLE_PACKAGE_EXPORT_CONDITIONS,
+} from '#auklet/css/core/resolvers/packageDependency';
+import {
+  clearSharedOutputResolveCache,
+  getSharedOutputResolveCache,
+  isPublishedPlainSharedOutputAssetTarget,
+  listSharedOutputFiles,
+  setSharedOutputResolveCache,
+  type SharedOutputResolveCacheEntry,
+} from '#auklet/css/core/style/sharedOutput';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
-import { isInstalledNodeModulesPath, normalizeFileKey } from '#auklet/utils';
+import { normalizeFileKey } from '#auklet/utils';
 
 export type ResolveWorkspaceSharedOutputModuleOptions = {
   source: string;
@@ -16,91 +34,59 @@ export type ResolveWorkspaceSharedOutputModuleOptions = {
   loadAukletConfig?: typeof loadAukletConfig;
 };
 
-type ProducerSharedOutputCacheEntry = {
-  sourceRoot: string;
-  sharedFileKeys: Set<string>;
-};
-
-const STYLE_EXPORT_CONDITIONS = [
-  'less',
-  'source',
-  'style',
-  'import',
-  'default',
-];
-
-// Process-local only. Invalidate when producer auklet.config.* changes.
-const producerSharedOutputCache = new Map<
-  string,
-  ProducerSharedOutputCacheEntry
->();
-
 export function invalidateWorkspaceSharedOutputResolveCache(
   packageRoot?: string,
 ) {
-  if (packageRoot == null) {
-    producerSharedOutputCache.clear();
-    return;
-  }
-  producerSharedOutputCache.delete(normalizeFileKey(packageRoot));
+  clearSharedOutputResolveCache(packageRoot);
 }
-
-const findDependencyPackageRoot = (
-  importerPackageRoot: string,
-  packageName: string,
-) => {
-  const require = createRequire(path.join(importerPackageRoot, 'package.json'));
-  for (const searchPath of require.resolve.paths(packageName) ?? []) {
-    const candidate = path.join(searchPath, packageName);
-    const packageJsonFile = path.join(candidate, 'package.json');
-    if (!fs.existsSync(packageJsonFile)) continue;
-    return fs.realpathSync.native(candidate);
-  }
-  return null;
-};
-
-const readPackageJson = (packageJsonFile: string) => {
-  try {
-    return JSON.parse(fs.readFileSync(packageJsonFile, 'utf8')) as {
-      name?: string;
-      exports?: Parameters<typeof findPathInExports>[1];
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-      peerDependencies?: Record<string, string>;
-      optionalDependencies?: Record<string, string>;
-    };
-  } catch {
-    return null;
-  }
-};
-
-const DEPENDENCY_FIELDS = [
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'optionalDependencies',
-] as const;
-
-const isDirectDependency = (
-  packageName: string,
-  packageJson: NonNullable<ReturnType<typeof readPackageJson>>,
-) =>
-  DEPENDENCY_FIELDS.some((field) =>
-    Object.hasOwn(packageJson[field] ?? {}, packageName),
-  );
-
-const isWorkspaceEditablePackageRoot = (packageRoot: string) =>
-  !isInstalledNodeModulesPath(packageRoot);
 
 const isPublishedModulesShimTarget = (target: string) =>
   /\.module\.(?:css|less)\.js$/i.test(target);
 
-const loadProducerSharedOutputCache = async (
+// Workspace-editable direct deps (symlink / workspace path), not installed copies.
+export function listWorkspaceEditableDependencyPackageRoots(
+  importerPackageRoot: string,
+) {
+  const roots: Array<string> = [];
+  for (const packageName of listDirectDependencyPackageNames(
+    importerPackageRoot,
+  )) {
+    const packageRoot = findDependencyPackageRoot(
+      importerPackageRoot,
+      packageName,
+    );
+    if (!packageRoot || !isWorkspaceEditablePackageRoot(packageRoot)) continue;
+    roots.push(packageRoot);
+  }
+  return roots;
+}
+
+// Dev pre-warm so sync Less (reference) remap does not depend on a prior JS
+// import of shared.output. loadProducerSharedOutputCache is a no-op-ish miss
+// when styles.shared.output is empty (empty plain list → no remap).
+export async function warmWorkspaceSharedOutputCaches(options: {
+  packageRoots: Iterable<string>;
+  loadAukletConfig?: typeof loadAukletConfig;
+}) {
+  const loadConfig = options.loadAukletConfig ?? loadAukletConfig;
+  const roots = new Set<string>();
+  for (const packageRoot of options.packageRoots) {
+    const resolved = path.resolve(packageRoot);
+    if (!isWorkspaceEditablePackageRoot(resolved)) continue;
+    roots.add(resolved);
+  }
+  await Promise.all(
+    Array.from(roots, (packageRoot) =>
+      loadProducerSharedOutputCache(packageRoot, loadConfig),
+    ),
+  );
+}
+
+export async function loadProducerSharedOutputCache(
   packageRoot: string,
-  loadConfig: typeof loadAukletConfig,
-) => {
-  const cacheKey = normalizeFileKey(packageRoot);
-  const hit = producerSharedOutputCache.get(cacheKey);
+  loadConfig: typeof loadAukletConfig = loadAukletConfig,
+) {
+  const hit = getSharedOutputResolveCache(packageRoot);
   if (hit) return hit;
 
   // Miss must cacheBust so Node ESM does not keep a stale auklet.config.* module.
@@ -108,34 +94,42 @@ const loadProducerSharedOutputCache = async (
     await loadConfig(packageRoot, { cacheBust: true }),
   );
   const sourceRoot = path.join(packageRoot, normalizedConfig.source);
-  const sharedFileKeys = new Set<string>();
-  if (
-    normalizedConfig.modules &&
-    normalizedConfig.styles.shared.output.length
-  ) {
-    for (const file of listSharedOutputModuleFiles({
+  const outputDir = normalizedConfig.output;
+  const outputFormats = moduleStyleBuildConfig.output.outputFormats;
+  const moduleFileKeys = new Set<string>();
+  const plainFileKeys = new Set<string>();
+  if (normalizedConfig.styles.shared.output.length) {
+    for (const file of listSharedOutputFiles({
       packageRoot,
       sourceRoot,
       patterns: normalizedConfig.styles.shared.output,
     })) {
-      sharedFileKeys.add(normalizeFileKey(file));
+      const key = normalizeFileKey(file);
+      if (isCssModuleFile(file)) {
+        moduleFileKeys.add(key);
+      } else {
+        plainFileKeys.add(key);
+      }
     }
   }
 
-  const entry = { sourceRoot, sharedFileKeys };
-  producerSharedOutputCache.set(cacheKey, entry);
+  const entry = {
+    sourceRoot,
+    outputDir,
+    outputFormats,
+    moduleFileKeys,
+    plainFileKeys,
+  } satisfies SharedOutputResolveCacheEntry;
+  setSharedOutputResolveCache(packageRoot, entry);
   return entry;
-};
+}
 
-// Dev-only: workspace producer shared.output → source file for Modules HMR.
-// Installed packages keep the published JS shim. Dist shim need not be fresh.
-export async function resolveWorkspaceSharedOutputModule(
-  options: ResolveWorkspaceSharedOutputModuleOptions,
-) {
+const resolveWorkspaceSharedOutputPackage = (options: {
+  source: string;
+  importerPackageRoot: string;
+}) => {
   const source = options.source.split('?', 1)[0] ?? options.source;
-  if (!isExternalPackageSpecifier(source) || !isCssModuleSpecifier(source)) {
-    return null;
-  }
+  if (!isExternalPackageSpecifier(source)) return null;
 
   const parsed = (() => {
     try {
@@ -178,30 +172,87 @@ export async function resolveWorkspaceSharedOutputModule(
       return findPathInExports(
         parsed.path || '.',
         packageJson.exports!,
-        STYLE_EXPORT_CONDITIONS,
+        STYLE_PACKAGE_EXPORT_CONDITIONS,
       );
     } catch {
       return null;
     }
   })();
-  if (!exportTarget || !isPublishedModulesShimTarget(exportTarget)) {
-    return null;
-  }
+  if (!exportTarget) return null;
 
   const relative = (parsed.path || '.').replace(/^\.\//, '');
-  if (!relative || relative === '.' || !isCssModuleFile(relative)) {
+  if (!relative || relative === '.') return null;
+
+  return {
+    packageRoot,
+    exportTarget,
+    relative,
+  };
+};
+
+// Dev-only: workspace producer shared.output Modules → source for HMR.
+export async function resolveWorkspaceSharedOutputModule(
+  options: ResolveWorkspaceSharedOutputModuleOptions,
+) {
+  const source = options.source.split('?', 1)[0] ?? options.source;
+  if (!isExternalPackageSpecifier(source) || !isCssModuleSpecifier(source)) {
     return null;
   }
 
+  const resolved = resolveWorkspaceSharedOutputPackage({
+    source,
+    importerPackageRoot: options.importerPackageRoot,
+  });
+  if (!resolved || !isPublishedModulesShimTarget(resolved.exportTarget)) {
+    return null;
+  }
+  if (!isCssModuleFile(resolved.relative)) return null;
+
   const loadConfig = options.loadAukletConfig ?? loadAukletConfig;
-  const { sourceRoot, sharedFileKeys } = await loadProducerSharedOutputCache(
-    packageRoot,
+  const { sourceRoot, moduleFileKeys } = await loadProducerSharedOutputCache(
+    resolved.packageRoot,
     loadConfig,
   );
-  const candidate = path.resolve(sourceRoot, relative);
+  const candidate = path.resolve(sourceRoot, resolved.relative);
   if (!isCssModuleFile(candidate) || !fs.existsSync(candidate)) {
     return null;
   }
 
-  return sharedFileKeys.has(normalizeFileKey(candidate)) ? candidate : null;
+  return moduleFileKeys.has(normalizeFileKey(candidate)) ? candidate : null;
+}
+
+// Dev-only: workspace producer shared.output plain css/less → source.
+export async function resolveWorkspaceSharedOutputPlainStyle(
+  options: ResolveWorkspaceSharedOutputModuleOptions,
+) {
+  const source = options.source.split('?', 1)[0] ?? options.source;
+  if (!isExternalPackageSpecifier(source) || !isPlainStyleSpecifier(source)) {
+    return null;
+  }
+
+  const resolved = resolveWorkspaceSharedOutputPackage({
+    source,
+    importerPackageRoot: options.importerPackageRoot,
+  });
+  if (!resolved) return null;
+
+  const loadConfig = options.loadAukletConfig ?? loadAukletConfig;
+  const cache = await loadProducerSharedOutputCache(
+    resolved.packageRoot,
+    loadConfig,
+  );
+  if (
+    !isPublishedPlainSharedOutputAssetTarget(resolved.exportTarget, {
+      outputDir: cache.outputDir,
+      outputFormats: cache.outputFormats,
+    })
+  ) {
+    return null;
+  }
+
+  // Mirror export subpath under producer sourceRoot (not the published path).
+  const candidate = path.resolve(cache.sourceRoot, resolved.relative);
+  if (!fs.existsSync(candidate)) return null;
+  if (!cache.plainFileKeys.has(normalizeFileKey(candidate))) return null;
+  return candidate;
 }

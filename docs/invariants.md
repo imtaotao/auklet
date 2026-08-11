@@ -72,29 +72,28 @@ the same change and make the reason explicit.
   `StyleProcessor.readStyleFile`. JS build and Vite consume Modules only via
   `compileCssModule` / `isCssModuleFile`.
 - `styles.shared` is object-only (`{ inner?, output? }`). `inner` is the only
-  same-package exception to component-local style imports. It must stay limited
-  to current source-root style files and must not permit component-to-component
-  or package-to-package style imports. Nested shared imports must stay limited
-  to non-module, non-theme helpers. When the shared file is CSS, preserve the
-  `@import` relationship in module output and dev virtual CSS rather than
-  duplicating shared rules into every importer.
-- `styles.shared.output` selects current-package CSS Modules that production
-  **compiles** (not mirrors) into `dist/es|lib` with the same scoped-class hash
-  as the JS CSS Modules plugin. Like other Modules, it must not use
-  `styles.prefix` (`styles.shared.inner` remains on the global path and is
-  prefixed). Class hashes use
-  `packageName + source-relative path + localName` so workspace HMR and published
-  shims stay aligned. Published CSS must be `*.scoped.css` (not `*.module.css`)
-  so consumer Vite/webpack do not re-run CSS Modules. When the producer also
-  JS-imports the same file, build-js must emit that same `*.scoped.css` path
-  (no parallel `*.module.css` asset). Cross-package consumption goes through
-  `package.json#exports` to the published JS shim in production / installed
-  installs; in a pnpm workspace, Vite may resolve that export to producer
-  source for Modules HMR without rebuilding the producer first. It must not
-  open global component CSS `@import "other-package/..."`.
-  `styles.dependencies` remains the path for built dependency CSS entries.
-  Shared patterns use `fast-glob`. `auk inspect css` must validate export
-  subpaths → JS shims and dist presence (non-zero exit on failure).
+  same-package exception to component-local style imports. It is **plain
+  `.css` / `.less` only** (not `*.module.*`), stays on the global path (gets
+  `styles.prefix`), must stay under the source root, and must not permit
+  component-to-component or package-to-package style imports. Nested shared
+  imports must stay limited to non-module, non-theme helpers. When the shared
+  file is CSS, preserve the `@import` relationship in module output and dev
+  virtual CSS rather than duplicating shared rules into every importer.
+- `styles.shared.output` publishes current-package shared styles into
+  `{output}/es|lib` (configurable `output`, default `dist`) and must not use
+  `styles.prefix`. Kinds:
+  - CSS Modules: compile to `*.scoped.css` + JS shim (same hash formula as the
+    JS Modules plugin); `modules: true` required when any Modules match;
+    exports → shim under `{output}/es|lib`; workspace Vite may resolve to
+    source for Modules HMR.
+  - Plain `.css` / `.less`: copy as-is (Less **not** compiled); exports →
+    mirrored `{output}/es|lib` asset; workspace Vite remaps Modules / plain /
+    Less `(reference)` to source for HMR (pre-warmed caches); installed / prod
+    keep published artifacts.
+    It must not open global component CSS `@import "other-package/..."`.
+    `styles.dependencies` remains the path for built dependency CSS entries.
+    Shared patterns use `fast-glob`. `auk inspect css` must validate export
+    subpaths → accepted dist targets and dist presence (non-zero exit on failure).
 - `@tsdown/css` enables tsdown CSS processing; auklet `modules: true` owns the
   `*.module.*` protocol. Do not run a second CSS Modules pipeline on the same
   files.
