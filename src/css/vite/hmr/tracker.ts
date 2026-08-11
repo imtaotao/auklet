@@ -56,11 +56,17 @@ export function removeVirtualStyleDependency(
   }
 }
 
+export type VirtualDependencyRetainOptions = {
+  // Retain ids that are not Vite module ids (optional escape hatch).
+  retainVirtualId?: (virtualId: string) => boolean;
+};
+
 export function getLiveDependencyVirtualIds(
   virtualIdsByDependency: VirtualIdsByDependency,
   filesByVirtualId: FilesByVirtualId,
   file: string,
   moduleGraph?: ModuleGraphLookup,
+  options?: VirtualDependencyRetainOptions,
 ) {
   const normalizedFile = normalizeFileKey(file);
   const virtualIds = Array.from(
@@ -70,8 +76,10 @@ export function getLiveDependencyVirtualIds(
     return virtualIds;
   }
 
-  const liveVirtualIds = virtualIds.filter((virtualId) =>
-    moduleGraph.getModuleById(virtualId),
+  const liveVirtualIds = virtualIds.filter(
+    (virtualId) =>
+      options?.retainVirtualId?.(virtualId) ||
+      moduleGraph.getModuleById(virtualId),
   );
   if (liveVirtualIds.length !== virtualIds.length) {
     const liveSet = new Set(liveVirtualIds);
@@ -93,9 +101,11 @@ export function pruneStaleVirtualDependencies(
   virtualIdsByDependency: VirtualIdsByDependency,
   filesByVirtualId: FilesByVirtualId,
   moduleGraph: ModuleGraphLookup,
+  options?: VirtualDependencyRetainOptions,
 ) {
   for (const [normalizedFile, virtualIds] of virtualIdsByDependency) {
     for (const virtualId of Array.from(virtualIds)) {
+      if (options?.retainVirtualId?.(virtualId)) continue;
       if (moduleGraph.getModuleById(virtualId)) continue;
       removeVirtualStyleDependency(
         virtualIdsByDependency,
@@ -168,16 +178,25 @@ export class VirtualDependencyTracker {
     this.replace(virtualId, files);
   }
 
-  hasTracked(file: string, moduleGraph?: ModuleGraphLookup) {
-    return this.getLiveVirtualIds(file, moduleGraph).length > 0;
+  hasTracked(
+    file: string,
+    moduleGraph?: ModuleGraphLookup,
+    options?: VirtualDependencyRetainOptions,
+  ) {
+    return this.getLiveVirtualIds(file, moduleGraph, options).length > 0;
   }
 
-  getLiveVirtualIds(file: string, moduleGraph?: ModuleGraphLookup) {
+  getLiveVirtualIds(
+    file: string,
+    moduleGraph?: ModuleGraphLookup,
+    options?: VirtualDependencyRetainOptions,
+  ) {
     return getLiveDependencyVirtualIds(
       this.virtualIdsByDependency,
       this.filesByVirtualId,
       file,
       moduleGraph,
+      options,
     );
   }
 
@@ -239,11 +258,15 @@ export class VirtualDependencyTracker {
     return this.filesByVirtualId.get(virtualId) ?? new Map();
   }
 
-  pruneStale(moduleGraph: ModuleGraphLookup) {
+  pruneStale(
+    moduleGraph: ModuleGraphLookup,
+    options?: VirtualDependencyRetainOptions,
+  ) {
     pruneStaleVirtualDependencies(
       this.virtualIdsByDependency,
       this.filesByVirtualId,
       moduleGraph,
+      options,
     );
   }
 }

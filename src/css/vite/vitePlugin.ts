@@ -1,9 +1,9 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import type {
   DevEnvironment,
   HotUpdateOptions,
   Plugin,
+  ResolvedConfig,
   ViteDevServer,
 } from 'vite';
 import {
@@ -41,23 +41,19 @@ import { invalidateModuleInEnvironments } from '#auklet/css/vite/hmr/propagate';
 import type { ModuleStyleGraphOptions } from '#auklet/css/vite/moduleGraph/types';
 import { AukletStyleHmr } from '#auklet/css/vite/hmr/styleHmr';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
+import {
+  fromPackageStyleVirtualId,
+  toPackageStyleVirtualId,
+} from '#auklet/css/vite/packageStyleVirtualId';
+import { createAukletViteLessPlugin } from '#auklet/css/vite/viteLessPlugin';
 import { createAukletLogger } from '#auklet/logger';
 import { findWorkspaceRoot } from '#auklet/workspace/root';
 
 const VIRTUAL_ID_PREFIX = 'virtual:auklet-css:';
 const RESOLVED_VIRTUAL_ID_PREFIX = '\0auklet-css:';
 const RESOLVED_CSS_MODULE_PREFIX = '\0auklet-css-module:';
-const PACKAGE_STYLE_VIRTUAL_PREFIX = '\0auklet-package-style:';
 const BROWSER_VIRTUAL_ID_PREFIX = 'auklet-css:';
 const logger = createAukletLogger({ scope: 'css:vite' });
-
-const toPackageStyleVirtualId = (file: string) =>
-  `${PACKAGE_STYLE_VIRTUAL_PREFIX}${path.resolve(file)}`;
-
-const fromPackageStyleVirtualId = (id: string) => {
-  if (!id.startsWith(PACKAGE_STYLE_VIRTUAL_PREFIX)) return null;
-  return path.resolve(id.slice(PACKAGE_STYLE_VIRTUAL_PREFIX.length));
-};
 
 const fromCssModuleVirtualId = cssModuleFileFromVirtualId;
 
@@ -197,8 +193,30 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
     apply: 'serve',
     enforce: 'pre',
 
-    configResolved(config: { root: string }) {
+    configResolved(config: ResolvedConfig) {
       graph = createModuleStyleGraph(options, config.root);
+      // Mutate resolved config so the Less FileManager is definitely present.
+      // Vite's less IdResolver does not call user resolveId; remap + HMR track
+      // for `@import (reference) 'pkg/….less'` must run inside Less.
+      const preprocessorOptions = (config.css.preprocessorOptions ??= {});
+      const lessOptions = (preprocessorOptions.less ??= {});
+      const plugins = ((lessOptions as { plugins?: Array<unknown> }).plugins ??=
+        []);
+      const alreadyInstalled = plugins.some(
+        (plugin) =>
+          plugin &&
+          typeof plugin === 'object' &&
+          (plugin as { __aukletViteLess?: boolean }).__aukletViteLess,
+      );
+      if (!alreadyInstalled) {
+        const plugin = createAukletViteLessPlugin({
+          trackImport: (resolvedFile, importer) => {
+            hmr.trackViteLessImport(resolvedFile, importer);
+          },
+        }) as { __aukletViteLess?: boolean };
+        plugin.__aukletViteLess = true;
+        plugins.push(plugin);
+      }
     },
 
     resolveId: {
@@ -242,6 +260,9 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
                 importerPackageRoot,
               });
             if (sharedOutputPlain) {
+              // JS import only. Less `@import` remap/track is viteLessPlugin
+              // (Vite's Less IdResolver uses an internal resolver, not user
+              // resolveId).
               return {
                 id: toPackageStyleVirtualId(sharedOutputPlain),
                 moduleSideEffects: true,
@@ -382,8 +403,8 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
       const environmentModuleGraph = {
         getModuleById(id: string) {
           for (const environment of Object.values(server.environments)) {
-            const module = environment.moduleGraph.getModuleById(id);
-            if (module) return module;
+            const mod = environment.moduleGraph.getModuleById(id);
+            if (mod) return mod;
           }
           return undefined;
         },

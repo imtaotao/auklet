@@ -223,3 +223,20 @@ export const resolveExternalLessImport = (
     packageJsonFile,
   } satisfies ExternalLessResolution;
 };
+
+/** Best-effort resolve for Vite Less FileManager / HMR source-scan. */
+export function tryResolveExternalLessFile(
+  specifier: string,
+  currentDirectory: string,
+) {
+  if (!isExternalPackageSpecifier(specifier)) return null;
+  const packageRoot = findPackageRootForFile(
+    path.join(currentDirectory, '__auklet_import__.less'),
+  );
+  if (!packageRoot) return null;
+  try {
+    return resolveExternalLessImport(specifier, packageRoot).file;
+  } catch {
+    return null;
+  }
+}

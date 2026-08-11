@@ -3,6 +3,8 @@ declare module '@demo/ui/shared/chip.module.less' {
   export default classes;
 }
 
+declare module '@demo/ui/shared/helpers.css';
+
 declare module '*.module.css' {
   const classes: Record<string, string>;
   export default classes;
@@ -12,3 +14,6 @@ declare module '*.module.less' {
   const classes: Record<string, string>;
   export default classes;
 }
+
+declare module '*.css';
+declare module '*.less';

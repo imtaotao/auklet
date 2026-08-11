@@ -124,7 +124,18 @@ src/css/vite/
 
 The Vite plugin resolves package CSS through virtual modules built by
 `moduleGraph/`. On tracked source changes, `hmr/` refreshes affected package CSS
-and CSS Modules; other CSS remains on Vite's native HMR.
+and CSS Modules; other CSS remains on Vite's native HMR. Plain JS imports of
+workspace `shared.output` `.css` / `.less` use `\0auklet-package-style:` and are
+included in that hotUpdate path. Vite's Less IdResolver does **not** call user
+`resolveId` plugins, so package `@import (reference) 'pkg/….less'` goes through
+a Less `FileManager` (`viteLessPlugin`, tried before Vite's own). Resolve uses
+the same `resolveExternalLessImport` path as production external Less (exports
+→ published `.less`; workspace `shared.output` remaps to source when the resolve
+cache is warm; installed packages keep published files). For HMR the manager
+records resolved→entry `.less` when Less provides `options.filename`; otherwise
+hotUpdate falls back to a source scan of loaded Less modules. Never return the
+changed Less partial itself from hotUpdate when auklet also owns the update
+(dead-end → full-reload that package CSS HMR would suppress).
 
 Vite/dev caches virtual CSS generation in memory for the current dev server
 lifecycle and persists generated virtual CSS results under

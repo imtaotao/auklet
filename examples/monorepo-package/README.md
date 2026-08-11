@@ -18,7 +18,8 @@ Packages:
 App (outside `packages/`):
 
 - `@demo/app`: private Vite app for hand-checking workspace
-  `styles.shared.output` HMR (`aukletStylePlugin({ mode: 'monorepo' })`).
+  `styles.shared.output` HMR for Modules, plain CSS, and Less `(reference)`
+  (`aukletStylePlugin({ mode: 'monorepo' })`).
 
 ```bash
 pnpm --dir examples/monorepo-package build
@@ -37,10 +38,17 @@ pnpm --filter @demo/ui build
 pnpm --dir examples/monorepo-package dev:app
 ```
 
-Open the printed local URL, then edit
-`packages/ui/src/shared/chip.module.less` (e.g. chip background). The page
-should hot-update without rebuilding `@demo/ui`. The on-page `chip class:`
-string should match the producer hash used in
+Open the printed local URL. Edit under `packages/ui/src/shared/` without
+rebuilding `@demo/ui`:
+
+| File               | Consumer path                                | What to change                    |
+| ------------------ | -------------------------------------------- | --------------------------------- |
+| `chip.module.less` | JS `import` Modules                          | chip background / color           |
+| `helpers.css`      | `import '@demo/ui/shared/helpers.css'`       | `.helper-reset` colors / padding  |
+| `tokens.less`      | app `tokens-demo.less` `@import (reference)` | `@token-demo-bg` / `@chip-accent` |
+
+Each change should hot-update in the app. The on-page `chip class:` string should
+match the producer hash in
 `packages/ui/dist/es/shared/chip.module.less.js` after a ui build.
 
 Expected CSS output includes package-level `dist/index.css` and module CSS entries under `dist/es` and `dist/lib` because `modules` is enabled for style packages.

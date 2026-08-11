@@ -176,6 +176,19 @@ Check:
   `shared.output` import. Cold cache → published path (no `src/` guess).
   Config change currently re-warms the full graph (correct; can later narrow
   to the invalidated `packageRoot` + its workspace deps).
+- Plain package CSS JS import uses `\0auklet-package-style:` virtuals; hotUpdate
+  must include `collectDirectPackageStyleHotUpdateModules` (tracker only covers
+  `auklet-css:*`). Vite Less does not use user `resolveId` — remap + HMR live
+  in `viteLessPlugin` (Less FileManager via `css.preprocessorOptions.less.plugins`).
+  Resolve must stay on `tryResolveExternalLessFile` →
+  `resolveExternalLessImport` (same as production external Less / shared.output
+  remap; do not invent a Vite-only resolve). HMR tracks only concrete entry
+  `.less` (`options.filename`); do **not** track Vite `${dir}/*` / `dir:`
+  pseudo ids. Collect: owner track first, source-scan only when track empty
+  (package `@import` via same resolve — no basename match).
+  `handleCombinedHotUpdate` exits only when the merged list is empty (include
+  `safeNativeModules`; never return the changed Less partial alone).
+  Cold-start integration: `src/__tests__/css/vite/sharedOutputPlainHmr.spec.ts`.
 - One resolve cache only (`sharedOutputResolveCache` in `sharedOutput.ts`);
   Modules / plain / Less remap share it. It caches a **glob snapshot**, not live
   FS: invalidate/re-warm on `auklet.config.*` only. File add/remove under an

@@ -197,8 +197,7 @@ describe('monorepo package example', () => {
     const helpers = readDist(ui, 'es/shared/helpers.css');
 
     expect(esCss).toContain(`.${expectedClass}`);
-    expect(esCss).toContain('@import');
-    expect(esCss).toMatch(/helpers\.css/);
+    expect(esCss).toContain('#3730a3');
     expect(helpers).toContain('.helper-reset');
     expect(readDist(ui, 'es/shared/tokens.less')).toContain('@chip-accent');
     expect(readDist(ui, 'lib/shared/tokens.less')).toContain('@chip-accent');

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { AukletStyleHmr } from '#auklet/css/vite/hmr/styleHmr';
 import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
+import { toPackageStyleVirtualId } from '#auklet/css/vite/packageStyleVirtualId';
 import type { HotUpdateOptions, ViteDevServer } from 'vite';
 
 type MockModule = {
@@ -623,6 +624,59 @@ describe('AukletStyleHmr', () => {
     );
     expect(context.invalidateModule).not.toHaveBeenCalled();
     expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('returns direct package-style virtual modules for plain CSS imports', async () => {
+    const context = createHmrTestContext(graph);
+    const virtualId = toPackageStyleVirtualId(fixture.styleFile);
+    registerModule(context, virtualId);
+
+    const result = await handleCombinedUpdate(context);
+
+    expectReturnedModules(result, [virtualId]);
+    expect(context.send).not.toHaveBeenCalled();
+  });
+
+  test('returns filtered Vite native importers when auklet track/scan are empty', async () => {
+    const context = createHmrTestContext(graph);
+    const importerId = '/workspace/app/src/tokens-demo.less';
+    const importerModule = registerModule(context, importerId);
+    const partialModule = registerModule(context, fixture.lessFile);
+
+    const result = await context.hmr.handleCombinedHotUpdate(
+      {
+        ...createContext(context.server, fixture.lessFile),
+        modules: [partialModule, importerModule],
+      } as unknown as HotUpdateOptions,
+      context.server.environments.client.moduleGraph,
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as Array<{ id: string }>).map((item) => item.id)).toEqual([
+      importerModule.id,
+    ]);
+  });
+
+  test('updates tracked Vite Less importers without returning the partial', async () => {
+    const context = createHmrTestContext(graph);
+    const importerId = '/workspace/app/src/tokens-demo.less';
+    const importerModule = registerModule(context, importerId);
+    const partialModule = registerModule(context, fixture.lessFile);
+    // HMR tracks concrete entry .less (Less options.filename), not `${dir}/*`.
+    context.hmr.trackViteLessImport(fixture.lessFile, importerId);
+
+    const result = await context.hmr.handleCombinedHotUpdate(
+      {
+        ...createContext(context.server, fixture.lessFile),
+        modules: [partialModule],
+      } as unknown as HotUpdateOptions,
+      context.server.environments.client.moduleGraph,
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as Array<{ id: string }>).map((item) => item.id)).toEqual([
+      importerModule.id,
+    ]);
   });
 
   test('suppresses full reload during the package CSS HMR window', async () => {

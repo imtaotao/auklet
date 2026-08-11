@@ -32,16 +32,23 @@ import {
   type TrackedVirtualStyleFileKind,
 } from '#auklet/css/vite/hmr/shared';
 import type { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
+import {
+  collectViteLessImporterHotUpdateModules,
+  filterSafeViteNativeHotUpdateModules,
+  LessImportTracker,
+} from '#auklet/css/vite/hmr/viteLessImport';
+import { collectDirectPackageStyleHotUpdateModules } from '#auklet/css/vite/packageStyleVirtualId';
 import { createAukletLogger } from '#auklet/logger';
 import { normalizeFileKey } from '#auklet/utils';
 
 const FULL_RELOAD_SUPPRESS_MS = 100;
 
-// auklet dev HMR 分两条虚拟模块链路，都不能直接走 Vite 原生 CSS 文件 HMR：
+// auklet dev HMR 分三条链路，hotUpdate 在 handleCombinedHotUpdate 合并：
 //
-// 1. package CSS（全局样式图）—— packageStyle.ts
-//    - 浏览器 import 的是 auklet-css:* 虚拟 CSS，不是 packages/*/src/**/*.css
-//      源文件；真实 CSS 变化时 Vite 的 modules 可能为空。
+// 1. package CSS（全局样式图）—— packageStyle.ts + packageStyleVirtualId.ts
+//    - 浏览器 import 的是 auklet-css:* 或 \0auklet-package-style: 虚拟 CSS，
+//      不是 packages/*/src/**/*.css 源文件；真实 CSS 变化时 Vite 的 modules
+//      可能为空。
 //    - 虚拟 CSS 在 dev 里会被 Vite 转成自接受的 JS，更新样式需要重新执行
 //      updateStyle()；通过 hotUpdate 返回 ModuleNode，让 Vite propagateUpdate
 //      发送 self-accept js-update。
@@ -56,7 +63,17 @@ const FULL_RELOAD_SUPPRESS_MS = 100;
 //    - locals 仅在 class map 变化时进入 hotUpdate modules；不伪造
 //      importer.acceptedHmrDeps，沿 importer 链寻找真实 HMR boundary。
 //
-// 共享 dependency 追踪在 tracker.ts；HMR 更新统一走 handleCombinedHotUpdate。
+// 3. Vite-native Less @import（非 auklet 虚拟模块）—— viteLessImport.ts /
+//    viteLessPlugin.ts
+//    - Resolve：FileManager → tryResolveExternalLessFile /
+//      resolveExternalLessImport（与 production external Less 同一套：exports
+//      → published，workspace shared.output warm cache 时 remap 到 source）。
+//    - HMR：只 track 具体入口 `.less`（Less options.filename）；track 空时
+//      source-scan；再合并 filter 后的 Vite context.modules（safeNative，
+//      去掉正在改的 partial，避免 dead-end full-reload）。
+//
+// Virtual CSS ids: VirtualDependencyTracker.
+// Less entry importers: LessImportTracker（绝对 .less path）。
 
 const logger = createAukletLogger({ scope: 'css:vite' });
 
@@ -64,6 +81,7 @@ export class AukletStyleHmr {
   private suppressFullReloadUntil = 0;
   private readonly packageStyleTracker = new VirtualDependencyTracker();
   private readonly cssModuleTracker = new VirtualDependencyTracker();
+  private readonly viteLessImportTracker = new LessImportTracker();
   private readonly cssModuleAssetDependencies = new Map<
     string,
     Map<string, Array<string>>
@@ -91,6 +109,10 @@ export class AukletStyleHmr {
     kind: TrackedVirtualStyleFileKind = 'dependency',
   ) {
     this.packageStyleTracker.track(file, virtualId, kind);
+  }
+
+  trackViteLessImport(resolvedFile: string, importer: string) {
+    this.viteLessImportTracker.track(resolvedFile, importer);
   }
 
   replaceCssModuleDependency(
@@ -204,10 +226,21 @@ export class AukletStyleHmr {
       file: context.file,
       moduleGraph,
     });
-
-    if (!cssVirtualIds.length && !packagePlan) {
-      return undefined;
-    }
+    const directPackageStyleModules = collectDirectPackageStyleHotUpdateModules(
+      {
+        file: context.file,
+        moduleGraph,
+      },
+    );
+    const viteLessImporterModules = collectViteLessImporterHotUpdateModules({
+      tracker: this.viteLessImportTracker,
+      file: context.file,
+      moduleGraph,
+    });
+    const safeNativeModules = filterSafeViteNativeHotUpdateModules({
+      file: context.file,
+      modules: context.modules ?? [],
+    });
 
     const cssPlan = collectCssModuleHotUpdateModules({
       moduleGraph,
@@ -222,14 +255,38 @@ export class AukletStyleHmr {
         })
       : [];
 
-    const modules = dedupeModuleNodes([...cssPlan, ...packageModules]);
+    // Vite-native Less @import deps have no graph edge (addWatchFile only).
+    // Importers come from LessImportTracker / source-scan; never return the
+    // changed partial itself (dead-end → full-reload, then suppressed). Exit
+    // only after merge — safeNativeModules can be the sole update path.
+    const modules = dedupeModuleNodes([
+      ...cssPlan,
+      ...packageModules,
+      ...directPackageStyleModules,
+      ...viteLessImporterModules,
+      ...safeNativeModules,
+    ]);
     if (!modules.length) {
       return undefined;
     }
 
     this.suppressFullReload();
+    const packageCount =
+      packageModules.length + directPackageStyleModules.length;
+    const c = logger.colors;
+    const count = (label: string, value: number) =>
+      `${c.dim(`${label}=`)}${
+        value > 0 ? c.green(String(value)) : c.dim(String(value))
+      }`;
     logger.info(
-      `style hmr ${context.file} cssModules=${cssPlan.length} package=${packageModules.length} modules=${modules.length}`,
+      [
+        c.cyan('style hmr'),
+        c.yellow(context.file),
+        count('cssModules', cssPlan.length),
+        count('package', packageCount),
+        count('lessImporters', viteLessImporterModules.length),
+        count('modules', modules.length),
+      ].join(' '),
     );
     return modules;
   }
@@ -257,6 +314,7 @@ export class AukletStyleHmr {
   pruneStaleVirtualDependencies(moduleGraph: ModuleGraphLookup) {
     this.packageStyleTracker.pruneStale(moduleGraph);
     this.cssModuleTracker.pruneStale(moduleGraph);
+    this.viteLessImportTracker.pruneStale(moduleGraph);
   }
 
   scheduleStaleVirtualDependencyPrune(moduleGraph: ModuleGraphLookup) {
