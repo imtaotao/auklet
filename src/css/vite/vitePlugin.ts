@@ -1,12 +1,30 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import type {
   DevEnvironment,
   HotUpdateOptions,
   Plugin,
   ViteDevServer,
 } from 'vite';
+import {
+  loadPackageStyleCss,
+  resolvePlainPackageStyleFile,
+} from '#auklet/css/core/packageStyleSource';
+import {
+  findPackageRootForFile,
+  isExternalPackageSpecifier,
+} from '#auklet/css/core/resolvers/externalLess';
+import { isCssModuleSpecifier } from '#auklet/css/core/resolvers/externalPackageStyle';
 import { createCssModuleLocalsViteLoadCode } from '#auklet/css/modules/compileCssModule';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
+import {
+  resolveCssModuleImport,
+  stripCssModuleQuery,
+} from '#auklet/css/modules/resolveCssModuleImport';
+import {
+  invalidateWorkspaceSharedOutputResolveCache,
+  resolveWorkspaceSharedOutputModule,
+} from '#auklet/css/modules/resolveWorkspaceSharedOutputModule';
 import { createCssModuleDevStyleSource } from '#auklet/css/vite/cssModuleStyleSource';
 import {
   cssModuleFileFromVirtualId,
@@ -16,10 +34,6 @@ import {
   toCssModuleVirtualId,
 } from '#auklet/css/vite/cssModuleVirtualId';
 import { invalidateModuleInEnvironments } from '#auklet/css/vite/hmr/propagate';
-import {
-  resolveCssModuleImport,
-  stripCssModuleQuery,
-} from '#auklet/css/modules/resolveCssModuleImport';
 import type { ModuleStyleGraphOptions } from '#auklet/css/vite/moduleGraph/types';
 import { AukletStyleHmr } from '#auklet/css/vite/hmr/styleHmr';
 import { ModuleStyleGraph } from '#auklet/css/vite/moduleGraph/graph';
@@ -29,8 +43,17 @@ import { findWorkspaceRoot } from '#auklet/workspace/root';
 const VIRTUAL_ID_PREFIX = 'virtual:auklet-css:';
 const RESOLVED_VIRTUAL_ID_PREFIX = '\0auklet-css:';
 const RESOLVED_CSS_MODULE_PREFIX = '\0auklet-css-module:';
+const PACKAGE_STYLE_VIRTUAL_PREFIX = '\0auklet-package-style:';
 const BROWSER_VIRTUAL_ID_PREFIX = 'auklet-css:';
 const logger = createAukletLogger({ scope: 'css:vite' });
+
+const toPackageStyleVirtualId = (file: string) =>
+  `${PACKAGE_STYLE_VIRTUAL_PREFIX}${path.resolve(file)}`;
+
+const fromPackageStyleVirtualId = (id: string) => {
+  if (!id.startsWith(PACKAGE_STYLE_VIRTUAL_PREFIX)) return null;
+  return path.resolve(id.slice(PACKAGE_STYLE_VIRTUAL_PREFIX.length));
+};
 
 const fromCssModuleVirtualId = cssModuleFileFromVirtualId;
 
@@ -176,7 +199,7 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
     resolveId: {
       order: 'pre' as const,
-      handler(source: string, importer?: string) {
+      async handler(source: string, importer?: string) {
         const graph = getGraph();
         const cleanId = stripCssModuleQuery(source);
 
@@ -187,9 +210,35 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
           return cleanId;
         }
 
+        const importerPackageRoot = importer
+          ? (graph.resolvePackageRootForFile(importer) ??
+            findPackageRootForFile(importer))
+          : null;
+
+        // Workspace shared.output: resolve exports→shim to producer source so
+        // existing CSS Modules HMR applies. Installed packages keep the shim.
+        // Gate first — resolveId is hot; skip non package Modules imports.
+        if (
+          importerPackageRoot &&
+          isExternalPackageSpecifier(cleanId) &&
+          isCssModuleSpecifier(cleanId)
+        ) {
+          const sharedOutputSource = await resolveWorkspaceSharedOutputModule({
+            source: cleanId,
+            importerPackageRoot,
+          });
+          if (sharedOutputSource) {
+            return {
+              id: toCssModuleVirtualId(sharedOutputSource),
+              moduleSideEffects: true,
+            };
+          }
+        }
+
         const cssModuleFile = resolveCssModuleImport({
           source,
           importer,
+          importerPackageRoot: importerPackageRoot ?? undefined,
           parseModuleFileFromId: fromCssModuleVirtualId,
         });
         if (cssModuleFile) {
@@ -197,6 +246,23 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
             id: toCssModuleVirtualId(cssModuleFile),
             moduleSideEffects: true,
           };
+        }
+
+        if (importerPackageRoot) {
+          try {
+            const packageStyleFile = resolvePlainPackageStyleFile(
+              cleanId,
+              importerPackageRoot,
+            );
+            if (packageStyleFile) {
+              return {
+                id: toPackageStyleVirtualId(packageStyleFile),
+                moduleSideEffects: true,
+              };
+            }
+          } catch {
+            // Fall through for package virtual CSS entries and Vite-native CSS.
+          }
         }
 
         const resolvedVirtualId = toResolvedVirtualId(cleanId);
@@ -234,6 +300,15 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
           getGraph(),
           environmentName,
         );
+      }
+
+      const packageStyleFile = fromPackageStyleVirtualId(id);
+      if (packageStyleFile) {
+        this.addWatchFile?.(packageStyleFile);
+        return {
+          code: await loadPackageStyleCss(packageStyleFile),
+          moduleType: 'css' as const,
+        };
       }
 
       if (!id.startsWith(RESOLVED_VIRTUAL_ID_PREFIX)) return null;
@@ -351,6 +426,11 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
           );
 
           if (graph.isStyleConfigFile(file)) {
+            invalidateWorkspaceSharedOutputResolveCache(
+              graph.resolvePackageRootForFile(file) ??
+                findPackageRootForFile(file) ??
+                undefined,
+            );
             reloadStyleGraph(file);
           } else if (graph.isSourceModuleFile(file)) {
             await hmr.handleSourceModuleChange(server, file);

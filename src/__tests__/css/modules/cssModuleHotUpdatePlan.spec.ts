@@ -112,7 +112,8 @@ describe('planCssModuleHotUpdate locals/style split', () => {
       toCssModuleStyleVirtualId(file),
     ]);
 
-    await compileCache.compile(file, { force: true });
+    const sourceRoot = project.resolve('src');
+    await compileCache.compile(file, { force: true, sourceRoot });
     project.writeFile('src/tokens.less', ':root { --tag-color: blue; }');
 
     const virtualIds = await planCssModuleHotUpdate({
@@ -120,7 +121,7 @@ describe('planCssModuleHotUpdate locals/style split', () => {
       file: partial,
       moduleGraph,
       compileCache,
-      resolveSourceRoot: async () => project.resolve('src'),
+      resolveSourceRoot: async () => sourceRoot,
     });
 
     expect(virtualIds).toEqual([toCssModuleStyleVirtualId(file)]);
@@ -141,7 +142,8 @@ describe('planCssModuleHotUpdate locals/style split', () => {
       toCssModuleStyleVirtualId(file),
     ]);
 
-    await compileCache.compile(file, { force: true });
+    const sourceRoot = project.resolve('src');
+    await compileCache.compile(file, { force: true, sourceRoot });
     project.writeFile('src/tokens.less', ':root { --tag-color: blue; }');
 
     const read = vi.fn(async () => '/* stale entry */ .tag { color: pink; }');
@@ -150,7 +152,7 @@ describe('planCssModuleHotUpdate locals/style split', () => {
       file: partial,
       moduleGraph,
       compileCache,
-      resolveSourceRoot: async () => project.resolve('src'),
+      resolveSourceRoot: async () => sourceRoot,
       read,
     });
 

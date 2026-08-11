@@ -1,6 +1,6 @@
 {
   "name": "auklet",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "author": "chentao.arthur",
   "packageManager": "pnpm@10.27.0",
@@ -66,12 +66,14 @@
     "tsdown"
   ],
   "dependencies": {
+    "@tsdown/css": "catalog:",
     "aidly": "catalog:",
     "briefing": "catalog:",
     "cac": "catalog:",
     "chokidar": "catalog:",
     "conditional-export": "catalog:",
     "execa": "catalog:",
+    "fast-glob": "catalog:",
     "less": "catalog:",
     "minimist": "catalog:",
     "picocolors": "catalog:",
@@ -86,9 +88,9 @@
   },
   "devDependencies": {
     "@types/less": "catalog:",
-    "@types/postcss-less": "catalog:",
     "@types/minimist": "catalog:",
     "@types/node": "catalog:",
+    "@types/postcss-less": "catalog:",
     "@types/prettier": "catalog:",
     "@types/semver": "catalog:",
     "@vitest/coverage-v8": "catalog:",

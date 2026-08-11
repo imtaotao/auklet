@@ -1,10 +1,12 @@
-import { isArray, isString } from 'aidly';
+import { isArray, isPlainObject, isString } from 'aidly';
 
 import type {
   AukletConfig,
   NormalizedAukletConfig,
+  NormalizedStyleShared,
   StyleDependencyGroup,
   StyleOptions,
+  StyleSharedOptions,
 } from '#auklet/types';
 
 export const aukletConfigFiles = ['auklet.config.js', 'auklet.config.mjs'];
@@ -25,7 +27,10 @@ export const aukletDefaultOptions = {
   },
   styles: {
     themes: {},
-    shared: [],
+    shared: {
+      inner: [],
+      output: [],
+    },
     dependencies: {},
   },
 } satisfies Required<
@@ -35,29 +40,56 @@ export const aukletDefaultOptions = {
   >
 >;
 
+const SHARED_OBJECT_ERROR =
+  '[config] styles.shared must be an object: { inner?, output? }.';
+
 const normalizeStyleDependency = (dependency: StyleDependencyGroup) => ({
   entry: dependency.entry,
   themes: dependency.themes,
   components: dependency.components,
 });
 
-const normalizeStyleShared = (shared: StyleOptions['shared']) => {
-  if (isArray(shared)) {
-    for (const pattern of shared) {
-      if (!isString(pattern)) {
-        throw new Error(
-          '[config] styles.shared must be a string or an array of strings.',
-        );
-      }
-    }
-    return shared;
-  }
-  if (shared && !isString(shared)) {
+const normalizeSharedPatterns = (
+  patterns: string | Array<string> | undefined,
+  field: 'inner' | 'output',
+) => {
+  if (patterns == null) return [];
+  if (isString(patterns)) return [patterns];
+  if (!isArray(patterns)) {
     throw new Error(
-      '[config] styles.shared must be a string or an array of strings.',
+      `[config] styles.shared.${field} must be a string or an array of strings.`,
     );
   }
-  return shared ? [shared] : [];
+  for (const pattern of patterns) {
+    if (!isString(pattern)) {
+      throw new Error(
+        `[config] styles.shared.${field} must be a string or an array of strings.`,
+      );
+    }
+  }
+  return patterns;
+};
+
+const normalizeStyleShared = (
+  shared: StyleOptions['shared'],
+): NormalizedStyleShared => {
+  if (shared == null) {
+    return { inner: [], output: [] };
+  }
+  if (!isPlainObject(shared)) {
+    throw new Error(SHARED_OBJECT_ERROR);
+  }
+  const objectShared = shared as StyleSharedOptions;
+  const allowedKeys = new Set(['inner', 'output']);
+  for (const key of Object.keys(objectShared)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(SHARED_OBJECT_ERROR);
+    }
+  }
+  return {
+    inner: normalizeSharedPatterns(objectShared.inner, 'inner'),
+    output: normalizeSharedPatterns(objectShared.output, 'output'),
+  };
 };
 
 const normalizeStylePrefix = (prefix: StyleOptions['prefix']) => {

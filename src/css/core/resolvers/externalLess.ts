@@ -192,6 +192,7 @@ export const resolveExternalLessImport = (
       return null;
     }
   })();
+
   if (!parsed) {
     throw new ExternalLessResolutionError(
       'invalid-specifier',

@@ -1,6 +1,7 @@
 packages:
   - 'examples/*'
   - 'examples/*/packages/*'
+  - 'examples/*/app'
 
 catalog:
   '@types/less': 3.0.8
@@ -10,6 +11,7 @@ catalog:
   '@types/minimist': 1.2.5
   '@types/prettier': 3.0.0
   '@vitest/coverage-v8': 4.1.7
+  '@tsdown/css': 0.22.14
   cac: 7.0.0
   less: 4.8.1
   aidly: 1.37.0
@@ -21,6 +23,7 @@ catalog:
   postcss-modules: 9.0.1
   conditional-export: 1.1.0
   execa: 9.6.1
+  fast-glob: 3.3.3
   husky: 9.1.7
   picocolors: 1.1.1
   lint-staged: 17.0.5

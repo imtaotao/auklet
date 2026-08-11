@@ -7,14 +7,16 @@ import {
   type LessSourceImport,
 } from '#auklet/css/core/lessImportGraph';
 import {
-  isExternalPackageSpecifier,
-  resolveImporterPackageRoot,
-} from '#auklet/css/core/resolvers/externalLess';
-import {
   createExternalLessDependencyGraph,
   resolveExternalLessImportAcrossGraphs,
   type ExternalLessDependencyGraph,
 } from '#auklet/css/core/externalLessGraph';
+import {
+  ExternalLessResolutionError,
+  isExternalPackageSpecifier,
+  resolveImporterPackageRoot,
+} from '#auklet/css/core/resolvers/externalLess';
+import { resolveExternalPackageStyleImport } from '#auklet/css/core/resolvers/externalPackageStyle';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
 import { resolveCssModuleStyleImport } from '#auklet/css/modules/resolveCssModuleStyleImport';
 import { normalizeFileKey } from '#auklet/utils';
@@ -131,50 +133,103 @@ export function createCssModulePartialImportGraph(
       const external = isExternalPackageSpecifier(parsed.specifier);
       if (external) {
         hasExternalPackageImports = true;
-      }
-      const externalGraph = external
-        ? (() => {
-            if (extension !== '.less') {
-              throw new Error(
-                `[css] CSS files must not import external Less: ${parsed.specifier} from ${normalized}`,
-              );
-            }
-            const graph = createExternalLessDependencyGraph({
-              import: parsed,
-              importerFile: normalized,
-              importerPackageRoot: packageRoot,
-            });
-            externalGraphs.push(graph);
-            for (const packageJsonFile of graph.packageJsonFiles) {
-              packageJsonFiles.add(packageJsonFile);
-            }
-            for (const absentFile of graph.absentDependencyFiles) {
-              absentDependencyFiles.add(absentFile);
-            }
-            for (const externalNode of graph.nodes.values()) {
-              const externalKey = normalizeFileKey(externalNode.file);
-              if (nodes.has(externalKey)) continue;
-              nodes.set(externalKey, {
-                file: externalNode.file,
-                source: externalNode.source,
-                extension: '.less',
-                imports: externalNode.imports,
-                packageRoot: externalNode.packageRoot,
-                externalReferenceContext: true,
-              });
-            }
-            return graph;
-          })()
-        : null;
-      if (external && !externalGraph?.entryFile) return [];
-      const importedFile = external
-        ? externalGraph!.entryFile!
-        : resolveCssModuleStyleImport(parsed.specifier, normalized, {
-            sourceRoot: externalReferenceContext
-              ? packageRoot
-              : options.sourceRoot,
-            allowMissing: hasLessImportOption(parsed.options, 'optional'),
+        const isReference = hasLessImportOption(parsed.options, 'reference');
+        if (isReference) {
+          if (extension !== '.less') {
+            throw new Error(
+              `[css] CSS files must not import external Less: ${parsed.specifier} from ${normalized}`,
+            );
+          }
+          const graph = createExternalLessDependencyGraph({
+            import: parsed,
+            importerFile: normalized,
+            importerPackageRoot: packageRoot,
           });
+          externalGraphs.push(graph);
+          for (const packageJsonFile of graph.packageJsonFiles) {
+            packageJsonFiles.add(packageJsonFile);
+          }
+          for (const absentFile of graph.absentDependencyFiles) {
+            absentDependencyFiles.add(absentFile);
+          }
+          for (const externalNode of graph.nodes.values()) {
+            const externalKey = normalizeFileKey(externalNode.file);
+            if (nodes.has(externalKey)) continue;
+            nodes.set(externalKey, {
+              file: externalNode.file,
+              source: externalNode.source,
+              extension: '.less',
+              imports: externalNode.imports,
+              packageRoot: externalNode.packageRoot,
+              externalReferenceContext: true,
+            });
+          }
+          if (!graph.entryFile) return [];
+          return [
+            {
+              import: parsed,
+              importedFile: graph.entryFile,
+              external: true,
+              packageRoot:
+                graph.nodes.get(normalizeFileKey(graph.entryFile))
+                  ?.packageRoot ?? packageRoot,
+            },
+          ];
+        }
+
+        // Non-reference package imports may only become plain CSS sibling
+        // assets. Cross-package .less must use @import (reference) (same as
+        // global styles); cross-package CSS Modules stay on the JS import path.
+        try {
+          const resolved = resolveExternalPackageStyleImport(
+            parsed.specifier,
+            packageRoot,
+            {
+              extensions: ['.css'],
+            },
+          );
+          packageJsonFiles.add(resolved.packageJsonFile);
+          if (isCssModuleFile(resolved.file)) {
+            throw new Error(
+              `[css] CSS Modules files must not import other CSS Modules files: ${parsed.specifier} from ${normalized}`,
+            );
+          }
+          if (path.extname(resolved.file).toLowerCase() !== '.css') {
+            throw new Error(
+              `[css] CSS Modules partial imports must be .css files: ${parsed.specifier} from ${normalized}`,
+            );
+          }
+          return [
+            {
+              import: parsed,
+              importedFile: resolved.file,
+              external: false,
+              packageRoot: resolved.packageRoot,
+            },
+          ];
+        } catch (error) {
+          if (
+            error instanceof ExternalLessResolutionError &&
+            extension === '.less'
+          ) {
+            throw new Error(
+              `[css] external Less imports must use (reference): ${parsed.specifier} from ${normalized}. Use @import (reference) for tokens/mixins, import plain package CSS as a sibling, or import CSS Modules from JS.`,
+            );
+          }
+          throw error;
+        }
+      }
+
+      const importedFile = resolveCssModuleStyleImport(
+        parsed.specifier,
+        normalized,
+        {
+          sourceRoot: externalReferenceContext
+            ? packageRoot
+            : options.sourceRoot,
+          allowMissing: hasLessImportOption(parsed.options, 'optional'),
+        },
+      );
       if (!importedFile) return [];
 
       if (isCssModuleFile(importedFile)) {
@@ -200,10 +255,8 @@ export function createCssModulePartialImportGraph(
         {
           import: parsed,
           importedFile,
-          external,
-          packageRoot:
-            externalGraph?.nodes.get(normalizeFileKey(importedFile))
-              ?.packageRoot ?? packageRoot,
+          external: false,
+          packageRoot,
         },
       ];
     });
@@ -213,7 +266,7 @@ export function createCssModulePartialImportGraph(
       visit(
         edge.importedFile,
         edge.packageRoot,
-        externalReferenceContext || edge.external,
+        externalReferenceContext || edge.packageRoot !== consumerPackageRoot,
       );
     }
 

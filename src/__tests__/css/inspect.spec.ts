@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   createCssInspectModel,
   resolveInspectCssOptions,
+  runInspectCssCli,
 } from '#auklet/css/inspect';
 import {
   createStyleProject,
@@ -65,7 +66,9 @@ describe('createCssInspectModel', () => {
       output: fixture.outputDir,
       modules: true,
       themes: 2,
+      sharedOutputEntries: 0,
     });
+    expect(model.sharedOutputEntries).toEqual([]);
     expect(model.packageEntries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -182,6 +185,107 @@ describe('createCssInspectModel', () => {
       '@scope/ui/components/Callout.css',
       '../../Button/style/index.css',
     ]);
+  });
+});
+
+describe('runInspectCssCli shared.output checks', () => {
+  let project: VirtualProject;
+
+  beforeEach(() => {
+    project = createVirtualProject('auklet-css-inspect-shared-output-');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    project.cleanup();
+  });
+
+  test('exits 1 when shared.output export or dist checks fail', async () => {
+    project.writePackageJson({
+      name: '@scope/ui',
+      type: 'module',
+      exports: {
+        '.': './dist/es/index.js',
+      },
+    });
+    project.writeAukletConfig(`
+      export const config = {
+        source: 'src',
+        output: 'dist',
+        modules: true,
+        styles: {
+          shared: {
+            output: './src/shared/**/*.module.css',
+          },
+        },
+      };
+    `);
+    project.writeFile('src/shared/chip.module.css', '.chip { color: red; }\n');
+    vi.spyOn(process, 'cwd').mockReturnValue(project.root);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await expect(runInspectCssCli([])).resolves.toBe(1);
+
+    const model = await createCssInspectModel({
+      packageRoot: project.root,
+      aukletConfig: {
+        source: 'src',
+        output: 'dist',
+        modules: true,
+        styles: {
+          shared: {
+            output: './src/shared/**/*.module.css',
+          },
+        },
+      },
+    });
+    expect(model.sharedOutputEntries).toEqual([
+      expect.objectContaining({
+        source: 'shared/chip.module.css',
+        exportOk: false,
+        distOk: false,
+      }),
+    ]);
+  });
+
+  test('exits 0 when shared.output export and dist checks pass', async () => {
+    project.writePackageJson({
+      name: '@scope/ui',
+      type: 'module',
+      exports: {
+        './shared/chip.module.css': {
+          import: './dist/es/shared/chip.module.css.js',
+          default: './dist/es/shared/chip.module.css.js',
+        },
+      },
+    });
+    project.writeAukletConfig(`
+      export const config = {
+        source: 'src',
+        output: 'dist',
+        modules: true,
+        styles: {
+          shared: {
+            output: './src/shared/**/*.module.css',
+          },
+        },
+      };
+    `);
+    project.writeFile('src/shared/chip.module.css', '.chip { color: red; }\n');
+    project.writeFile(
+      'dist/es/shared/chip.module.css.js',
+      'import "./chip.scoped.css";\nexport default {"chip":"chip_x"};\n',
+    );
+    project.writeFile('dist/es/shared/chip.scoped.css', '.chip_x {}\n');
+    project.writeFile(
+      'dist/lib/shared/chip.module.css.js',
+      'require("./chip.scoped.css");\nexports.default = {"chip":"chip_x"};\n',
+    );
+    project.writeFile('dist/lib/shared/chip.scoped.css', '.chip_x {}\n');
+    vi.spyOn(process, 'cwd').mockReturnValue(project.root);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await expect(runInspectCssCli([])).resolves.toBe(0);
   });
 });
 

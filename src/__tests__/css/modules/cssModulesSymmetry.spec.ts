@@ -122,7 +122,11 @@ describe('CSS Modules dev and production symmetry', () => {
   test('Tag.module.less keeps dev references aligned while esm and cjs production stay symmetric', async () => {
     const file = writeTagLessFixture(project);
     const sourceRoot = project.resolve('src');
-    const protocol = await compileCssModule({ file });
+    const protocol = await compileCssModule({
+      file,
+      packageRoot: project.root,
+      sourceRoot,
+    });
     const plugin = aukletStylePlugin({ root: project.root });
     const { localsCode, styleCode } = await loadCssModuleDevPair(
       plugin,
@@ -229,7 +233,11 @@ describe('CSS Modules dev and production symmetry', () => {
   test('Button.module.css keeps dev inject and esm/cjs production css symmetric', async () => {
     const file = writeButtonCssFixture(project);
     const sourceRoot = project.resolve('src');
-    const protocol = await compileCssModule({ file });
+    const protocol = await compileCssModule({
+      file,
+      packageRoot: project.root,
+      sourceRoot,
+    });
     const plugin = aukletStylePlugin({ root: project.root });
     const { localsCode, styleCode } = await loadCssModuleDevPair(
       plugin,

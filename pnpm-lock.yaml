@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@tsdown/css':
+      specifier: 0.22.14
+      version: 0.22.14
     '@types/less':
       specifier: 3.0.8
       version: 3.0.8
@@ -48,6 +51,9 @@ catalogs:
     execa:
       specifier: 9.6.1
       version: 9.6.1
+    fast-glob:
+      specifier: 3.3.3
+      version: 3.3.3
     husky:
       specifier: 9.1.7
       version: 9.1.7
@@ -101,6 +107,9 @@ importers:
 
   .:
     dependencies:
+      '@tsdown/css':
+        specifier: 'catalog:'
+        version: 0.22.14(postcss-modules@9.0.1(postcss@8.5.25))(postcss@8.5.25)(tsdown@0.22.14)(tsx@4.22.3)(yaml@2.9.0)
       aidly:
         specifier: 'catalog:'
         version: 1.37.0
@@ -119,6 +128,9 @@ importers:
       execa:
         specifier: 'catalog:'
         version: 9.6.1
+      fast-glob:
+        specifier: 'catalog:'
+        version: 3.3.3
       less:
         specifier: 'catalog:'
         version: 4.8.1
@@ -148,7 +160,7 @@ importers:
         version: 7.8.1
       tsdown:
         specifier: 'catalog:'
-        version: 0.22.14(tsx@4.22.3)(typescript@6.0.3)(unrun@0.3.0)
+        version: 0.22.14(@tsdown/css@0.22.14)(tsx@4.22.3)(typescript@6.0.3)(unrun@0.3.0)
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -223,6 +235,22 @@ importers:
       cross-env:
         specifier: 'catalog:'
         version: 10.1.0
+
+  examples/monorepo-package/app:
+    dependencies:
+      '@demo/ui':
+        specifier: workspace:*
+        version: link:../packages/ui
+    devDependencies:
+      auklet:
+        specifier: link:../../..
+        version: link:../../..
+      less:
+        specifier: 'catalog:'
+        version: 4.8.1
+      vite:
+        specifier: 'catalog:'
+        version: 8.2.0(@types/node@22.17.0)(esbuild@0.28.0)(less@4.8.1)(tsx@4.22.3)(yaml@2.9.0)
 
   examples/monorepo-package/packages/dashboard:
     dependencies:
@@ -639,6 +667,28 @@ packages:
   '@szmarczak/http-timer@4.0.6':
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
     engines: {node: '>=10'}
+
+  '@tsdown/css@0.22.14':
+    resolution: {integrity: sha512-0NpbgqfhfjaAoLdY3DxjrMo08vKFEtvlybCS42Gtolx8OPoKUdZZDyls0qgNEqea0c7XGjlF0NIE1tIxgU8RqA==}
+    engines: {node: ^22.18.0 || >=24.11.0}
+    peerDependencies:
+      postcss: ^8.4.0
+      postcss-import: ^16.0.0
+      postcss-modules: ^6.0.0
+      sass: '*'
+      sass-embedded: '*'
+      tsdown: 0.22.14
+    peerDependenciesMeta:
+      postcss:
+        optional: true
+      postcss-import:
+        optional: true
+      postcss-modules:
+        optional: true
+      sass:
+        optional: true
+      sass-embedded:
+        optional: true
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -1819,6 +1869,10 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
+  lilconfig@3.1.3:
+    resolution: {integrity: sha512-/vlFKAoH5Cgt3Ie+JLhRbwOsCQePABiU3tJ1egGvyQ+33R/vcwM2Zl2QR/LzjsBeItPt3oSVXapn+m4nQDvpzw==}
+    engines: {node: '>=14'}
+
   lint-staged@17.0.5:
     resolution: {integrity: sha512-d12yC+/e8RhBjZtaxZn71FyrgU/P5e+uAPifhCLwdosQZP/zamSdKRWDC30ocVIbzDKiFG1McHc/LUgB92GIPw==}
     engines: {node: '>=22.22.1'}
@@ -2178,6 +2232,24 @@ packages:
     engines: {node: '>=12'}
     peerDependencies:
       postcss: ^8.3.5
+
+  postcss-load-config@6.0.1:
+    resolution: {integrity: sha512-oPtTM4oerL+UXmx+93ytZVN82RrlY/wPUV8IeDxFrzIjXOLF1pN+EmKPLbubvKHT2HC20xXsCAH2Z+CKV6Oz/g==}
+    engines: {node: '>= 18'}
+    peerDependencies:
+      jiti: '>=1.21.0'
+      postcss: '>=8.0.9'
+      tsx: ^4.8.1
+      yaml: ^2.4.2
+    peerDependenciesMeta:
+      jiti:
+        optional: true
+      postcss:
+        optional: true
+      tsx:
+        optional: true
+      yaml:
+        optional: true
 
   postcss-modules-extract-imports@3.1.0:
     resolution: {integrity: sha512-k3kNe0aNFQDAZGbin48pL2VNidTF0w4/eASDsxlyspobzU3wZQLOGj7L9gfRe0Jo9/4uud09DsjFNH7winGv8Q==}
@@ -3174,6 +3246,20 @@ snapshots:
   '@szmarczak/http-timer@4.0.6':
     dependencies:
       defer-to-connect: 2.0.1
+
+  '@tsdown/css@0.22.14(postcss-modules@9.0.1(postcss@8.5.25))(postcss@8.5.25)(tsdown@0.22.14)(tsx@4.22.3)(yaml@2.9.0)':
+    dependencies:
+      lightningcss: 1.33.0
+      postcss-load-config: 6.0.1(postcss@8.5.25)(tsx@4.22.3)(yaml@2.9.0)
+      rolldown: 1.2.3
+      tsdown: 0.22.14(@tsdown/css@0.22.14)(tsx@4.22.3)(typescript@6.0.3)(unrun@0.3.0)
+    optionalDependencies:
+      postcss: 8.5.25
+      postcss-modules: 9.0.1(postcss@8.5.25)
+    transitivePeerDependencies:
+      - jiti
+      - tsx
+      - yaml
 
   '@types/chai@5.2.3':
     dependencies:
@@ -4450,6 +4536,8 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
 
+  lilconfig@3.1.3: {}
+
   lint-staged@17.0.5:
     dependencies:
       listr2: 10.2.1
@@ -4765,6 +4853,14 @@ snapshots:
   postcss-less@6.0.0(postcss@8.5.25):
     dependencies:
       postcss: 8.5.25
+
+  postcss-load-config@6.0.1(postcss@8.5.25)(tsx@4.22.3)(yaml@2.9.0):
+    dependencies:
+      lilconfig: 3.1.3
+    optionalDependencies:
+      postcss: 8.5.25
+      tsx: 4.22.3
+      yaml: 2.9.0
 
   postcss-modules-extract-imports@3.1.0(postcss@8.5.25):
     dependencies:
@@ -5268,7 +5364,7 @@ snapshots:
     dependencies:
       utf8-byte-length: 1.0.5
 
-  tsdown@0.22.14(tsx@4.22.3)(typescript@6.0.3)(unrun@0.3.0):
+  tsdown@0.22.14(@tsdown/css@0.22.14)(tsx@4.22.3)(typescript@6.0.3)(unrun@0.3.0):
     dependencies:
       ansis: 4.3.1
       cac: 7.0.0
@@ -5286,6 +5382,7 @@ snapshots:
       unconfig-core: 7.5.0
       verkit: 0.3.2
     optionalDependencies:
+      '@tsdown/css': 0.22.14(postcss-modules@9.0.1(postcss@8.5.25))(postcss@8.5.25)(tsdown@0.22.14)(tsx@4.22.3)(yaml@2.9.0)
       tsx: 4.22.3
       typescript: 6.0.3
       unrun: 0.3.0

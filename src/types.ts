@@ -9,11 +9,24 @@ export type StyleDependencyGroup = {
   components?: string | Array<string>;
 };
 
+export type StyleSharedOptions = {
+  // 当前包内可被组件样式受控复用的共享样式片段（同包 @import 白名单）。
+  inner?: string | Array<string>;
+  // 跨包发布的 CSS Modules glob；匹配文件经 compileCssModule 写入 dist/es|lib
+  //（*.scoped.css + JS locals shim），不是源文件镜像拷贝。
+  output?: string | Array<string>;
+};
+
+export type NormalizedStyleShared = {
+  inner: Array<string>;
+  output: Array<string>;
+};
+
 export type StyleOptions = {
   // 当前包主题样式入口，key 是主题名，value 是相对于当前包根目录的样式文件路径。
   themes?: Record<string, string>;
-  // 当前包内可被组件样式受控复用的共享样式片段。
-  shared?: string | Array<string>;
+  // 同包共享片段与跨包发布 Modules：{ inner?, output? }。
+  shared?: StyleSharedOptions;
   // 本包自有样式选择器前缀，用于子应用隔离；例如 '#subapp'。
   prefix?: string;
   // 外部包样式依赖配置，key 是包名前缀，value 是该包的样式依赖规则。
@@ -36,7 +49,7 @@ export interface NormalizedAukletConfig {
   modules: boolean;
   styles: {
     themes: Record<string, string>;
-    shared: Array<string>;
+    shared: NormalizedStyleShared;
     prefix?: string;
     dependencies: Record<string, NormalizedStyleDependencyGroup>;
   };

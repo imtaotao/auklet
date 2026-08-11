@@ -561,7 +561,7 @@ describe('ModuleStyleGraph entries', () => {
           output: 'dist',
           modules: true,
           styles: {
-            shared: './src/internal/syntaxHighlight.css',
+            shared: { inner: './src/internal/syntaxHighlight.css' },
           },
         };
       `,

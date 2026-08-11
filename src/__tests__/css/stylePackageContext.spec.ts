@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { normalizeAukletConfig } from '#auklet/config';
 import { moduleStyleBuildConfig } from '#auklet/css/config';
@@ -110,6 +111,70 @@ describe('StylePackageContext style file discovery', () => {
         styleFile.endsWith('Card/tokens.css'),
       ),
     ).toBe(true);
+  });
+
+  test('excludes styles.shared.output trees from global styleFiles', () => {
+    project.writeFile('src/components/Button/index.css', '.button {}');
+    project.writeFile(
+      'src/shared/chip.module.less',
+      '@import "./helpers.css";\n.chip {}',
+    );
+    project.writeFile('src/shared/helpers.css', '.helper {}');
+
+    const packageContext = new StylePackageContext({
+      config: moduleStyleBuildConfig,
+      context: {
+        packageRoot: project.root,
+        sourceDir: 'src',
+        outputDir: 'dist',
+      },
+      normalizedConfig: normalizeAukletConfig({
+        source: 'src',
+        output: 'dist',
+        modules: true,
+        styles: {
+          shared: {
+            output: './src/shared/**/*.module.{less,css}',
+          },
+        },
+      }),
+    });
+
+    expect(packageContext.styleFiles).toEqual([
+      project.resolve('src/components/Button/index.css'),
+    ]);
+    expect(
+      packageContext.styleFiles.some((styleFile) =>
+        styleFile.includes(`${path.sep}shared${path.sep}`),
+      ),
+    ).toBe(false);
+  });
+
+  test('rejects styles.shared.output globs whose exclude root is the source root', () => {
+    project.writeFile('src/components/Button/index.css', '.button {}');
+    project.writeFile('src/shared/chip.module.less', '.chip {}');
+
+    expect(
+      () =>
+        new StylePackageContext({
+          config: moduleStyleBuildConfig,
+          context: {
+            packageRoot: project.root,
+            sourceDir: 'src',
+            outputDir: 'dist',
+          },
+          normalizedConfig: normalizeAukletConfig({
+            source: 'src',
+            output: 'dist',
+            modules: true,
+            styles: {
+              shared: {
+                output: './src/**/*.module.{less,css}',
+              },
+            },
+          }),
+        }),
+    ).toThrow('styles.shared.output glob is too wide');
   });
 
   test('keeps css partials referenced only by CSS Modules in styleFiles', async () => {

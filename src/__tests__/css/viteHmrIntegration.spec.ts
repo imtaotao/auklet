@@ -44,30 +44,51 @@ const triggerViteHotUpdate = async (
   file: string,
   changeFile: () => void,
 ) => {
-  await server.watcher.unwatch(file);
+  // Vite watches the project root directory. `unwatch(file)` does not stop
+  // parent-dir Chokidar events, so write+manual emit can double-fire HMR
+  // (flaky eval counts / CI timeouts). Detach listeners for the write, then
+  // restore and emit exactly once.
+  const watcher = server.watcher;
+  const changeListeners = watcher.rawListeners('change').slice();
+  watcher.removeAllListeners('change');
+
   const clientSend = vi.spyOn(server.environments.client.hot, 'send');
   const ssrSend = vi.spyOn(server.environments.ssr.hot, 'send');
   const serverSend = vi.spyOn(server.ws, 'send');
 
-  changeFile();
-  server.watcher.emit('change', file);
+  try {
+    changeFile();
+    for (const listener of changeListeners) {
+      watcher.on('change', listener as never);
+    }
+    watcher.emit('change', file);
 
-  await vi.waitFor(
-    () => {
-      expect(
-        clientSend.mock.calls.length +
-          ssrSend.mock.calls.length +
-          serverSend.mock.calls.length,
-      ).toBeGreaterThan(0);
-    },
-    { timeout: 2000 },
-  );
+    await vi.waitFor(
+      () => {
+        expect(
+          clientSend.mock.calls.length +
+            ssrSend.mock.calls.length +
+            serverSend.mock.calls.length,
+        ).toBeGreaterThan(0);
+      },
+      { timeout: 2000 },
+    );
 
-  return [
-    ...clientSend.mock.calls.map(([payload]) => payload),
-    ...ssrSend.mock.calls.map(([payload]) => payload),
-    ...serverSend.mock.calls.map(([payload]) => payload),
-  ];
+    return [
+      ...clientSend.mock.calls.map(([payload]) => payload),
+      ...ssrSend.mock.calls.map(([payload]) => payload),
+      ...serverSend.mock.calls.map(([payload]) => payload),
+    ];
+  } finally {
+    if (watcher.listenerCount('change') === 0) {
+      for (const listener of changeListeners) {
+        watcher.on('change', listener as never);
+      }
+    }
+    clientSend.mockRestore();
+    ssrSend.mockRestore();
+    serverSend.mockRestore();
+  }
 };
 
 const reachesBeyondStyleBoundary = (payloads: Array<unknown>) =>
@@ -152,6 +173,7 @@ describe('auklet vite HMR integration', () => {
   });
 
   test('virtual CSS asset browser URL returns CSS instead of Vite runtime JS', async () => {
+    vi.useRealTimers();
     const assetFile = fixture.writeFile(
       'src/tokens.less',
       ':root { --tag-color: teal; }',

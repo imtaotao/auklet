@@ -106,4 +106,68 @@ describe('resolveCssModuleImport', () => {
       }),
     ).toBe(path.resolve(moduleFile));
   });
+
+  test('resolves package-exported CSS Modules through package exports', () => {
+    project.writePackageJson({
+      name: '@scope/app',
+      dependencies: {
+        '@scope/ui': '0.0.1',
+      },
+    });
+    const moduleFile = project.writeFile(
+      'node_modules/@scope/ui/dist/shared/chip.module.less',
+      '.chip { color: red; }',
+    );
+    project.writeJson('node_modules/@scope/ui/package.json', {
+      name: '@scope/ui',
+      exports: {
+        './shared/chip.module.less': {
+          less: './dist/shared/chip.module.less',
+          source: './dist/shared/chip.module.less',
+          default: './dist/shared/chip.module.less',
+        },
+      },
+    });
+    const importer = project.writeFile('src/App.tsx', 'export {};');
+
+    expect(
+      resolveCssModuleImport({
+        source: '@scope/ui/shared/chip.module.less',
+        importer,
+        importerPackageRoot: project.root,
+      }),
+    ).toBe(path.resolve(moduleFile));
+  });
+
+  test('passes through package exports that point at a published JS shim', () => {
+    project.writePackageJson({
+      name: '@scope/app',
+      dependencies: {
+        '@scope/ui': '0.0.1',
+      },
+    });
+    project.writeFile(
+      'node_modules/@scope/ui/dist/es/shared/chip.module.less.js',
+      'import "./chip.scoped.css";\nexport default {"chip":"chip_x"};\n',
+    );
+    project.writeJson('node_modules/@scope/ui/package.json', {
+      name: '@scope/ui',
+      exports: {
+        './shared/chip.module.less': {
+          import: './dist/es/shared/chip.module.less.js',
+          default: './dist/es/shared/chip.module.less.js',
+        },
+      },
+    });
+    const importer = project.writeFile('src/App.tsx', 'export {};');
+
+    // null → let the bundler load the published shim as plain JS.
+    expect(
+      resolveCssModuleImport({
+        source: '@scope/ui/shared/chip.module.less',
+        importer,
+        importerPackageRoot: project.root,
+      }),
+    ).toBeNull();
+  });
 });

@@ -1,23 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { build } from 'tsdown';
 import { createCssModulesPlugin } from '#auklet/build/cssModulesPlugin';
-import { normalizeFileKey } from '#auklet/utils';
+import { createGenerateScopedName } from '#auklet/css/modules/generateScopedName';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../fixtures/virtualProject';
-
-const expectedScopedName = (localName: string, filename: string) => {
-  const base = path.basename(filename).replace(/\.module\.(css|less)$/i, '');
-  const hash = createHash('sha256')
-    .update(`${normalizeFileKey(filename)}:${localName}`)
-    .digest('base64url')
-    .slice(0, 6);
-  return `${base}_${localName}_${hash}`;
-};
 
 const readOutputFiles = (dir: string, prefix = '') => {
   if (!fs.existsSync(dir))
@@ -62,11 +52,18 @@ describe('css modules via tsdown build', () => {
 
   beforeEach(() => {
     project = createVirtualProject('auklet-css-modules-tsdown-');
+    project.writePackageJson({ name: '@scope/fixture', version: '0.0.0' });
   });
 
   afterEach(() => {
     project.cleanup();
   });
+
+  const expectedScopedName = (localName: string, filename: string) =>
+    createGenerateScopedName({
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    })(localName, filename, '');
 
   test('emits css partial assets for *.module.css local imports in build-js output', async () => {
     const sourceRoot = project.resolve('src');
@@ -191,9 +188,7 @@ describe('css modules via tsdown build', () => {
     const scoped = expectedScopedName('button', moduleCss);
     expect(fs.readFileSync(cssOutput!.full, 'utf8')).toContain(`.${scoped}`);
 
-    const moduleJs = outputs.find((file) =>
-      file.relative.endsWith('Button.module.css.js'),
-    );
+    const moduleJs = findCssModuleJsOutput(outputs, 'Button.module.css');
     expect(moduleJs).toBeTruthy();
 
     const moduleCode = fs.readFileSync(moduleJs!.full, 'utf8');
@@ -257,9 +252,7 @@ describe('css modules via tsdown build', () => {
     );
     expect(cssOutput).toBeTruthy();
 
-    const moduleJs = outputs.find((file) =>
-      file.relative.endsWith('Button.module.css.js'),
-    );
+    const moduleJs = findCssModuleJsOutput(outputs, 'Button.module.css');
     expect(moduleJs).toBeTruthy();
 
     const moduleCode = fs.readFileSync(moduleJs!.full, 'utf8');
@@ -337,9 +330,7 @@ describe('css modules via tsdown build', () => {
     );
     expect(cssOutput).toBeTruthy();
 
-    const moduleJs = outputs.find((file) =>
-      file.relative.endsWith('Card.module.less.js'),
-    );
+    const moduleJs = findCssModuleJsOutput(outputs, 'Card.module.less');
     expect(moduleJs).toBeTruthy();
 
     const scoped = expectedScopedName('card', moduleLess);
@@ -707,4 +698,83 @@ describe('css modules via tsdown build', () => {
       ).toBe(true);
     }
   }, 60_000);
+
+  test('JS import of styles.shared.output emits *.scoped.css (not *.module.css)', async () => {
+    const sourceRoot = project.resolve('src');
+    const moduleFile = project.writeFile(
+      'src/shared/chip.module.less',
+      '@import "./helpers.css";\n.chip { color: red; }\n',
+    );
+    project.writeFile(
+      'src/shared/helpers.css',
+      '.helper { display: block; }\n',
+    );
+    project.writeFile(
+      'src/components/Chip/index.tsx',
+      `import styles from '../../shared/chip.module.less';\nexport const className = styles.chip;\n`,
+    );
+    project.writeFile(
+      'src/css-modules.d.ts',
+      `declare module '*.module.less' {\n  const classes: Record<string, string>;\n  export default classes;\n}\n`,
+    );
+    project.writeFile(
+      'tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'ESNext',
+          moduleResolution: 'Bundler',
+          jsx: 'react-jsx',
+          strict: true,
+          skipLibCheck: true,
+        },
+        include: ['src'],
+      }),
+    );
+
+    const outDir = project.resolve('dist/es');
+    await build({
+      cwd: project.root,
+      root: project.root,
+      entry: {
+        Chip: 'src/components/Chip/index.tsx',
+      },
+      format: 'esm',
+      outDir,
+      dts: false,
+      unbundle: true,
+      platform: 'neutral',
+      target: 'es2020',
+      tsconfig: path.join(project.root, 'tsconfig.json'),
+      plugins: [
+        createCssModulesPlugin({
+          sourceRoot,
+          packageRoot: project.root,
+          sharedOutputPatterns: ['./src/shared/**/*.module.{less,css}'],
+        }),
+      ],
+    });
+
+    const outputs = readOutputFiles(outDir);
+    const scopedCss = outputs.find(
+      (file) => file.relative === 'shared/chip.scoped.css',
+    );
+    const moduleShim = findCssModuleJsOutput(outputs, 'chip.module.less');
+
+    expect(scopedCss).toBeTruthy();
+    expect(moduleShim).toBeTruthy();
+    expect(
+      outputs.some((file) => file.relative === 'shared/chip.module.css'),
+    ).toBe(false);
+    expect(outputs.some((file) => file.relative === 'shared/helpers.css')).toBe(
+      true,
+    );
+
+    const scoped = expectedScopedName('chip', moduleFile);
+    expect(fs.readFileSync(scopedCss!.full, 'utf8')).toContain(`.${scoped}`);
+    expect(fs.readFileSync(moduleShim!.full, 'utf8')).toContain(
+      'chip.scoped.css',
+    );
+    expect(fs.readFileSync(moduleShim!.full, 'utf8')).toContain(scoped);
+  }, 30_000);
 });

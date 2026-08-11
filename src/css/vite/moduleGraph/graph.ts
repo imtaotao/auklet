@@ -8,6 +8,7 @@ import {
   findPackageRootForFile,
   readPackageName,
 } from '#auklet/css/core/resolvers/externalLess';
+import { resolveStyleSourceRootForFile } from '#auklet/css/core/resolvers/externalPackageStyle';
 import { parsePackageStyleId } from '#auklet/css/vite/moduleGraph/styleId';
 import { StyleCodeFactory } from '#auklet/css/vite/moduleGraph/styleCodeFactory';
 import { ModuleStyleGraphRequestCache } from '#auklet/css/vite/moduleGraph/requestCache';
@@ -145,18 +146,34 @@ export class ModuleStyleGraph {
   }
 
   async resolveSourceRootForFile(file: string) {
-    const packageRoot = this.getFilePackageRoot(file);
+    const packageRoot =
+      this.getFilePackageRoot(file) ?? findPackageRootForFile(file);
     if (!packageRoot) return null;
 
-    const rawConfig = await this.loadAukletConfig(packageRoot, {
-      cacheBust: true,
-    });
-    const normalizedConfig = normalizeAukletConfig(rawConfig);
-    return path.join(packageRoot, normalizedConfig.source);
+    try {
+      const rawConfig = await this.loadAukletConfig(packageRoot, {
+        cacheBust: true,
+      });
+      const normalizedConfig = normalizeAukletConfig(rawConfig);
+      const configuredSourceRoot = path.join(
+        packageRoot,
+        normalizedConfig.source,
+      );
+      return resolveStyleSourceRootForFile({
+        file,
+        packageRoot,
+        configuredSourceRoot,
+      });
+    } catch {
+      return resolveStyleSourceRootForFile({
+        file,
+        packageRoot,
+      });
+    }
   }
 
   resolvePackageRootForFile(file: string) {
-    return this.getFilePackageRoot(file);
+    return this.getFilePackageRoot(file) ?? findPackageRootForFile(file);
   }
 
   private getFilePackageRoot(file: string) {

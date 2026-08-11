@@ -1,4 +1,6 @@
+import path from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { createGenerateScopedName } from '#auklet/css/modules/generateScopedName';
 import { lines, listDistFiles, readDist } from './helpers';
 
 const ui = 'examples/monorepo-package/packages/ui';
@@ -181,6 +183,40 @@ describe('monorepo package example', () => {
     expect(readDist(ui, 'index.css')).not.toMatch(/\.Tag_tag_/);
   });
 
+  test('publishes shared.output chip shim with stable hash and scoped CSS', () => {
+    const packageRoot = path.join(process.cwd(), ui);
+    const sourceRoot = path.join(packageRoot, 'src');
+    const chipSource = path.join(sourceRoot, 'shared/chip.module.less');
+    const expectedClass = createGenerateScopedName({
+      packageRoot,
+      sourceRoot,
+    })('chip', chipSource, '');
+    const esCss = readDist(ui, 'es/shared/chip.scoped.css');
+    const esJs = readDist(ui, 'es/shared/chip.module.less.js');
+    const libJs = readDist(ui, 'lib/shared/chip.module.less.js');
+    const helpers = readDist(ui, 'es/shared/helpers.css');
+
+    expect(esCss).toContain(`.${expectedClass}`);
+    expect(esCss).toContain('@import');
+    expect(esCss).toMatch(/helpers\.css/);
+    expect(helpers).toContain('.helper-reset');
+    expect(esJs).toBe(
+      `import "./chip.scoped.css";\nexport default ${JSON.stringify({
+        chip: expectedClass,
+      })};\n`,
+    );
+    expect(libJs).toBe(
+      `require("./chip.scoped.css");\nexports.default = ${JSON.stringify({
+        chip: expectedClass,
+      })};\n`,
+    );
+    expect(listDistFiles(ui)).not.toContain('es/shared/chip.module.css');
+    expect(listDistFiles(ui)).not.toContain('lib/shared/chip.module.css');
+
+    const dashboardJs = readDist(dashboard, 'es/components/Dashboard/index.js');
+    expect(dashboardJs).toContain('@demo/ui/shared/chip.module.less');
+  });
+
   test('emits bundle, module, and style files for ui', () => {
     expect(listDistFiles(ui)).toEqual([
       'components/Badge/Badge.module.css',
@@ -208,6 +244,9 @@ describe('monorepo package example', () => {
       'es/components/Tag/tokens.css',
       'es/index.d.ts',
       'es/index.js',
+      'es/shared/chip.module.less.js',
+      'es/shared/chip.scoped.css',
+      'es/shared/helpers.css',
       'es/style/external.css',
       'es/style/index.css',
       'es/style/module.css',
@@ -242,6 +281,9 @@ describe('monorepo package example', () => {
       'lib/components/Tag/tokens.css',
       'lib/index.d.ts',
       'lib/index.js',
+      'lib/shared/chip.module.less.js',
+      'lib/shared/chip.scoped.css',
+      'lib/shared/helpers.css',
       'lib/style/external.css',
       'lib/style/index.css',
       'lib/style/module.css',
@@ -270,6 +312,7 @@ describe('monorepo package example', () => {
       'index.d.ts',
       'index.js',
       'index.mjs',
+      'lib/_virtual/_rolldown/runtime.js',
       'lib/components/Dashboard/index.css',
       'lib/components/Dashboard/index.d.ts',
       'lib/components/Dashboard/index.js',

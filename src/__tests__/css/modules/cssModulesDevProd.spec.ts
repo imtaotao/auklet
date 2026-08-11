@@ -74,6 +74,13 @@ describe('CSS Modules dev and production semantics', () => {
     project.cleanup();
   });
 
+  const compile = (file: string) =>
+    compileCssModule({
+      file,
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    });
+
   test('compileCssModule matches aukletStylePlugin load for *.module.css', async () => {
     const file = project.writeFile(
       'src/components/Button/Button.module.css',
@@ -82,7 +89,7 @@ describe('CSS Modules dev and production semantics', () => {
         :global(.theme) { color: blue; }
       `,
     );
-    const production = await compileCssModule({ file });
+    const production = await compile(file);
     const plugin = aukletStylePlugin({ root: project.root });
     const loadContext = { addWatchFile: vi.fn() };
     const { localsCode, styleCode } = await loadCssModuleDevPair(
@@ -114,7 +121,7 @@ describe('CSS Modules dev and production semantics', () => {
         .card { color: var(--brand); }
       `,
     );
-    const production = await compileCssModule({ file });
+    const production = await compile(file);
     const plugin = aukletStylePlugin({ root: project.root });
     const loadContext = { addWatchFile: vi.fn() };
     const { localsCode, styleCode } = await loadCssModuleDevPair(
@@ -141,7 +148,7 @@ describe('CSS Modules dev and production semantics', () => {
       'src/components/Tag/Tag.module.less',
       '@import "./tokens.less";\n.tag { color: var(--tag-color); }',
     );
-    const result = await compileCssModule({ file });
+    const result = await compile(file);
     const plugin = aukletStylePlugin({ root: project.root });
     const loadContext = { addWatchFile: vi.fn() };
     const { localsCode, styleCode } = await loadCssModuleDevPair(
@@ -181,7 +188,7 @@ describe('CSS Modules dev and production semantics', () => {
 
   test('protocol, Vite load, and tsdown virtual chunk share locals', async () => {
     const { sourceRoot, file } = writeCssModulesFixture(project);
-    const protocol = await compileCssModule({ file });
+    const protocol = await compile(file);
 
     const plugin = aukletStylePlugin({ root: project.root });
     const loadContext = { addWatchFile: vi.fn() };
@@ -255,7 +262,7 @@ describe('CSS Modules dev and production semantics', () => {
       }),
     );
 
-    const protocol = await compileCssModule({ file });
+    const protocol = await compile(file);
     const plugin = aukletStylePlugin({ root: project.root });
     const loadContext = { addWatchFile: vi.fn() };
     const { localsCode, styleCode } = await loadCssModuleDevPair(
@@ -347,7 +354,7 @@ describe('CSS Modules dev and production semantics', () => {
     const plugin = aukletStylePlugin({ root: project.root });
     const loadContext = { addWatchFile: vi.fn() };
 
-    const firstProtocol = await compileCssModule({ file });
+    const firstProtocol = await compile(file);
     const firstDev = await loadCssModuleDevPair(plugin, loadContext, file);
     expect(parseCssModuleStyleLoad(firstDev.styleCode!).css).toBe(
       createCssModuleDevStyleSource(file, firstProtocol),
@@ -362,7 +369,7 @@ describe('CSS Modules dev and production semantics', () => {
       ':root { --tag-color: #111827; }',
     );
 
-    const secondProtocol = await compileCssModule({ file });
+    const secondProtocol = await compile(file);
     const secondDev = await loadCssModuleDevPair(plugin, loadContext, file);
 
     expect(parseCssModuleStyleLoad(secondDev.styleCode!).css).toBe(

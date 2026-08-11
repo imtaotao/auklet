@@ -199,7 +199,7 @@ describe('ModuleStyleBuilder module output', () => {
     await createBuilder(fixture, {
       ...moduleConfig,
       styles: {
-        shared: './source/internal/syntaxHighlight.css',
+        shared: { inner: './source/internal/syntaxHighlight.css' },
       },
     }).build();
 

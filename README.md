@@ -88,7 +88,7 @@ Publish flags:
 | --------------------- | ----------------------------------------------------------------- |
 | `auk inspect publish` | Check publish readiness without changing files or registry state. |
 | `auk inspect pack`    | Check package entry/export files before publishing.               |
-| `auk inspect css`     | Explain CSS output entry, theme, and module plans.                |
+| `auk inspect css`     | Explain CSS plans; validate `styles.shared.output` exports/dist.  |
 
 Inspect flags:
 
@@ -165,7 +165,10 @@ export const config = defineConfig({
       light: './src/themes/light.css',
       dark: './src/themes/dark.css',
     },
-    shared: ['./src/internal/**/*.{css,less}'],
+    shared: {
+      inner: ['./src/internal/**/*.{css,less}'],
+      output: ['./src/shared/**/*.module.{less,css}'],
+    },
     dependencies: {
       '@scope/ui': {
         entry: '/style.css',
@@ -180,14 +183,78 @@ Source styles may be `.css` or `.less` (compiled by auklet; outputs stay CSS).
 `styles.prefix` wraps selectors on this package's own rules for mount-point
 isolation; dependency CSS from `styles.dependencies` is never prefixed. The host
 must provide a matching container when prefixed rules target `:root`, `html`, or
-`body`. `styles.shared` declares same-package fragments component styles may
-import (`*`, `**`, `?`); prefer `.css` shared when the `@import` edge must stay
-in the graph. Shared files cannot import component or theme styles.
-Component-to-component style imports are rejected; package style dependencies
-use `styles.dependencies` (built CSS of the dependency, not its Less sources).
+`body`. `styles.shared` is `{ inner?, output? }` only. `inner` declares
+same-package fragments component styles may import (fast-glob patterns); prefer
+`.css` shared when the `@import` edge must stay in the graph. Shared files cannot
+import component or theme styles. `output` selects CSS Modules that `auk build` /
+`build-css` **compile** into `dist/es|lib` as `*.scoped.css` + JS locals shims
+(same hashes as the JS CSS Modules plugin; no `styles.prefix`, unlike `inner`).
+Export the **JS shim** from
+`package.json#exports` (not the source file). `auk inspect css` verifies those
+exports and dist files (exit `1` on failure). Publishing as `*.module.css` would
+let consumers re-run CSS Modules and desync locals; exporting source `.module.*`
+can also drift hashes. Class hashes use package name + source-relative path so
+workspace consumers can HMR producer `shared.output` sources without rebuilding
+first; installed/published consumers still load the JS shim. Details:
+`docs/css.md`. Component-to-component style imports are rejected; built package
+style entries still use `styles.dependencies`.
 
 CSS Modules (`*.module.css` / `*.module.less`) import from JS/TS and compile
 outside the global style entry graph. They skip `styles.prefix` and ship with
 the JS build (locals plus side-effect CSS). That naming pattern is reserved for
 Modules — rename former global `*.module.*` files if needed. Ambient TypeScript
 declarations live in the consuming package.
+
+`@tsdown/css` is required for tsdown's CSS stack; auklet `modules: true` owns
+`*.module.*` (do not also enable a second Modules pipeline on those files).
+Details: `docs/css.md`.
+
+## Style Pattern Kinds
+
+Several style options use `*` / `**`, but they are **not the same kind of
+pattern**. Treat them by what they match:
+
+| Config                             | Example                                 | Kind          | Engine / rules                                                                                               | Matches                                              |
+| ---------------------------------- | --------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `styles.shared.inner`              | `'./src/internal/**/*.{css,less}'`      | File glob     | `fast-glob` under the package root; must stay under `source`; gets `styles.prefix`                           | Files on disk (same-package `@import` allowlist)     |
+| `styles.shared.output`             | `'./src/shared/**/*.module.{less,css}'` | File glob     | Same as `inner`; CSS Modules only; needs `modules: true`; no `styles.prefix`; emits `*.scoped.css` + JS shim | Files on disk (compile into `dist/es\|lib`)          |
+| `styles.dependencies.*.components` | `'/components/**.css'`                  | Path template | Lightweight `*` / `**` rewrite from JS/TSX imports                                                           | Specifiers such as `@scope/ui/components/Button.css` |
+| `styles.dependencies.*.entry`      | `'/style.css'`                          | Literal path  | No wildcards                                                                                                 | Fixed package style entry                            |
+| `styles.dependencies.*.themes`     | `{ light: '/themes/light.css' }`        | Literal path  | No wildcards                                                                                                 | Fixed theme entry per theme name                     |
+
+Notes:
+
+- `shared.*` answers “which files exist under this package?”.
+- `dependencies.components` answers “given `import { Button } from '@scope/ui'`,
+  which CSS specifier should auto-import?” — it does **not** scan the
+  dependency’s filesystem with `fast-glob`.
+- Prefer documenting examples with the resulting import, not only the pattern
+  string. Details: `docs/css.md`.
+
+## CSS / Less / CSS Modules Import Limits
+
+Global styles (plain `.css` / `.less`) and CSS Modules (`*.module.*`) are
+separate pipelines. Cross imports are restricted as follows (`@import` /
+module partial edges; CSS Modules themselves are imported from JS/TSX):
+
+| Importer → imported | Plain `.css`                                                     | Plain `.less`                                                         | `*.module.css` / `*.module.less` |
+| ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------- |
+| Plain `.css`        | Allowed                                                          | Rejected                                                              | Rejected                         |
+| Plain `.less`       | Allowed                                                          | Allowed locally; exported package Less requires `@import (reference)` | Rejected                         |
+| `*.module.css`      | Allowed (local or exported package CSS; sibling / tracked asset) | Rejected                                                              | Rejected                         |
+| `*.module.less`     | Allowed (sibling / tracked asset)                                | Allowed locally; exported package Less requires `@import (reference)` | Rejected                         |
+
+Additional rules:
+
+| Rule                                      | Behavior                                                                                                              |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `.css` → `.less`                          | Always rejected (including `@import (less)` on `.css`).                                                               |
+| Module → module                           | Rejected; import each CSS Module from JS/TSX so locals maps stay independent.                                         |
+| Global → module                           | Rejected; Modules stay out of the global entry graph and `styles.prefix`.                                             |
+| Component ↔ component global CSS          | Rejected; reuse via TSX + `styles.dependencies`, or `styles.shared.inner`.                                            |
+| Cross-package global CSS                  | Use `styles.dependencies` against **built CSS**, not raw Less sources.                                                |
+| Cross-package CSS Modules                 | Producer: `styles.shared.output` + export the **JS shim** (`*.scoped.css`); consumer: `import styles from 'pkg/...'`. |
+| Export source `.module.*` instead of shim | Consumer may recompile; class hashes can drift vs producer.                                                           |
+| Producer shared source change             | Rebuild producer; consumer HMR across published shims is not provided.                                                |
+
+Full protocol (Less options, exports, secondary Modules, HMR): `docs/css.md`.

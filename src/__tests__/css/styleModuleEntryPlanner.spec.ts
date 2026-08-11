@@ -98,7 +98,7 @@ describe('StyleModuleEntryPlanner diagnostics', () => {
     await expect(
       createPlanner(project, {
         styles: {
-          shared: ['./src/internal/**/*.css'],
+          shared: { inner: ['./src/internal/**/*.css'] },
         },
       }),
     ).resolves.toBeDefined();
@@ -122,7 +122,7 @@ describe('StyleModuleEntryPlanner diagnostics', () => {
     await expect(
       createPlanner(project, {
         styles: {
-          shared: './shared/**/*.css',
+          shared: { inner: './shared/**/*.css' },
         },
       }),
     ).rejects.toThrow(
@@ -144,7 +144,7 @@ describe('StyleModuleEntryPlanner diagnostics', () => {
     await expect(
       createPlanner(project, {
         styles: {
-          shared: './src/internal/**/*.css',
+          shared: { inner: './src/internal/**/*.css' },
         },
       }),
     ).rejects.toThrow(
@@ -162,7 +162,7 @@ describe('StyleModuleEntryPlanner diagnostics', () => {
     await expect(
       createPlanner(project, {
         styles: {
-          shared: './src/internal/**/*.css',
+          shared: { inner: './src/internal/**/*.css' },
           themes: {
             light: './src/themes/light.css',
           },

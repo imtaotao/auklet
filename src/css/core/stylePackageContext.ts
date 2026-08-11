@@ -9,7 +9,10 @@ import {
 } from '#auklet/css/core/styleProcessor';
 import { WorkspaceStyleResolver } from '#auklet/css/core/workspaceStyleResolver';
 import { createStyleFileKeySet } from '#auklet/css/core/style/files';
-import { createSharedStyleFileKeySet } from '#auklet/css/core/style/shared';
+import {
+  createSharedStyleFileKeySet,
+  resolveSharedOutputExcludeRoots,
+} from '#auklet/css/core/style/shared';
 import {
   getThemeNames,
   resolveThemeStyleFiles,
@@ -18,6 +21,7 @@ import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
 import {
   fileWalker,
   getSourceModuleDir,
+  isInsideRoot,
   normalizeFileKey,
   toPosixPath,
 } from '#auklet/utils';
@@ -78,14 +82,39 @@ export class StylePackageContext {
     this.themeNames = getThemeNames(normalizedConfig);
     this.themeStyleFileKeys = createStyleFileKeySet(this.themeFiles.values());
     this.sourceModuleDirs = this.getSourceModuleDirs(this.sourceFiles);
-    this.scannedStyleFiles = this.getStyleFiles(this.sourceFiles);
-    this.resolvedStyleFiles = this.scannedStyleFiles;
-    this.sharedStyleFileKeys = createSharedStyleFileKeySet({
+    const styleLikeFiles = this.getStyleFiles(this.sourceFiles);
+    const sharedInnerKeys = createSharedStyleFileKeySet({
       packageRoot: context.packageRoot,
       sourceRoot: this.sourceRoot,
-      styleFiles: this.scannedStyleFiles,
-      patterns: normalizedConfig.styles.shared,
+      styleFiles: styleLikeFiles,
+      patterns: normalizedConfig.styles.shared.inner,
     });
+    // output globs only match *.module.* (already stripped from styleLikeFiles).
+    // Exclude those directory trees so sibling helpers (e.g. helpers.css) do not
+    // become package/module global entries; keep them on the @import allowlist.
+    const sharedOutputExcludeRoots = resolveSharedOutputExcludeRoots({
+      packageRoot: context.packageRoot,
+      sourceRoot: this.sourceRoot,
+      patterns: normalizedConfig.styles.shared.output,
+    });
+    this.scannedStyleFiles = styleLikeFiles.filter((styleFile) => {
+      const key = normalizeFileKey(styleFile);
+      if (sharedInnerKeys.has(key)) return true;
+      return !sharedOutputExcludeRoots.some((root) =>
+        isInsideRoot(styleFile, root),
+      );
+    });
+    this.resolvedStyleFiles = this.scannedStyleFiles;
+    this.sharedStyleFileKeys = new Set([
+      ...sharedInnerKeys,
+      ...styleLikeFiles
+        .filter((styleFile) =>
+          sharedOutputExcludeRoots.some((root) =>
+            isInsideRoot(styleFile, root),
+          ),
+        )
+        .map((styleFile) => normalizeFileKey(styleFile)),
+    ]);
   }
 
   get styleFiles() {

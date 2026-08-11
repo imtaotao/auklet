@@ -212,7 +212,7 @@ flowchart TD
 examples/
 ├── monorepo-package/ # Component library monorepo demo
 ├── monorepo-lib/     # Pure lib monorepo demo
-├── single-package/   # Single-package component library demo with Vite dev mode
+├── single-package/   # Single-package library + Vite app/ entry for local HMR
 ├── single-lib/       # Single-package pure TypeScript lib demo
 └── __tests__/        # Example output tests
 ```

@@ -127,7 +127,72 @@ Tests:
 
 - Config normalization belongs near `config` or config loader specs.
 - Build config mapping belongs in `src/__tests__/build/tsdownConfig/`.
-- CSS config semantics need CSS builder or graph tests.
+
+## Change styles.shared Or Cross-Package Style Sources
+
+Check:
+
+- `docs/invariants.md` shared/output boundary (inner stays same-package;
+  output compiles Modules to `dist/es|lib`; no global package `@import`).
+- `src/types.ts` / `src/config.ts` for object-only `{ inner, output }` normalize.
+- `src/css/core/style/shared.ts` (`fast-glob` + `resolveSharedOutputExcludeRoots`).
+  Do not intersect `output` globs with `styleFiles` for Modules — they are
+  already stripped; exclusion/allowlist for sibling helpers uses exclude roots.
+- `src/css/core/style/sharedOutput.ts` entry/export/dist helpers.
+- `src/css/production/sharedOutputWriter.ts` for Modules compile + JS shim +
+  `*.scoped.css` (never emit published `*.module.css`).
+- Cross-package sibling assets share `src/css/modules/cssModuleOutputPaths.ts`
+  with `cssModulesPlugin` and `packageStyleImportPlugin`
+  (`shared-package/<pkg>/...` + import rewrite).
+- Plain package style resolve→CSS text lives in
+  `src/css/core/packageStyleSource.ts` (build plugin + Vite); do not duplicate
+  resolve gates or Less→CSS loading in glue layers.
+- `createCssModulesPlugin` receives `sharedOutputPatterns` so JS imports of
+  `shared.output` files emit `*.scoped.css` (aligned with `sharedOutputWriter`).
+- Document `@tsdown/css` vs auklet Modules coexistence (`docs/css.md`).
+- Scoped class hash: `generateScopedName` /
+  `createGenerateScopedName` (`packageName + source-relative + local`).
+  Keep the relative pathKey as a relative string — do not run
+  `normalizeFileKey` on it (that resolves against cwd and breaks hash parity).
+- Workspace shared.output HMR:
+  `resolveWorkspaceSharedOutputModule` (Vite only; resolves exports→shim to
+  producer source). Installed / prod stay on the published shim.
+  Process-local cache of producer config+glob; invalidate on
+  `auklet.config.*` change (`invalidateWorkspaceSharedOutputResolveCache`).
+  Vite `resolveId` gates with `isExternalPackageSpecifier` +
+  `isCssModuleSpecifier` before calling resolve.
+- `shared.output` does not apply `styles.prefix` (Modules); `shared.inner` does
+  (global `StyleProcessor`). Document in `docs/css.md` / invariants / README.
+- `resolveSharedOutputExcludeRoots` rejects globs whose exclude root is the
+  source root (too wide).
+- `src/css/inspect.ts` shared output listing and export/dist checks
+  (`findPathInExports` must use `exportSubpath` with a `./` prefix; accepted
+  targets are `dist/es|lib/...` only, not bare `jsRelative`).
+- Prefer exporting the published JS shim (not source `.module.*`); shims load as
+  JS and import `*.scoped.css`. Hash is stable either way, but source exports
+  skip the publish contract.
+- Docs must stay aligned: compile (not mirror), secondary Modules + `*.scoped.css`,
+  inspect export validation, workspace source HMR vs installed shim rebuild.
+- Examples that publish or consume shared Modules.
+
+Tests:
+
+- Config object-only and invalid values.
+- Producer compile into `dist/es|lib` with hash parity and `*.scoped.css`.
+- JS import + `shared.output` dual path: scoped CSS only (`cssModulesTsdown`).
+- Hash formula + cwd stability (`generateScopedName.spec.ts`).
+- Workspace exports→source + Modules HMR
+  (`resolveWorkspaceSharedOutputModule.spec.ts`).
+- Resolve cache: same package loads config once; invalidate reloads
+  (`resolveWorkspaceSharedOutputModule.spec.ts`).
+- Example monorepo: shim content / hash assertions for published chip.
+- `checkSharedOutputExports` positive/negative (`sharedOutputExports.spec.ts`).
+- exports → JS shim → `resolveCssModuleImport` null / plugin `external: true`.
+- Consumer import `pkg/...`: locals match scoped CSS (`publishedSharedOutputVite`).
+- Inspect shared output: `runInspectCssCli` exit `1` / `0`.
+- `packageStyleImportPlugin` resolve/load/renderChunk (`packageStyleImportPlugin.spec.ts`).
+- `styles.shared.output` trees excluded from global `styleFiles` / `style/module.css`.
+- Consumer package Modules / plain CSS / Less when still relevant.
 
 ## Change Workspace Discovery
 

@@ -33,6 +33,7 @@ export function createBuildContext(
   options: PackageBuildOptions,
   source: string,
   output: string,
+  sharedOutputPatterns: Array<string> = [],
 ) {
   const pkg = JSON.parse(
     fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'),
@@ -61,6 +62,7 @@ export function createBuildContext(
     platform: options.platform!,
     target: options.target!,
     configureTsdown: options.configureTsdown,
+    sharedOutputPatterns,
     tsconfig: options.tsconfig
       ? path.resolve(packageRoot, options.tsconfig)
       : findWorkspaceTsconfig(packageRoot),

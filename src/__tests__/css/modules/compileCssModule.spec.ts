@@ -1,6 +1,5 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   compileCssModule,
@@ -11,33 +10,32 @@ import {
   toCssModuleStyleAssetBrowserUrl,
   toCssModuleStyleVirtualId,
 } from '#auklet/css/vite/hmr/cssModule';
-import { generateScopedName } from '#auklet/css/modules/generateScopedName';
+import {
+  createGenerateScopedName,
+  generateScopedName,
+} from '#auklet/css/modules/generateScopedName';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
-import { normalizeFileKey } from '#auklet/utils';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../../fixtures/virtualProject';
-
-const expectedScopedName = (localName: string, filename: string) => {
-  const base = path.basename(filename).replace(/\.module\.(css|less)$/i, '');
-  const hash = createHash('sha256')
-    .update(`${normalizeFileKey(filename)}:${localName}`)
-    .digest('base64url')
-    .slice(0, 6);
-  return `${base}_${localName}_${hash}`;
-};
 
 describe('css/modules protocol', () => {
   let project: VirtualProject;
 
   beforeEach(() => {
     project = createVirtualProject('auklet-css-modules-');
+    project.writePackageJson({ name: '@scope/fixture', version: '0.0.0' });
   });
 
   afterEach(() => {
     project.cleanup();
   });
+
+  const expectedScopedName = (localName: string, filename: string) =>
+    createGenerateScopedName({
+      packageRoot: project.root,
+    })(localName, filename, '');
 
   test('detects CSS Modules file names', () => {
     expect(isCssModuleFile('Button.module.css')).toBe(true);
@@ -444,7 +442,36 @@ describe('css/modules protocol', () => {
     expect(result.watchFiles).not.toContain(project.resolve('package.json'));
   });
 
-  test('rejects external Less imports without reference or an exported path', async () => {
+  test('rejects exported package Less without (reference)', async () => {
+    project.writeJson('package.json', {
+      name: 'consumer',
+      dependencies: { tokens: '1.0.0' },
+    });
+    project.writeJson('node_modules/tokens/package.json', {
+      name: 'tokens',
+      exports: {
+        './public.less': './public.less',
+      },
+    });
+    project.writeFile(
+      'node_modules/tokens/public.less',
+      '@brand: teal;\n.token { color: @brand; }',
+    );
+    const withoutReference = project.writeFile(
+      'src/WithoutReference.module.less',
+      '@import "tokens/public.less";\n.tag { color: @brand; }',
+    );
+
+    await expect(
+      compileCssModule({
+        file: withoutReference,
+        packageRoot: project.root,
+        sourceRoot: project.resolve('src'),
+      }),
+    ).rejects.toThrow(/external Less imports must use \(reference\)/);
+  });
+
+  test('rejects external Less imports that are not exported', async () => {
     project.writeJson('package.json', {
       name: 'consumer',
       dependencies: { tokens: '1.0.0' },
@@ -456,22 +483,11 @@ describe('css/modules protocol', () => {
       },
     });
     project.writeFile('node_modules/tokens/public.less', '@brand: teal;');
-    const withoutReference = project.writeFile(
-      'src/WithoutReference.module.less',
-      '@import "tokens/public.less";\n.tag { color: @brand; }',
-    );
     const privatePath = project.writeFile(
       'src/PrivatePath.module.less',
       '@import (reference) "tokens/private.less";\n.tag {}',
     );
 
-    await expect(
-      compileCssModule({
-        file: withoutReference,
-        packageRoot: project.root,
-        sourceRoot: project.resolve('src'),
-      }),
-    ).rejects.toThrow('external Less imports must use (reference)');
     await expect(
       compileCssModule({
         file: privatePath,

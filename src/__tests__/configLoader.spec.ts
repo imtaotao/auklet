@@ -177,7 +177,9 @@ describe('normalizeAukletConfig', () => {
           themes: {
             light: './source/themes/light.css',
           },
-          shared: './source/internal/**/*.css',
+          shared: {
+            inner: './source/internal/**/*.css',
+          },
           dependencies: {
             '@scope/ui': {
               entry: '/style.css',
@@ -200,7 +202,10 @@ describe('normalizeAukletConfig', () => {
         themes: {
           light: './source/themes/light.css',
         },
-        shared: ['./source/internal/**/*.css'],
+        shared: {
+          inner: ['./source/internal/**/*.css'],
+          output: [],
+        },
         dependencies: {
           '@scope/ui': {
             entry: '/style.css',
@@ -229,9 +234,28 @@ describe('normalizeAukletConfig', () => {
       },
       styles: {
         themes: {},
-        shared: [],
+        shared: {
+          inner: [],
+          output: [],
+        },
         dependencies: {},
       },
+    });
+  });
+
+  test('normalizes styles.shared object form', () => {
+    expect(
+      normalizeAukletConfig({
+        styles: {
+          shared: {
+            inner: './src/internal/**/*.css',
+            output: ['./src/shared/**/*.{css,less}'],
+          },
+        },
+      }).styles.shared,
+    ).toEqual({
+      inner: ['./src/internal/**/*.css'],
+      output: ['./src/shared/**/*.{css,less}'],
     });
   });
 
@@ -239,21 +263,29 @@ describe('normalizeAukletConfig', () => {
     expect(() =>
       normalizeAukletConfig({
         styles: {
-          shared: {} as never,
+          shared: { nested: true } as never,
         },
       }),
-    ).toThrow(
-      '[config] styles.shared must be a string or an array of strings.',
-    );
+    ).toThrow('[config] styles.shared must be an object: { inner?, output? }.');
 
     expect(() =>
       normalizeAukletConfig({
         styles: {
-          shared: [1] as never,
+          shared: './src/internal/**/*.css' as never,
+        },
+      }),
+    ).toThrow('[config] styles.shared must be an object: { inner?, output? }.');
+
+    expect(() =>
+      normalizeAukletConfig({
+        styles: {
+          shared: {
+            output: [1] as never,
+          },
         },
       }),
     ).toThrow(
-      '[config] styles.shared must be a string or an array of strings.',
+      '[config] styles.shared.output must be a string or an array of strings.',
     );
   });
 

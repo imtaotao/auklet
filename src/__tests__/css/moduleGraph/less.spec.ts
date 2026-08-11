@@ -317,7 +317,7 @@ describe('ModuleStyleGraph Less entries', () => {
           modules: true,
           styles: {
             prefix: '.mf-app',
-            shared: './src/internal/syntaxHighlight.css',
+            shared: { inner: './src/internal/syntaxHighlight.css' },
           },
         };
       `,

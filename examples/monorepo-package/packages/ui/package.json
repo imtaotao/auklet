@@ -26,7 +26,11 @@
     },
     "./style.css": "./dist/index.css",
     "./components/*.css": "./dist/es/components/*/style/index.css",
-    "./themes/*.css": "./dist/es/themes/*.css"
+    "./themes/*.css": "./dist/es/themes/*.css",
+    "./shared/chip.module.less": {
+      "import": "./dist/es/shared/chip.module.less.js",
+      "default": "./dist/es/shared/chip.module.less.js"
+    }
   },
   "devDependencies": {
     "auklet": "link:../../../..",

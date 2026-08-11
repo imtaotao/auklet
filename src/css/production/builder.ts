@@ -4,6 +4,7 @@ import { moduleStyleBuildConfig } from '#auklet/css/config';
 import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
 import { ModuleStyleOutputWriter } from '#auklet/css/production/moduleOutputWriter';
 import { PackageStyleEntryWriter } from '#auklet/css/production/packageEntryWriter';
+import { SharedStyleOutputWriter } from '#auklet/css/production/sharedOutputWriter';
 import type {
   ModuleStyleBuildConfig,
   ModuleStyleBuildContext,
@@ -56,6 +57,14 @@ export class ModuleStyleBuilder {
         ...(await new ModuleStyleOutputWriter(writerOptions).write()),
       );
     }
+
+    outputs.push(
+      ...(await new SharedStyleOutputWriter({
+        config: this.config,
+        context,
+        packageContext,
+      }).write()),
+    );
 
     return {
       packageRoot: context.packageRoot,

@@ -1,34 +1,31 @@
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createCssModulesPlugin } from '#auklet/build/cssModulesPlugin';
 import * as cssModuleCompile from '#auklet/css/modules/compileCssModule';
-import { normalizeFileKey } from '#auklet/utils';
+import { createGenerateScopedName } from '#auklet/css/modules/generateScopedName';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../fixtures/virtualProject';
-
-const expectedScopedName = (localName: string, filename: string) => {
-  const base = path.basename(filename).replace(/\.module\.(css|less)$/i, '');
-  const hash = createHash('sha256')
-    .update(`${normalizeFileKey(filename)}:${localName}`)
-    .digest('base64url')
-    .slice(0, 6);
-  return `${base}_${localName}_${hash}`;
-};
 
 describe('createCssModulesPlugin', () => {
   let project: VirtualProject;
 
   beforeEach(() => {
     project = createVirtualProject('auklet-css-modules-plugin-');
+    project.writePackageJson({ name: '@scope/fixture', version: '0.0.0' });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     project.cleanup();
   });
+
+  const expectedScopedName = (localName: string, filename: string) =>
+    createGenerateScopedName({
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    })(localName, filename, '');
 
   test('rewrites *.module.css to a synthetic *.module.css.js id', async () => {
     const sourceRoot = project.resolve('src');
@@ -375,6 +372,7 @@ describe('createCssModulesPlugin', () => {
   });
 
   test('emits basename CSS asset when module file is outside sourceRoot', async () => {
+    project.writePackageJson({ name: '@scope/app' });
     const sourceRoot = project.resolve('src');
     const file = project.writeFile(
       'vendor/Widget.module.less',
@@ -400,14 +398,50 @@ describe('createCssModulesPlugin', () => {
       String(entryId),
     );
 
+    const scopedOutsideSource = createGenerateScopedName({
+      packageRoot: project.root,
+      sourceRoot: project.root,
+    })('widget', file, '');
     expect(emitted).toEqual([
       {
         type: 'asset',
         fileName: 'Widget.module.css',
-        source: expect.stringContaining(
-          `.${expectedScopedName('widget', file)}`,
-        ),
+        source: expect.stringContaining(`.${scopedOutsideSource}`),
       },
     ]);
+  });
+
+  test('marks package exports to published JS shims as external', async () => {
+    project.writePackageJson({
+      name: '@scope/app',
+      dependencies: { '@scope/ui': '0.0.1' },
+    });
+    project.writeJson('node_modules/@scope/ui/package.json', {
+      name: '@scope/ui',
+      exports: {
+        './shared/chip.module.less': {
+          import: './dist/es/shared/chip.module.less.js',
+          default: './dist/es/shared/chip.module.less.js',
+        },
+      },
+    });
+    project.writeFile(
+      'node_modules/@scope/ui/dist/es/shared/chip.module.less.js',
+      'import "./chip.scoped.css";\nexport default {"chip":"chip_x"};\n',
+    );
+
+    const plugin = createCssModulesPlugin({
+      packageRoot: project.root,
+      sourceRoot: project.resolve('src'),
+    });
+    const resolved = await plugin.resolveId.handler(
+      '@scope/ui/shared/chip.module.less',
+      project.resolve('src/App.tsx'),
+    );
+
+    expect(resolved).toEqual({
+      id: '@scope/ui/shared/chip.module.less',
+      external: true,
+    });
   });
 });

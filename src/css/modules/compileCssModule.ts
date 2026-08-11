@@ -14,10 +14,18 @@ import {
   getCssModulePartialImportGraphNode,
   type CssModulePartialImportGraph,
 } from '#auklet/css/modules/cssModulePartialImportGraph';
+import {
+  findPackageRootForFile,
+  readPackageName,
+} from '#auklet/css/core/resolvers/externalPackageStyle';
 import { createImportCode } from '#auklet/css/core/style/specifier';
-import { generateScopedName } from '#auklet/css/modules/generateScopedName';
+import { createGenerateScopedName } from '#auklet/css/modules/generateScopedName';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
-import { isInstalledNodeModulesPath, normalizeFileKey } from '#auklet/utils';
+import {
+  isInstalledNodeModulesPath,
+  normalizeFileKey,
+  toPosixPath,
+} from '#auklet/utils';
 
 export type CssModuleRequest = {
   file: string;
@@ -219,7 +227,14 @@ const compileModuleLess = async (
         ),
         raw: false,
       });
-      const rewritten = rewriteLessImportAsReference(edge.import);
+      const specifierForLess =
+        edge.packageRoot !== graph.consumerPackageRoot
+          ? toPosixPath(edge.importedFile)
+          : edge.import.specifier;
+      const rewritten = rewriteLessImportAsReference({
+        ...edge.import,
+        specifier: specifierForLess,
+      });
       if (rewritten) {
         compileCode =
           compileCode.slice(0, edge.import.start) +
@@ -398,10 +413,20 @@ export async function compileCssModule(
         )
       : compileModuleCss(file, graph, collectDependencies);
 
+  const compilePackageRoot =
+    request.packageRoot != null
+      ? path.resolve(request.packageRoot)
+      : (findPackageRootForFile(file) ?? undefined);
   let locals: Record<string, string> = {};
   const result = await postcss([
     postcssModules({
-      generateScopedName,
+      generateScopedName: createGenerateScopedName({
+        packageRoot: compilePackageRoot,
+        packageName: compilePackageRoot
+          ? readPackageName(compilePackageRoot)
+          : null,
+        sourceRoot,
+      }),
       getJSON(_cssFileName, json) {
         locals = json;
       },

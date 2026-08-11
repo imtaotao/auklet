@@ -13,6 +13,12 @@ import {
   createStyleEntryParts,
   createThemeEntryParts,
 } from '#auklet/css/core/style/entries';
+import {
+  checkSharedOutputDistFiles,
+  checkSharedOutputExports,
+  createSharedOutputEntriesFromConfig,
+  type SharedOutputExportCheck,
+} from '#auklet/css/core/style/sharedOutput';
 import { toPosixPath } from '#auklet/utils';
 import { createAukletLogger } from '#auklet/logger';
 import { StylePackageContext } from '#auklet/css/core/stylePackageContext';
@@ -38,6 +44,16 @@ type CssInspectModuleRow = {
   ownStyles: Array<string>;
 };
 
+type CssInspectSharedOutputRow = {
+  source: string;
+  js: string;
+  css: string;
+  exportOk: boolean;
+  distOk: boolean;
+  exportReason?: string;
+  missingFiles: Array<string>;
+};
+
 export type CssInspectModel = {
   details: {
     packageName: string;
@@ -49,11 +65,13 @@ export type CssInspectModel = {
     styleFiles: number;
     themes: number;
     moduleEntries: number;
+    sharedOutputEntries: number;
   };
   packageEntries: Array<CssInspectEntryRow>;
   themeFiles: Array<{ theme: string; file: string }>;
   styleFiles: Array<string>;
   moduleEntries: Array<CssInspectModuleRow>;
+  sharedOutputEntries: Array<CssInspectSharedOutputRow>;
 };
 
 export async function runInspectCssCli(args: Array<string>) {
@@ -62,7 +80,10 @@ export async function runInspectCssCli(args: Array<string>) {
     inspectOptions.targets.map((target) => createCssInspectModel(target)),
   );
   new CssInspectReporter(inspectOptions.cwd, models).report();
-  return 0;
+  const hasSharedOutputFailure = models.some((model) =>
+    model.sharedOutputEntries.some((entry) => !entry.exportOk || !entry.distOk),
+  );
+  return hasSharedOutputFailure ? 1 : 0;
 }
 
 export async function resolveInspectCssOptions(args: Array<string>) {
@@ -124,6 +145,11 @@ export async function createCssInspectModel(options: {
     normalizedConfig,
     packageContext,
   );
+  const sharedOutputEntries = createSharedOutputInspectRows(
+    options.packageRoot,
+    normalizedConfig,
+    config,
+  );
 
   return {
     details: {
@@ -136,6 +162,7 @@ export async function createCssInspectModel(options: {
       styleFiles: packageContext.styleFiles.length,
       themes: packageContext.themeFiles.size,
       moduleEntries: moduleEntries.length,
+      sharedOutputEntries: sharedOutputEntries.length,
     },
     packageEntries,
     themeFiles: Array.from(packageContext.themeFiles.entries()).map(
@@ -154,8 +181,48 @@ export async function createCssInspectModel(options: {
         toRelativePath(context.packageRoot, file),
       ),
     })),
+    sharedOutputEntries,
   } satisfies CssInspectModel;
 }
+
+const createSharedOutputInspectRows = (
+  packageRoot: string,
+  normalizedConfig: NormalizedAukletConfig,
+  config: ModuleStyleBuildConfig,
+) => {
+  if (!normalizedConfig.styles.shared.output.length) return [];
+
+  const entries = createSharedOutputEntriesFromConfig({
+    packageRoot,
+    normalizedConfig,
+    outputFormats: config.output.outputFormats,
+  });
+  const exportChecks = new Map(
+    checkSharedOutputExports({ packageRoot, entries }).map((item) => [
+      item.exportSubpath,
+      item,
+    ]),
+  );
+  const distChecks = checkSharedOutputDistFiles({ packageRoot, entries });
+
+  return entries.map((entry) => {
+    const exportCheck = exportChecks.get(entry.exportSubpath) as
+      | SharedOutputExportCheck
+      | undefined;
+    const missingFiles = distChecks
+      .filter((item) => item.entry === entry.exportSubpath && !item.exists)
+      .map((item) => item.file);
+    return {
+      source: entry.sourceRelative,
+      js: entry.jsFiles[0] ?? entry.jsRelative,
+      css: entry.cssFiles[0] ?? entry.cssRelative,
+      exportOk: exportCheck?.ok ?? false,
+      distOk: missingFiles.length === 0,
+      exportReason: exportCheck?.reason,
+      missingFiles,
+    };
+  });
+};
 
 const createCssInspectEntryRows = (
   config: ModuleStyleBuildConfig,
@@ -294,6 +361,12 @@ class CssInspectReporter {
             0,
           ),
         ),
+        shared: this.formatValue(
+          this.models.reduce(
+            (total, model) => total + model.details.sharedOutputEntries,
+            0,
+          ),
+        ),
       },
     });
 
@@ -323,6 +396,7 @@ class CssInspectReporter {
         styles: this.formatValue(model.details.styleFiles),
         themes: this.formatValue(model.details.themes),
         entries: this.formatValue(model.details.moduleEntries),
+        shared: this.formatValue(model.details.sharedOutputEntries),
       },
     });
 
@@ -348,6 +422,28 @@ class CssInspectReporter {
         this.logger.path(theme.file),
       ]),
       empty: this.logger.colors.gray('No theme files configured.'),
+    });
+
+    this.logger.newline();
+
+    this.writeSectionTitle('Shared output entries');
+    this.logger.rows({
+      columns: this.formatColumns(['source', 'js', 'export', 'dist']),
+      rows: model.sharedOutputEntries.map((entry) => [
+        this.logger.path(entry.source),
+        this.logger.path(entry.js),
+        entry.exportOk
+          ? this.logger.colors.green('ok')
+          : this.logger.colors.red(entry.exportReason ?? 'missing'),
+        entry.distOk
+          ? this.logger.colors.green('ok')
+          : this.logger.colors.red(
+              entry.missingFiles.length
+                ? `missing: ${entry.missingFiles.join(', ')}`
+                : 'missing',
+            ),
+      ]),
+      empty: this.logger.colors.gray('No styles.shared.output entries.'),
     });
 
     this.logger.newline();

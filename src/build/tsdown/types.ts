@@ -34,6 +34,9 @@ export type BuildContext = {
   target: NonNullable<PackageBuildOptions['target']>;
   platform: NonNullable<PackageBuildOptions['platform']>;
   configureTsdown?: PackageBuildOptions['configureTsdown'];
+  // styles.shared.output globs — JS CSS Modules plugin emits *.scoped.css for
+  // these entries so build-js and build-css agree when both touch the same file.
+  sharedOutputPatterns: Array<string>;
 };
 
 export type TsdownDeps = NonNullable<UserConfig['deps']>;
