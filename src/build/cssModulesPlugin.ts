@@ -7,14 +7,12 @@ import {
   resolveStyleSourceRootForFile,
 } from '#auklet/css/core/resolvers/externalPackageStyle';
 import {
-  listSharedOutputModuleFiles,
-  toSharedOutputCssRelative,
-} from '#auklet/css/core/style/sharedOutput';
-import {
   compileCssModule,
   type CssModuleResult,
 } from '#auklet/css/modules/compileCssModule';
 import {
+  COMPILED_CSS_MODULE_SCOPED_SUFFIX,
+  isCompiledCssModuleScopedCssFile,
   rewriteCssModuleOutputImportSpecifiers,
   toCssModuleOutputFileName,
   toCssModuleOutputImportPath,
@@ -33,10 +31,23 @@ const MODULE_JS_SUFFIX = '.js';
 const isModuleJsId = (id: string) =>
   /\.module\.(?:css|less)\.js$/i.test(stripCssModuleQuery(id));
 
+const sourceModuleExt = (file: string) =>
+  path.extname(file).toLowerCase() === '.less' ? '.module.less' : '.module.css';
+
+// Output CSS assets use *.scoped.css; synthetic JS ids must keep *.module.*.js
+// so isModuleJsId / CssGuard bypass stay valid (cross-package shared-package/).
+const toSyntheticModuleJsRelative = (file: string, cssRelative: string) => {
+  if (!isCompiledCssModuleScopedCssFile(cssRelative)) {
+    throw new Error(
+      `[css] expected compiled Modules asset (*.scoped.css) for synthetic JS id, got ${cssRelative}`,
+    );
+  }
+  return `${cssRelative.slice(0, -COMPILED_CSS_MODULE_SCOPED_SUFFIX.length)}${sourceModuleExt(file)}`;
+};
+
 export type CssModulesPluginOptions = {
   packageRoot?: string;
   sourceRoot: string;
-  sharedOutputPatterns?: Array<string>;
 };
 
 const toOutputCssFileName = (
@@ -117,13 +128,6 @@ export function createCssModulesPlugin(options: CssModulesPluginOptions) {
   const packageRoot = path.resolve(
     options.packageRoot ?? path.dirname(sourceRoot),
   );
-  const sharedOutputKeys = new Set(
-    listSharedOutputModuleFiles({
-      packageRoot,
-      sourceRoot,
-      patterns: options.sharedOutputPatterns ?? [],
-    }).map((file) => normalizeFileKey(file)),
-  );
   const cache = new Map<string, CssModuleResult>();
   const cssOutputByEntryId = new Map<string, string>();
   const cssOutputByModuleFile = new Map<string, string>();
@@ -131,18 +135,8 @@ export function createCssModulesPlugin(options: CssModulesPluginOptions) {
   const emittedStyleAssets = new Set<string>();
   const moduleFileByJsId = new Map<string, string>();
 
-  const toEntryCssOutputFileName = (file: string) => {
-    if (sharedOutputKeys.has(normalizeFileKey(file))) {
-      const sourceRelative = toPosixPath(path.relative(sourceRoot, file));
-      if (
-        !sourceRelative.startsWith('..') &&
-        !path.isAbsolute(sourceRelative)
-      ) {
-        return toSharedOutputCssRelative(sourceRelative);
-      }
-    }
-    return toOutputCssFileName(file, sourceRoot, packageRoot);
-  };
+  const toEntryCssOutputFileName = (file: string) =>
+    toOutputCssFileName(file, sourceRoot, packageRoot);
 
   const toModuleJsId = (file: string) => {
     const resolved = path.resolve(file);
@@ -160,9 +154,16 @@ export function createCssModulesPlugin(options: CssModulesPluginOptions) {
           `${path.basename(resolved)}${MODULE_JS_SUFFIX}`,
         );
       }
+      // Outside the package: reuse shared-package/ output layout for uniqueness,
+      // but keep *.module.(css|less).js — do not append .js onto *.scoped.css.
+      const cssRelative = toOutputCssFileName(
+        resolved,
+        sourceRoot,
+        packageRoot,
+      );
       return path.join(
         sourceRoot,
-        `${toOutputCssFileName(resolved, sourceRoot, packageRoot)}${MODULE_JS_SUFFIX}`,
+        `${toSyntheticModuleJsRelative(resolved, cssRelative)}${MODULE_JS_SUFFIX}`,
       );
     })();
     moduleFileByJsId.set(normalizeFileKey(id), resolved);

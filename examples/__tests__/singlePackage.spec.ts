@@ -51,16 +51,16 @@ describe('single package example', () => {
 
   test('emits CSS Modules assets outside the global style aggregate', () => {
     expect(
-      readDist(singlePackage, 'es/components/Badge/Badge.module.css'),
+      readDist(singlePackage, 'es/components/Badge/Badge.scoped.css'),
     ).toMatch(/\.Badge_badge_/);
-    expect(readDist(singlePackage, 'es/components/Tag/Tag.module.css')).toMatch(
+    expect(readDist(singlePackage, 'es/components/Tag/Tag.scoped.css')).toMatch(
       /\.Tag_tag_/,
     );
     expect(
-      readDist(singlePackage, 'es/components/Tag/Tag.module.css'),
+      readDist(singlePackage, 'es/components/Tag/Tag.scoped.css'),
     ).toContain('@import "./tokens.css"');
     expect(
-      readDist(singlePackage, 'es/components/Tag/Tag.module.css'),
+      readDist(singlePackage, 'es/components/Tag/Tag.scoped.css'),
     ).toContain('color: var(--tag-color)');
     expect(readDist(singlePackage, 'es/components/Tag/tokens.css')).toContain(
       '--tag-color: #0f766e',
@@ -73,19 +73,19 @@ describe('single package example', () => {
     );
     expect(
       readDist(singlePackage, 'lib/components/Badge/Badge.module.css.js'),
-    ).toContain('require("./Badge.module.css")');
+    ).toContain('require("./Badge.scoped.css")');
     expect(
       readDist(singlePackage, 'lib/components/Tag/Tag.module.less.js'),
-    ).toContain('require("./Tag.module.css")');
+    ).toContain('require("./Tag.scoped.css")');
   });
 
   test('emits bundle, module, and style files', () => {
     expect(listDistFiles(singlePackage)).toEqual([
-      'components/Badge/Badge.module.css',
-      'components/Tag/Tag.module.css',
+      'components/Badge/Badge.scoped.css',
+      'components/Tag/Tag.scoped.css',
       'components/Tag/tokens.css',
-      'es/components/Badge/Badge.module.css',
       'es/components/Badge/Badge.module.css.js',
+      'es/components/Badge/Badge.scoped.css',
       'es/components/Badge/index.d.ts',
       'es/components/Badge/index.js',
       'es/components/Badge/style/index.css',
@@ -102,8 +102,8 @@ describe('single package example', () => {
       'es/components/Panel/index.d.ts',
       'es/components/Panel/index.js',
       'es/components/Panel/style/index.css',
-      'es/components/Tag/Tag.module.css',
       'es/components/Tag/Tag.module.less.js',
+      'es/components/Tag/Tag.scoped.css',
       'es/components/Tag/index.d.ts',
       'es/components/Tag/index.js',
       'es/components/Tag/style/index.css',
@@ -120,8 +120,8 @@ describe('single package example', () => {
       'index.global.js',
       'index.js',
       'index.mjs',
-      'lib/components/Badge/Badge.module.css',
       'lib/components/Badge/Badge.module.css.js',
+      'lib/components/Badge/Badge.scoped.css',
       'lib/components/Badge/index.d.ts',
       'lib/components/Badge/index.js',
       'lib/components/Badge/style/index.css',
@@ -138,8 +138,8 @@ describe('single package example', () => {
       'lib/components/Panel/index.d.ts',
       'lib/components/Panel/index.js',
       'lib/components/Panel/style/index.css',
-      'lib/components/Tag/Tag.module.css',
       'lib/components/Tag/Tag.module.less.js',
+      'lib/components/Tag/Tag.scoped.css',
       'lib/components/Tag/index.d.ts',
       'lib/components/Tag/index.js',
       'lib/components/Tag/style/index.css',

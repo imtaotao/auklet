@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createCssModulesPlugin } from '#auklet/build/cssModulesPlugin';
@@ -76,7 +77,7 @@ describe('createCssModulesPlugin', () => {
     });
 
     expect(rendered?.code).toBe(
-      `import "./Button.module.css";\n${loaded!.code}`,
+      `import "./Button.scoped.css";\n${loaded!.code}`,
     );
 
     const renderedCjs = plugin.renderChunk(
@@ -89,13 +90,13 @@ describe('createCssModulesPlugin', () => {
     );
 
     expect(renderedCjs?.code).toBe(
-      `require("./Button.module.css");\nexports.default = ${JSON.stringify({ button: expectedScopedName('button', file) })};\n`,
+      `require("./Button.scoped.css");\nexports.default = ${JSON.stringify({ button: expectedScopedName('button', file) })};\n`,
     );
 
     expect(emitted).toEqual([
       {
         type: 'asset',
-        fileName: 'components/Button/Button.module.css',
+        fileName: 'components/Button/Button.scoped.css',
         source: expect.stringContaining(
           `.${expectedScopedName('button', file)}`,
         ),
@@ -135,7 +136,7 @@ describe('createCssModulesPlugin', () => {
     );
 
     expect(emitted).toHaveLength(1);
-    expect(emitted[0]?.fileName).toBe('components/Tag/Tag.module.css');
+    expect(emitted[0]?.fileName).toBe('components/Tag/Tag.scoped.css');
     expect(emitted[0]?.source).toContain('border-color: teal');
     expect(emitted[0]?.source).toContain('color: blue');
     expect(emitted[0]?.source).not.toContain('reference-only');
@@ -174,7 +175,7 @@ describe('createCssModulesPlugin', () => {
       },
       {
         type: 'asset',
-        fileName: 'components/Button/Button.module.css',
+        fileName: 'components/Button/Button.scoped.css',
         source: expect.stringContaining(
           `.${expectedScopedName('button', file)}`,
         ),
@@ -225,7 +226,7 @@ describe('createCssModulesPlugin', () => {
       },
       {
         type: 'asset',
-        fileName: 'components/Tag/Tag.module.css',
+        fileName: 'components/Tag/Tag.scoped.css',
         source: expect.stringContaining(`.${expectedScopedName('tag', file)}`),
       },
     ]);
@@ -268,7 +269,7 @@ describe('createCssModulesPlugin', () => {
           source: expect.stringContaining('@import "../shared/base.css"'),
         }),
         expect.objectContaining({
-          fileName: 'components/Tag/Tag.module.css',
+          fileName: 'components/Tag/Tag.scoped.css',
           source: expect.stringContaining(
             `.${expectedScopedName('tag', file)}`,
           ),
@@ -276,7 +277,7 @@ describe('createCssModulesPlugin', () => {
       ]),
     );
     const moduleAsset = emitted.find(
-      (asset) => asset.fileName === 'components/Tag/Tag.module.css',
+      (asset) => asset.fileName === 'components/Tag/Tag.scoped.css',
     );
     expect(moduleAsset?.source).toContain('@import "./partials/tokens.css"');
   });
@@ -367,7 +368,7 @@ describe('createCssModulesPlugin', () => {
     );
 
     expect(renderedCjs?.code).toBe(
-      `require("./Button.module.css");\nexports.default = ${JSON.stringify({ button: expectedScopedName('button', file) })};\n`,
+      `require("./Button.scoped.css");\nexports.default = ${JSON.stringify({ button: expectedScopedName('button', file) })};\n`,
     );
   });
 
@@ -405,7 +406,7 @@ describe('createCssModulesPlugin', () => {
     expect(emitted).toEqual([
       {
         type: 'asset',
-        fileName: 'Widget.module.css',
+        fileName: 'Widget.scoped.css',
         source: expect.stringContaining(`.${scopedOutsideSource}`),
       },
     ]);
@@ -443,5 +444,82 @@ describe('createCssModulesPlugin', () => {
       id: '@scope/ui/shared/chip.module.less',
       external: true,
     });
+  });
+
+  test('cross-package source Modules keep *.module.*.js ids while emitting *.scoped.css', async () => {
+    // Sibling package outside consumer packageRoot hits the shared-package/
+    // synthetic-id branch (nested node_modules stays inside packageRoot).
+    const appRoot = project.resolve('packages/app');
+    const uiRoot = project.resolve('packages/ui');
+    fs.mkdirSync(project.resolve('packages/app/node_modules/@scope'), {
+      recursive: true,
+    });
+    fs.symlinkSync(
+      uiRoot,
+      project.resolve('packages/app/node_modules/@scope/ui'),
+    );
+
+    project.writeJson('packages/app/package.json', {
+      name: '@scope/app',
+      dependencies: { '@scope/ui': '0.0.1' },
+    });
+    project.writeJson('packages/ui/package.json', {
+      name: '@scope/ui',
+      exports: {
+        './shared/chip.module.less': './src/shared/chip.module.less',
+      },
+    });
+    project.writeFile(
+      'packages/ui/src/shared/chip.module.less',
+      '.chip { color: red; }\n',
+    );
+
+    const sourceRoot = path.join(appRoot, 'src');
+    fs.mkdirSync(sourceRoot, { recursive: true });
+    const plugin = createCssModulesPlugin({
+      packageRoot: appRoot,
+      sourceRoot,
+    });
+    const resolved = await plugin.resolveId.handler(
+      '@scope/ui/shared/chip.module.less',
+      path.join(sourceRoot, 'App.tsx'),
+    );
+
+    expect(resolved).toBe(
+      path.join(
+        sourceRoot,
+        'shared-package/@scope/ui/src/shared/chip.module.less.js',
+      ),
+    );
+    expect(String(resolved).endsWith('.module.less.js')).toBe(true);
+    expect(String(resolved).includes('.scoped.css.js')).toBe(false);
+
+    const emitted: Array<{ fileName: string; source: string }> = [];
+    const loaded = await plugin.load.call(
+      {
+        emitFile(asset: { type: 'asset'; fileName: string; source: string }) {
+          emitted.push(asset);
+        },
+      },
+      String(resolved),
+    );
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.code).toMatch(/"chip"\s*:/);
+    expect(emitted).toEqual([
+      {
+        type: 'asset',
+        fileName: 'shared-package/@scope/ui/src/shared/chip.scoped.css',
+        source: expect.stringMatching(/\.[\w-]*chip[\w-]*/),
+      },
+    ]);
+
+    const rendered = plugin.renderChunk(loaded!.code!, {
+      fileName: 'App.js',
+      moduleIds: [String(resolved)],
+    });
+    expect(rendered?.code).toContain(
+      'import "./shared-package/@scope/ui/src/shared/chip.scoped.css"',
+    );
   });
 });

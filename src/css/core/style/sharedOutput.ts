@@ -3,6 +3,11 @@ import path from 'node:path';
 import { findPathInExports, type Exports } from 'conditional-export';
 import { STYLE_PACKAGE_EXPORT_CONDITIONS } from '#auklet/css/core/resolvers/packageDependency';
 import { resolveSharedStylePatterns } from '#auklet/css/core/style/shared';
+import {
+  COMPILED_CSS_MODULE_SCOPED_SUFFIX,
+  isCompiledCssModuleScopedCssFile,
+  toCompiledCssModuleAssetRelative,
+} from '#auklet/css/modules/cssModuleOutputPaths';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
 import {
   isInstalledNodeModulesPath,
@@ -12,10 +17,9 @@ import {
 import type { NormalizedAukletConfig } from '#auklet/types';
 
 const MODULE_JS_SUFFIX = '.js';
-// Published shared.output CSS Modules must not keep a `*.module.css` name: Vite /
-// webpack treat that pattern as CSS Modules and would re-hash class names while
-// the JS shim still exports the producer locals.
-export const SHARED_OUTPUT_SCOPED_CSS_SUFFIX = '.scoped.css';
+// Alias of the compiled Modules CSS suffix (same contract as JS build emit).
+export const SHARED_OUTPUT_SCOPED_CSS_SUFFIX =
+  COMPILED_CSS_MODULE_SCOPED_SUFFIX;
 
 const PLAIN_STYLE_EXTENSIONS = new Set(['.css', '.less']);
 
@@ -93,12 +97,7 @@ export function sharedOutputRequiresModules(options: {
 }
 
 export function toSharedOutputCssRelative(sourceRelative: string) {
-  return toPosixPath(
-    sourceRelative.replace(
-      /\.module\.(css|less)$/i,
-      SHARED_OUTPUT_SCOPED_CSS_SUFFIX,
-    ),
-  );
+  return toCompiledCssModuleAssetRelative(sourceRelative);
 }
 
 export function toSharedOutputJsRelative(sourceRelative: string) {
@@ -106,7 +105,7 @@ export function toSharedOutputJsRelative(sourceRelative: string) {
 }
 
 export function isSharedOutputScopedCssFile(file: string) {
-  return file.toLowerCase().endsWith(SHARED_OUTPUT_SCOPED_CSS_SUFFIX);
+  return isCompiledCssModuleScopedCssFile(file);
 }
 
 export function isPlainSharedOutputStyleFile(file: string) {

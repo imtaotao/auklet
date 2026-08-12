@@ -22,7 +22,6 @@ export function defineKernelPackageConfigFromOptions(
     buildOptions,
     normalizedConfig.source,
     normalizedConfig.output,
-    normalizedConfig.styles.shared.output,
   );
   const bundleConfigs = createBundleConfigs(context, formats);
   const moduleConfigs = normalizedConfig.modules

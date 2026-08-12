@@ -85,7 +85,8 @@ the same change and make the reason explicit.
   - CSS Modules: compile to `*.scoped.css` + JS shim (same hash formula as the
     JS Modules plugin); `modules: true` required when any Modules match;
     exports → shim under `{output}/es|lib`; workspace Vite may resolve to
-    source for Modules HMR.
+    source for Modules HMR. Component JS Modules emit the same `*.scoped.css`
+    contract (never published `*.module.css`).
   - Plain `.css` / `.less`: copy as-is (Less **not** compiled); exports →
     mirrored `{output}/es|lib` asset; workspace Vite remaps Modules / plain /
     Less `(reference)` to source for HMR (pre-warmed caches); installed / prod

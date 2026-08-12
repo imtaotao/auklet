@@ -32,6 +32,31 @@ describe('cssModuleOutputPaths', () => {
     ).toBe('shared/helpers.css');
   });
 
+  test('rewrites compiled CSS Modules to *.scoped.css', () => {
+    const cssModule = project.writeFile(
+      'src/components/Button/Button.module.css',
+      '.button {}\n',
+    );
+    const lessModule = project.writeFile(
+      'src/components/Tag/Tag.module.less',
+      '.tag {}\n',
+    );
+    expect(
+      toCssModuleOutputFileName({
+        file: cssModule,
+        sourceRoot: project.resolve('src'),
+        consumerPackageRoot: project.root,
+      }),
+    ).toBe('components/Button/Button.scoped.css');
+    expect(
+      toCssModuleOutputFileName({
+        file: lessModule,
+        sourceRoot: project.resolve('src'),
+        consumerPackageRoot: project.root,
+      }),
+    ).toBe('components/Tag/Tag.scoped.css');
+  });
+
   test('maps dependency package assets under shared-package/', () => {
     project.writeJson('node_modules/@scope/ui/package.json', {
       name: '@scope/ui',

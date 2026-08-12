@@ -23,7 +23,6 @@ export function createCommonConfig(context: BuildContext, deps: TsdownDeps) {
       createCssModulesPlugin({
         packageRoot: context.packageRoot,
         sourceRoot: path.join(context.packageRoot, context.source),
-        sharedOutputPatterns: context.sharedOutputPatterns,
       }),
       createPackageStyleImportPlugin({
         packageRoot: context.packageRoot,

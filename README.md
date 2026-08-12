@@ -205,9 +205,10 @@ package style entries still use `styles.dependencies`.
 
 CSS Modules (`*.module.css` / `*.module.less`) import from JS/TS and compile
 outside the global style entry graph. They skip `styles.prefix` and ship with
-the JS build (locals plus side-effect CSS). That naming pattern is reserved for
-Modules — rename former global `*.module.*` files if needed. Ambient TypeScript
-declarations live in the consuming package.
+the JS build as `*.scoped.css` plus a locals shim (never published
+`*.module.css`, so consumers do not re-module). That source naming pattern is
+reserved for Modules — rename former global `*.module.*` files if needed.
+Ambient TypeScript declarations live in the consuming package.
 
 `@tsdown/css` is required for tsdown's CSS stack; auklet `modules: true` owns
 `*.module.*` (do not also enable a second Modules pipeline on those files).

@@ -7,11 +7,37 @@ import {
   findPackageRootForFile,
   readPackageName,
 } from '#auklet/css/core/resolvers/externalPackageStyle';
+import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
 import { isInsideRoot, toPosixPath } from '#auklet/utils';
 
 // Cross-package sibling plain CSS assets (and local compiled Less→CSS) emitted
 // next to compiled Modules. Cross-package .less uses (reference), not this path.
 export const SHARED_PACKAGE_STYLE_OUTPUT_PREFIX = 'shared-package';
+
+// Compiled CSS Modules must not keep a `*.module.css` name: Vite / webpack treat
+// that pattern as CSS Modules and would re-hash class names while the JS shim
+// still exports the producer locals.
+export const COMPILED_CSS_MODULE_SCOPED_SUFFIX = '.scoped.css';
+
+export function toCompiledCssModuleAssetRelative(fileOrRelative: string) {
+  return toPosixPath(
+    fileOrRelative.replace(
+      /\.module\.(css|less)$/i,
+      COMPILED_CSS_MODULE_SCOPED_SUFFIX,
+    ),
+  );
+}
+
+export function isCompiledCssModuleScopedCssFile(file: string) {
+  return file.toLowerCase().endsWith(COMPILED_CSS_MODULE_SCOPED_SUFFIX);
+}
+
+const toOutputAssetRelative = (file: string, relativePath: string) => {
+  if (isCssModuleFile(file)) {
+    return toCompiledCssModuleAssetRelative(relativePath);
+  }
+  return toPosixPath(relativePath.replace(/\.less$/i, '.css'));
+};
 
 export function toCssModuleOutputFileName(options: {
   file: string;
@@ -20,7 +46,7 @@ export function toCssModuleOutputFileName(options: {
 }) {
   const relative = path.relative(options.sourceRoot, options.file);
   if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
-    return toPosixPath(relative.replace(/\.less$/i, '.css'));
+    return toOutputAssetRelative(options.file, relative);
   }
 
   // Prefer provider package identity over "inside consumer root" so nested
@@ -36,16 +62,16 @@ export function toCssModuleOutputFileName(options: {
       path.posix.join(
         SHARED_PACKAGE_STYLE_OUTPUT_PREFIX,
         packageName,
-        providerRelative.replace(/\.less$/i, '.css'),
+        toOutputAssetRelative(options.file, providerRelative),
       ),
     );
   }
 
   if (isInsideRoot(options.file, options.consumerPackageRoot)) {
-    return path.basename(options.file).replace(/\.less$/i, '.css');
+    return toOutputAssetRelative(options.file, path.basename(options.file));
   }
 
-  return path.basename(options.file).replace(/\.less$/i, '.css');
+  return toOutputAssetRelative(options.file, path.basename(options.file));
 }
 
 export function toCssModuleOutputImportPath(

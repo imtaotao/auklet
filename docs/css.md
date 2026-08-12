@@ -324,9 +324,12 @@ style entry pipeline.
   `watchFiles` contains locally editable files. Less partials become sibling
   `.css` assets with preserved `@import` in both production and dev CSS sources.
 - **Production:** emitted by the JS build (`createCssModulesPlugin`), not
-  `build-css` alone — CSS asset plus side-effect shim with locals. Local CSS
+  `build-css` alone — compiled CSS asset as `*.scoped.css` (never
+  `*.module.css`) plus a side-effect shim with locals. Local CSS
   partials referenced by `*.module.css` are emitted as sibling assets so
-  standalone `build-js` output stays self-contained.
+  standalone `build-js` output stays self-contained. The `*.scoped.css`
+  name avoids consumer Vite/webpack running CSS Modules again on an
+  already-compiled asset.
 - **Dev:** `aukletStylePlugin` serves the same protocol; changes to tracked files
   refresh virtual CSS, including Less partials listed in `watchFiles`.
   Dev splits each module into two virtual chunks: a **locals** shim
@@ -415,12 +418,11 @@ A producer may both:
 1. list the file in `styles.shared.output` (publish shim + `*.scoped.css`), and
 2. `import styles from './shared/….module.*'` inside its own JS.
 
-`createCssModulesPlugin` treats `shared.output` matches as publishable entries:
-build-js emits the same `*.scoped.css` path (not `*.module.css`) and side-effect
-imports that file. `sharedOutputWriter` (build-css) then writes the export shim
-and the same scoped CSS. Do not leave a parallel `*.module.css` asset for those
-entries — that would reintroduce secondary Modules risk and split internal vs
-published CSS paths.
+`createCssModulesPlugin` and `sharedOutputWriter` share one compiled-Modules
+contract: build-js / build-css both emit `*.scoped.css` (not `*.module.css`)
+and the JS shim side-effect-imports that file. Do not leave a parallel
+`*.module.css` asset — that would reintroduce secondary Modules risk and split
+internal vs published CSS paths.
 
 | Consumer surface                                         | Behavior                                                                                                                                     |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -431,9 +433,10 @@ published CSS paths.
 
 #### Secondary CSS Modules risk
 
-If the published CSS kept a `*.module.css` name, consumer Vite/webpack would run
-CSS Modules again, re-hash classes while the JS shim still exported producer
-locals → **locals and DOM classes diverge**.
+If any compiled Modules CSS kept a `*.module.css` name (component JS build or
+`shared.output`), consumer Vite/webpack would run CSS Modules again, re-hash
+classes while the JS shim still exported producer locals → **locals and DOM
+classes diverge**.
 
 | Mitigation                               | Detail                                                                                            |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------- |

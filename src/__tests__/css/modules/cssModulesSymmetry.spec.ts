@@ -178,11 +178,11 @@ describe('CSS Modules dev and production symmetry', () => {
 
     const esModuleCss = readFileFromOutputs(
       esOutputs,
-      'components/Tag/Tag.module.css',
+      'components/Tag/Tag.scoped.css',
     );
     const cjsModuleCss = readFileFromOutputs(
       cjsOutputs,
-      'components/Tag/Tag.module.css',
+      'components/Tag/Tag.scoped.css',
     );
     const esTokensCss = readFileFromOutputs(
       esOutputs,
@@ -209,7 +209,7 @@ describe('CSS Modules dev and production symmetry', () => {
     );
 
     expect(esSideEffect).toBe(cjsSideEffect);
-    expect(esSideEffect).toBe('./components/Tag/Tag.module.css');
+    expect(esSideEffect).toBe('./components/Tag/Tag.scoped.css');
     expect(
       fs.existsSync(
         path.resolve(path.dirname(esModuleJs!.full), esSideEffect!),
@@ -287,11 +287,11 @@ describe('CSS Modules dev and production symmetry', () => {
 
     const esModuleCss = readFileFromOutputs(
       esOutputs,
-      'components/Button/Button.module.css',
+      'components/Button/Button.scoped.css',
     );
     const cjsModuleCss = readFileFromOutputs(
       cjsOutputs,
-      'components/Button/Button.module.css',
+      'components/Button/Button.scoped.css',
     );
 
     expect(esModuleCss).toBe(cjsModuleCss);
@@ -306,7 +306,7 @@ describe('CSS Modules dev and production symmetry', () => {
     );
 
     expect(esSideEffect).toBe(cjsSideEffect);
-    expect(esSideEffect).toBe('./components/Button/Button.module.css');
+    expect(esSideEffect).toBe('./components/Button/Button.scoped.css');
     expect(
       fs.existsSync(
         path.resolve(path.dirname(esModuleJs!.full), esSideEffect!),

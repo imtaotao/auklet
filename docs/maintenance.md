@@ -143,12 +143,12 @@ Check:
   `*.scoped.css` (never emit published `*.module.css`).
 - Cross-package sibling assets share `src/css/modules/cssModuleOutputPaths.ts`
   with `cssModulesPlugin` and `packageStyleImportPlugin`
-  (`shared-package/<pkg>/...` + import rewrite).
+  (`shared-package/<pkg>/...` + import rewrite). Compiled Modules always map
+  to `*.scoped.css` via `toCssModuleOutputFileName` (same contract as
+  `shared.output`).
 - Plain package style resolve→CSS text lives in
   `src/css/core/packageStyleSource.ts` (build plugin + Vite); do not duplicate
   resolve gates or Less→CSS loading in glue layers.
-- `createCssModulesPlugin` receives `sharedOutputPatterns` so JS imports of
-  `shared.output` files emit `*.scoped.css` (aligned with `sharedOutputWriter`).
 - Document `@tsdown/css` vs auklet Modules coexistence (`docs/css.md`).
 - Scoped class hash: `generateScopedName` /
   `createGenerateScopedName` (`packageName + source-relative + local`).

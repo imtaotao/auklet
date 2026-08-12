@@ -303,7 +303,7 @@ describe('CSS Modules dev and production semantics', () => {
     const outputs = readOutputFiles(outDir);
     const moduleJs = findCssModuleJsOutput(outputs, 'Tag.module.less');
     const moduleCss = outputs.find((item) =>
-      item.relative.endsWith('components/Tag/Tag.module.css'),
+      item.relative.endsWith('components/Tag/Tag.scoped.css'),
     );
     const tokensCss = outputs.find((item) =>
       item.relative.endsWith('components/Tag/tokens.css'),
@@ -333,7 +333,7 @@ describe('CSS Modules dev and production semantics', () => {
     expect(entryMarkers.hasDevRuntimePrefix).toBe(false);
     expect(entryMarkers.hasDocumentHeadInjection).toBe(false);
     expect(entryCode).toContain('Tag.module.less.mjs');
-    expect(moduleJsCode).toMatch(/Tag\.module\.css/);
+    expect(moduleJsCode).toMatch(/Tag\.scoped\.css/);
     expect(moduleCssCode).toContain('@import "./tokens.css"');
     expect(moduleCssCode).toContain('color: var(--tag-color)');
     expect(moduleCssCode).toContain(Object.values(protocol.locals)[0]);

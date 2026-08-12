@@ -120,7 +120,7 @@ describe('css modules via tsdown build', () => {
 
     const outputs = readOutputFiles(outDir);
     const cssOutput = outputs.find(
-      (file) => file.relative === 'components/Button/Button.module.css',
+      (file) => file.relative === 'components/Button/Button.scoped.css',
     );
     expect(cssOutput).toBeTruthy();
     expect(
@@ -181,7 +181,7 @@ describe('css modules via tsdown build', () => {
 
     const outputs = readOutputFiles(outDir);
     const cssOutput = outputs.find(
-      (file) => file.relative === 'Button.module.css',
+      (file) => file.relative === 'Button.scoped.css',
     );
     expect(cssOutput).toBeTruthy();
 
@@ -248,7 +248,7 @@ describe('css modules via tsdown build', () => {
 
     const outputs = readOutputFiles(outDir);
     const cssOutput = outputs.find(
-      (file) => file.relative === 'components/Button/Button.module.css',
+      (file) => file.relative === 'components/Button/Button.scoped.css',
     );
     expect(cssOutput).toBeTruthy();
 
@@ -326,7 +326,7 @@ describe('css modules via tsdown build', () => {
 
     const outputs = readOutputFiles(outDir);
     const cssOutput = outputs.find(
-      (file) => file.relative === 'components/Card/Card.module.css',
+      (file) => file.relative === 'components/Card/Card.scoped.css',
     );
     expect(cssOutput).toBeTruthy();
 
@@ -419,7 +419,7 @@ describe('css modules via tsdown build', () => {
 
       const outputs = readOutputFiles(outputDir);
       const cssOutput = outputs.find(
-        (file) => file.relative === 'components/Button/Button.module.css',
+        (file) => file.relative === 'components/Button/Button.scoped.css',
       );
       const moduleJs = findCssModuleJsOutput(outputs, 'Button.module.css');
 
@@ -597,7 +597,7 @@ describe('css modules via tsdown build', () => {
     for (const outDir of ['dist/es', 'dist/lib']) {
       const tokens = project.resolve(`${outDir}/components/Tag/tokens.css`);
       const moduleCss = project.resolve(
-        `${outDir}/components/Tag/Tag.module.css`,
+        `${outDir}/components/Tag/Tag.scoped.css`,
       );
       expect(fs.existsSync(tokens)).toBe(true);
       expect(fs.readFileSync(tokens, 'utf8')).toContain('--tag-color: #0f766e');
@@ -685,7 +685,7 @@ describe('css modules via tsdown build', () => {
     for (const outDir of ['dist/es', 'dist/lib']) {
       expect(
         fs.existsSync(
-          project.resolve(`${outDir}/components/Badge/Badge.module.css`),
+          project.resolve(`${outDir}/components/Badge/Badge.scoped.css`),
         ),
       ).toBe(true);
       expect(
@@ -693,7 +693,7 @@ describe('css modules via tsdown build', () => {
       ).toBe(true);
       expect(
         fs.existsSync(
-          project.resolve(`${outDir}/components/Tag/Tag.module.css`),
+          project.resolve(`${outDir}/components/Tag/Tag.scoped.css`),
         ),
       ).toBe(true);
     }
@@ -750,7 +750,6 @@ describe('css modules via tsdown build', () => {
         createCssModulesPlugin({
           sourceRoot,
           packageRoot: project.root,
-          sharedOutputPatterns: ['./src/shared/**/*.module.{less,css}'],
         }),
       ],
     });

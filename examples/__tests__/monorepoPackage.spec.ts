@@ -149,19 +149,19 @@ describe('monorepo package example', () => {
       '@import',
     );
 
-    expect(readDist(ui, 'es/components/Badge/Badge.module.css')).toMatch(
+    expect(readDist(ui, 'es/components/Badge/Badge.scoped.css')).toMatch(
       /\.Badge_badge_/,
     );
-    expect(readDist(ui, 'es/components/Tag/Tag.module.css')).toMatch(
+    expect(readDist(ui, 'es/components/Tag/Tag.scoped.css')).toMatch(
       /\.Tag_tag_/,
     );
-    expect(readDist(ui, 'es/components/Tag/Tag.module.css')).toContain(
+    expect(readDist(ui, 'es/components/Tag/Tag.scoped.css')).toContain(
       '@import "./tokens.css"',
     );
-    expect(readDist(ui, 'es/components/Tag/Tag.module.css')).toContain(
+    expect(readDist(ui, 'es/components/Tag/Tag.scoped.css')).toContain(
       'color: #2563eb',
     );
-    expect(readDist(ui, 'es/components/Tag/Tag.module.css')).not.toContain(
+    expect(readDist(ui, 'es/components/Tag/Tag.scoped.css')).not.toContain(
       '@demo/theme/tokens.less',
     );
     expect(readDist(ui, 'es/components/Tag/tokens.css')).toContain(
@@ -174,10 +174,10 @@ describe('monorepo package example', () => {
       'Tag.module.less.js',
     );
     expect(readDist(ui, 'lib/components/Badge/Badge.module.css.js')).toContain(
-      'require("./Badge.module.css")',
+      'require("./Badge.scoped.css")',
     );
     expect(readDist(ui, 'lib/components/Tag/Tag.module.less.js')).toContain(
-      'require("./Tag.module.css")',
+      'require("./Tag.scoped.css")',
     );
     expect(readDist(ui, 'index.css')).not.toMatch(/\.Badge_badge_/);
     expect(readDist(ui, 'index.css')).not.toMatch(/\.Tag_tag_/);
@@ -220,11 +220,11 @@ describe('monorepo package example', () => {
 
   test('emits bundle, module, and style files for ui', () => {
     expect(listDistFiles(ui)).toEqual([
-      'components/Badge/Badge.module.css',
-      'components/Tag/Tag.module.css',
+      'components/Badge/Badge.scoped.css',
+      'components/Tag/Tag.scoped.css',
       'components/Tag/tokens.css',
-      'es/components/Badge/Badge.module.css',
       'es/components/Badge/Badge.module.css.js',
+      'es/components/Badge/Badge.scoped.css',
       'es/components/Badge/index.d.ts',
       'es/components/Badge/index.js',
       'es/components/Badge/style/index.css',
@@ -237,8 +237,8 @@ describe('monorepo package example', () => {
       'es/components/Card/index.js',
       'es/components/Card/style/index.css',
       'es/components/Card/tokens.css',
-      'es/components/Tag/Tag.module.css',
       'es/components/Tag/Tag.module.less.js',
+      'es/components/Tag/Tag.scoped.css',
       'es/components/Tag/index.d.ts',
       'es/components/Tag/index.js',
       'es/components/Tag/style/index.css',
@@ -261,8 +261,8 @@ describe('monorepo package example', () => {
       'index.d.ts',
       'index.js',
       'index.mjs',
-      'lib/components/Badge/Badge.module.css',
       'lib/components/Badge/Badge.module.css.js',
+      'lib/components/Badge/Badge.scoped.css',
       'lib/components/Badge/index.d.ts',
       'lib/components/Badge/index.js',
       'lib/components/Badge/style/index.css',
@@ -275,8 +275,8 @@ describe('monorepo package example', () => {
       'lib/components/Card/index.js',
       'lib/components/Card/style/index.css',
       'lib/components/Card/tokens.css',
-      'lib/components/Tag/Tag.module.css',
       'lib/components/Tag/Tag.module.less.js',
+      'lib/components/Tag/Tag.scoped.css',
       'lib/components/Tag/index.d.ts',
       'lib/components/Tag/index.js',
       'lib/components/Tag/style/index.css',
