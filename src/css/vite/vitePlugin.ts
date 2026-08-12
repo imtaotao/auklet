@@ -53,9 +53,26 @@ const VIRTUAL_ID_PREFIX = 'virtual:auklet-css:';
 const RESOLVED_VIRTUAL_ID_PREFIX = '\0auklet-css:';
 const RESOLVED_CSS_MODULE_PREFIX = '\0auklet-css-module:';
 const BROWSER_VIRTUAL_ID_PREFIX = 'auklet-css:';
+// All auklet Vite virtual ids share this prefix (`auklet-css*`, `auklet-package-style:`).
+const AUKLET_VIRTUAL_ID_PREFIX = '\0auklet-';
 const logger = createAukletLogger({ scope: 'css:vite' });
 
 const fromCssModuleVirtualId = cssModuleFileFromVirtualId;
+
+// Module Federation and other plugins use `\0…` virtual ids. Those must not be
+// treated as filesystem paths (Node fs APIs reject null bytes).
+const isForeignViteVirtualId = (id: string) =>
+  id.startsWith('\0') && !id.startsWith(AUKLET_VIRTUAL_ID_PREFIX);
+
+// Owned virtual importers embed a real file; unwrap before package-root walks.
+const resolveImporterAnchorFile = (importer: string) => {
+  const cleanImporter = stripCssModuleQuery(importer);
+  return (
+    fromCssModuleVirtualId(cleanImporter) ??
+    fromPackageStyleVirtualId(cleanImporter) ??
+    (cleanImporter.startsWith('\0') ? null : cleanImporter)
+  );
+};
 
 const loadCssModuleCode = async (
   context: { addWatchFile?: (file: string) => void },
@@ -225,16 +242,44 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
         const graph = getGraph();
         const cleanId = stripCssModuleQuery(source);
 
+        // Foreign `\0` sources (e.g. MF `__loadShare__`) are never style entries.
+        if (isForeignViteVirtualId(cleanId)) {
+          return null;
+        }
+
+        // Reclaim owned virtuals before importer-based path work. MF remotes often
+        // re-resolve `\0auklet-css-module:…` / `auklet-css:…` with a foreign
+        // `__loadShare__` importer; that must not drop the claim.
         const styleAsset = resolveCssModuleStyleAssetVirtualId(cleanId);
         if (styleAsset) return styleAsset.id;
 
         if (cleanId.startsWith(RESOLVED_CSS_MODULE_PREFIX)) {
           return cleanId;
         }
+        if (fromPackageStyleVirtualId(cleanId)) {
+          return cleanId;
+        }
 
-        const importerPackageRoot = importer
-          ? (graph.resolvePackageRootForFile(importer) ??
-            findPackageRootForFile(importer))
+        const resolvedVirtualId = toResolvedVirtualId(cleanId);
+        if (resolvedVirtualId) return resolvedVirtualId;
+        if (cleanId.startsWith(VIRTUAL_ID_PREFIX)) {
+          return `${RESOLVED_VIRTUAL_ID_PREFIX}${cleanId.slice(
+            VIRTUAL_ID_PREFIX.length,
+          )}`;
+        }
+
+        // Foreign importers are not filesystem anchors — skip package-root and
+        // relative path resolution (owned virtual reclaim already ran above).
+        const foreignImporter =
+          importer != null && isForeignViteVirtualId(importer);
+        const importerAnchor =
+          importer && !foreignImporter
+            ? resolveImporterAnchorFile(importer)
+            : null;
+
+        const importerPackageRoot = importerAnchor
+          ? (graph.resolvePackageRootForFile(importerAnchor) ??
+            findPackageRootForFile(importerAnchor))
           : null;
 
         // Workspace shared.output: resolve exports→dist/shim to producer source.
@@ -273,7 +318,10 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
 
         const cssModuleFile = resolveCssModuleImport({
           source,
-          importer,
+          // Prefer the unwrapped file anchor so package-style / css-module
+          // virtual importers resolve relatives and package roots correctly.
+          // Foreign `\0virtual:mf:…` importers stay unset.
+          importer: importerAnchor ?? undefined,
           importerPackageRoot: importerPackageRoot ?? undefined,
           parseModuleFileFromId: fromCssModuleVirtualId,
         });
@@ -301,13 +349,6 @@ export function aukletStylePlugin(options: AukletStylePluginOptions = {}) {
           }
         }
 
-        const resolvedVirtualId = toResolvedVirtualId(cleanId);
-        if (resolvedVirtualId) return resolvedVirtualId;
-        if (cleanId.startsWith(VIRTUAL_ID_PREFIX)) {
-          return `${RESOLVED_VIRTUAL_ID_PREFIX}${cleanId.slice(
-            VIRTUAL_ID_PREFIX.length,
-          )}`;
-        }
         if (!graph.parsePackageStyleId(cleanId)) return null;
         return `${RESOLVED_VIRTUAL_ID_PREFIX}${cleanId}`;
       },

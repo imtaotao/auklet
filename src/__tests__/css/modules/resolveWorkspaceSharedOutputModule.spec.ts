@@ -21,12 +21,25 @@ import {
   toCssModuleStyleVirtualId,
   toCssModuleVirtualId,
 } from '#auklet/css/vite/hmr/cssModule';
+import { toPackageStyleVirtualId } from '#auklet/css/vite/packageStyleVirtualId';
 import { aukletStylePlugin } from '#auklet/css/vite/vitePlugin';
 import { normalizeFileKey } from '#auklet/utils';
 import {
   createVirtualProject,
   type VirtualProject,
 } from '../../fixtures/virtualProject';
+
+const resolveIdHandler = (plugin: ReturnType<typeof aukletStylePlugin>) => {
+  const resolveId = plugin.resolveId;
+  return typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+    ? resolveId.handler
+    : resolveId;
+};
+
+const resolvedIdOf = (resolved: unknown) =>
+  typeof resolved === 'object' && resolved && 'id' in resolved
+    ? String((resolved as { id: string }).id)
+    : resolved;
 
 describe('resolveWorkspaceSharedOutputModule', () => {
   let project: VirtualProject;
@@ -49,6 +62,79 @@ describe('resolveWorkspaceSharedOutputModule', () => {
     fs.symlinkSync(uiRoot, path.join(appRoot, 'node_modules/@scope/ui'), 'dir');
     return { uiRoot, appRoot };
   };
+
+  test('resolveId remaps shared.output from css-module and package-style virtual importers', async () => {
+    const { appRoot } = linkWorkspaceUi();
+    const moduleFile = project.writeFile(
+      'packages/ui/src/shared/chip.module.less',
+      '.chip { color: red; }\n',
+    );
+    const helpers = project.writeFile(
+      'packages/ui/src/shared/helpers.css',
+      '.helper { display: block; }\n',
+    );
+    project.writeJson('packages/ui/package.json', {
+      name: '@scope/ui',
+      version: '0.0.1',
+      type: 'module',
+      exports: {
+        './shared/chip.module.less': {
+          import: './dist/es/shared/chip.module.less.js',
+          default: './dist/es/shared/chip.module.less.js',
+        },
+        './shared/helpers.css': './dist/es/shared/helpers.css',
+      },
+    });
+    project.writeFile(
+      'packages/ui/auklet.config.js',
+      `export const config = {
+        source: 'src',
+        modules: true,
+        styles: {
+          shared: {
+            output: [
+              './src/shared/**/*.module.{less,css}',
+              './src/shared/helpers.css',
+            ],
+          },
+        },
+      };`,
+    );
+    project.writeJson('packages/app/package.json', {
+      name: '@scope/app',
+      type: 'module',
+      dependencies: { '@scope/ui': 'workspace:*' },
+    });
+    const consumerModule = project.writeFile(
+      'packages/app/src/Widget.module.css',
+      '.widget { color: black; }\n',
+    );
+    const consumerPlain = project.writeFile(
+      'packages/app/src/local.css',
+      '.local {}\n',
+    );
+
+    const plugin = aukletStylePlugin({ root: appRoot, mode: 'package' });
+    const handler = resolveIdHandler(plugin);
+
+    const fromCssModuleVirtual = await handler?.call(
+      plugin,
+      '@scope/ui/shared/chip.module.less',
+      toCssModuleVirtualId(consumerModule),
+    );
+    expect(resolvedIdOf(fromCssModuleVirtual)).toBe(
+      toCssModuleVirtualId(moduleFile),
+    );
+
+    const fromPackageStyleVirtual = await handler?.call(
+      plugin,
+      '@scope/ui/shared/helpers.css',
+      toPackageStyleVirtualId(consumerPlain),
+    );
+    expect(resolvedIdOf(fromPackageStyleVirtual)).toBe(
+      toPackageStyleVirtualId(helpers),
+    );
+  });
 
   test('maps workspace exports→shim to producer shared.output source', async () => {
     const { uiRoot, appRoot } = linkWorkspaceUi();

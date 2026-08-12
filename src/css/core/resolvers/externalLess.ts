@@ -68,6 +68,10 @@ export function isRejectedPackageImportsLessSpecifier(
 }
 
 export const findPackageRootForFile = (file: string) => {
+  // Vite virtual module ids are `\0…`. Node fs APIs reject null bytes, and these
+  // ids are never real package files.
+  if (file.includes('\0')) return null;
+
   let current = path.extname(file) ? path.dirname(file) : path.resolve(file);
   const root = path.parse(current).root;
   while (current !== root) {

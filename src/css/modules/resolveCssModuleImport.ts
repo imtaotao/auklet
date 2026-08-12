@@ -27,11 +27,14 @@ const resolveImporterDirectory = (
   const cleanImporter = stripCssModuleQuery(importer);
   const moduleFile =
     parseModuleFileFromId?.(cleanImporter) ??
-    (isCssModuleFile(cleanImporter) ? path.resolve(cleanImporter) : null);
+    (isCssModuleFile(cleanImporter) && !cleanImporter.includes('\0')
+      ? path.resolve(cleanImporter)
+      : null);
 
-  return moduleFile
-    ? path.dirname(moduleFile)
-    : path.dirname(path.resolve(cleanImporter));
+  if (moduleFile) return path.dirname(moduleFile);
+  // Foreign Vite virtual importers (`\0…`) are not filesystem paths.
+  if (cleanImporter.includes('\0')) return null;
+  return path.dirname(path.resolve(cleanImporter));
 };
 
 const resolveImporterPackageRoot = (
@@ -44,9 +47,12 @@ const resolveImporterPackageRoot = (
   const cleanImporter = stripCssModuleQuery(importer);
   const moduleFile =
     parseModuleFileFromId?.(cleanImporter) ??
-    (isCssModuleFile(cleanImporter) ? path.resolve(cleanImporter) : null);
-  const anchor = moduleFile ?? path.resolve(cleanImporter);
-  return findPackageRootForFile(anchor);
+    (isCssModuleFile(cleanImporter) && !cleanImporter.includes('\0')
+      ? path.resolve(cleanImporter)
+      : null);
+  if (moduleFile) return findPackageRootForFile(moduleFile);
+  if (cleanImporter.includes('\0')) return null;
+  return findPackageRootForFile(path.resolve(cleanImporter));
 };
 
 export function resolveCssModuleImport(options: ResolveCssModuleImportOptions) {
@@ -61,10 +67,12 @@ export function resolveCssModuleImport(options: ResolveCssModuleImportOptions) {
   let candidate = cleanSource;
   if (cleanSource.startsWith('.')) {
     if (!options.importer) return null;
-    candidate = path.resolve(
-      resolveImporterDirectory(options.importer, options.parseModuleFileFromId),
-      cleanSource,
+    const importerDirectory = resolveImporterDirectory(
+      options.importer,
+      options.parseModuleFileFromId,
     );
+    if (!importerDirectory) return null;
+    candidate = path.resolve(importerDirectory, cleanSource);
   } else if (path.isAbsolute(cleanSource)) {
     candidate = cleanSource;
   } else if (

@@ -1128,6 +1128,61 @@ describe('aukletStylePlugin CSS Modules integration', () => {
     expect(String(resolvedId)).toContain('Button.module.css.js');
   });
 
+  test('resolveId ignores foreign Vite virtual modules such as Module Federation shared loaders', async () => {
+    const moduleFile = fixture.writeFile('src/Button.module.css', '.button {}');
+    const plugin = aukletStylePlugin({ root: packageRoot });
+    const resolveId = plugin.resolveId;
+    const handler =
+      typeof resolveId === 'object' && resolveId && 'handler' in resolveId
+        ? resolveId.handler
+        : resolveId;
+
+    const foreignImporters = [
+      '\0virtual:mf:__mfe_internal__host__loadShare__react__loadShare__.js',
+      '\0vite/preload-helper.js',
+      '\0plugin-vue:export-helper',
+    ];
+    const realImporter = path.join(packageRoot, 'src/Button.tsx');
+    const cssModuleVirtualId = toCssModuleVirtualId(moduleFile);
+
+    for (const foreignImporter of foreignImporters) {
+      await expect(
+        handler?.call(plugin, 'react', foreignImporter),
+      ).resolves.toBeNull();
+      await expect(
+        handler?.call(plugin, './lifecycle.tsx', foreignImporter),
+      ).resolves.toBeNull();
+      await expect(
+        handler?.call(plugin, foreignImporter, realImporter),
+      ).resolves.toBeNull();
+
+      // Owned auklet virtuals must still be reclaimed under any foreign importer.
+      await expect(
+        handler?.call(plugin, cssModuleVirtualId, foreignImporter),
+      ).resolves.toBe(cssModuleVirtualId);
+      await expect(
+        handler?.call(
+          plugin,
+          '\0auklet-css:@scope/app/style.css',
+          foreignImporter,
+        ),
+      ).resolves.toBe('\0auklet-css:@scope/app/style.css');
+    }
+
+    const aukletResolved = await handler?.call(
+      plugin,
+      './Button.module.css',
+      realImporter,
+    );
+    const aukletResolvedId =
+      typeof aukletResolved === 'object' &&
+      aukletResolved &&
+      'id' in aukletResolved
+        ? aukletResolved.id
+        : aukletResolved;
+    expect(String(aukletResolvedId)).toContain('\0auklet-css-module:');
+  });
+
   test('load registers Less partial paths from compileCssModule watchFiles', async () => {
     fixture.writeFile('src/tokens.less', '@brand: tomato;');
     const moduleFile = path.join(

@@ -160,7 +160,16 @@ Check:
   Process-local cache of producer config+glob; invalidate on
   `auklet.config.*` change (`invalidateWorkspaceSharedOutputResolveCache`).
   Vite `resolveId` gates with `isExternalPackageSpecifier` +
-  `isCssModuleSpecifier` before calling resolve.
+  `isCssModuleSpecifier` before calling resolve. Order matters for `\0`
+  virtuals: (1) foreign _sources_ (not `\0auklet-…`) → `null`;
+  (2) reclaim owned `\0auklet-…` / `auklet-css:…` even when the importer
+  is foreign (MF `__loadShare__` must not drop the claim);
+  (3) foreign importers only skip `path.resolve` /
+  `findPackageRootForFile`; (4) owned virtual importers unwrap via
+  `fromCssModuleVirtualId` / `fromPackageStyleVirtualId` before
+  package-root lookup so `shared.output` remap still works.
+  Lower layers (`resolveCssModuleImport`, `findPackageRootForFile`) also
+  reject `\0` path walks as defense in depth.
 - `shared.output` supports Modules + plain css/less (Less copied as-is; no
   prefix). `shared.inner` is plain css/less only (gets prefix). Document in
   `docs/css.md` / invariants / README.

@@ -126,11 +126,18 @@ The Vite plugin resolves package CSS through virtual modules built by
 `moduleGraph/`. On tracked source changes, `hmr/` refreshes affected package CSS
 and CSS Modules; other CSS remains on Vite's native HMR. Plain JS imports of
 workspace `shared.output` `.css` / `.less` use `\0auklet-package-style:` and are
-included in that hotUpdate path. Vite's Less IdResolver does **not** call user
-`resolveId` plugins, so package `@import (reference) 'pkg/….less'` goes through
-a Less `FileManager` (`viteLessPlugin`, tried before Vite's own). Resolve uses
-the same `resolveExternalLessImport` path as production external Less (exports
-→ published `.less`; workspace `shared.output` remaps to source when the resolve
+included in that hotUpdate path. `resolveId` (`enforce` / `order: 'pre'`)
+handles Vite `\0` virtuals in this order: ignore foreign _sources_ (not
+`\0auklet-…`, e.g. Module Federation `__loadShare__`); reclaim owned
+`\0auklet-…` / `auklet-css:…` even under a foreign importer; skip filesystem /
+package-root walks only for foreign importers; unwrap owned virtual importers
+(`fromCssModuleVirtualId` / `fromPackageStyleVirtualId`) before
+`importerPackageRoot` so workspace `shared.output` remap still runs. Vite's
+Less IdResolver does **not** call user `resolveId` plugins, so package
+`@import (reference) 'pkg/….less'` goes through a Less `FileManager`
+(`viteLessPlugin`, tried before Vite's own). Resolve uses the same
+`resolveExternalLessImport` path as production external Less (exports →
+published `.less`; workspace `shared.output` remaps to source when the resolve
 cache is warm; installed packages keep published files). For HMR the manager
 records resolved→entry `.less` when Less provides `options.filename`; otherwise
 hotUpdate falls back to a source scan of loaded Less modules. Never return the

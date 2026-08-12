@@ -6,7 +6,10 @@ import {
   createLessExternalImportPlan,
 } from '#auklet/css/core/externalLessGraph';
 import { parseLessSourceImports } from '#auklet/css/core/lessImportGraph';
-import { resolveExternalLessImport } from '#auklet/css/core/resolvers/externalLess';
+import {
+  findPackageRootForFile,
+  resolveExternalLessImport,
+} from '#auklet/css/core/resolvers/externalLess';
 import {
   createVirtualProject,
   type VirtualProject,
@@ -21,6 +24,17 @@ describe('external Less resolver', () => {
 
   afterEach(() => {
     project.cleanup();
+  });
+
+  test('findPackageRootForFile ignores Vite virtual module ids with null bytes', () => {
+    for (const virtualId of [
+      '\0virtual:mf:__mfe_internal__host__loadShare__react__loadShare__.js',
+      '\0vite/preload-helper.js',
+      '\0plugin-vue:export-helper',
+      '\0auklet-css:@scope/app/style.css',
+    ]) {
+      expect(findPackageRootForFile(virtualId)).toBeNull();
+    }
   });
 
   test('resolves exports patterns with Less condition priority and respects null entries', () => {

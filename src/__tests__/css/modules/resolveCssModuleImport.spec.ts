@@ -64,6 +64,30 @@ describe('resolveCssModuleImport', () => {
     ).toBeNull();
   });
 
+  test('rejects foreign Vite virtual sources and importers', () => {
+    project.writeFile('src/Button.module.css', '.button {}');
+    const foreignImporters = [
+      '\0virtual:mf:__mfe_internal__host__loadShare__react__loadShare__.js',
+      '\0vite/preload-helper.js',
+      '\0plugin-vue:export-helper',
+    ];
+
+    for (const foreignImporter of foreignImporters) {
+      expect(
+        resolveCssModuleImport({
+          source: foreignImporter,
+          importer: project.resolve('src/Button.tsx'),
+        }),
+      ).toBeNull();
+      expect(
+        resolveCssModuleImport({
+          source: './Button.module.css',
+          importer: foreignImporter,
+        }),
+      ).toBeNull();
+    }
+  });
+
   test('returns null when the module file does not exist', () => {
     const importer = project.resolve('src/Button.tsx');
 
