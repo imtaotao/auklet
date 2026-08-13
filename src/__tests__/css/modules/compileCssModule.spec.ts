@@ -112,7 +112,7 @@ describe('css/modules protocol', () => {
     expect(generateScopedName('button', file, '')).toBe(buttonClass);
   });
 
-  test('compiles *.module.less through Less then Modules', async () => {
+  test('emits optionless Less @import as a compiled sibling .css asset instead of inlining', async () => {
     const partial = project.writeFile(
       'tokens.less',
       `
@@ -813,7 +813,7 @@ describe('css/modules protocol', () => {
     expect(result.styleAssets).toEqual([]);
   });
 
-  test('preserves Less css import semantics for Less files', async () => {
+  test('rewrites @import (css) of a Less file to a compiled sibling .css asset', async () => {
     project.writeFile('src/tokens.less', ':root { --tag-color: teal; }');
     const file = project.writeFile(
       'src/Tag.module.less',

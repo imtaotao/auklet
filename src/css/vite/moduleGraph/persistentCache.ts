@@ -6,19 +6,19 @@ import { toPosixPath } from '#auklet/utils';
 
 type CachedFile =
   | {
+      type: 'file';
       hash: string;
       file: string;
       exists: true;
       realpath: string;
-      type: 'file';
       mtimeMs: number;
       size: number;
     }
   | {
+      type: 'directory';
       file: string;
       exists: true;
       realpath: string;
-      type: 'directory';
       mtimeMs: number;
       size: number;
     }

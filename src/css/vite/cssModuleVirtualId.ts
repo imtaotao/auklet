@@ -2,12 +2,12 @@ import path from 'node:path';
 import { isCssModuleFile } from '#auklet/css/modules/isCssModuleFile';
 import { stripCssModuleQuery } from '#auklet/css/modules/resolveCssModuleImport';
 
-const CSS_MODULE_VIRTUAL_PREFIX = '\0auklet-css-module:';
 const CSS_MODULE_LOCALS_SUFFIX = '.js';
+const CSS_MODULE_STYLE_ASSET_SUFFIX = '.css';
 const CSS_MODULE_ROOT_STYLE_SUFFIX = '.style.css';
+const CSS_MODULE_VIRTUAL_PREFIX = '\0auklet-css-module:';
 const CSS_MODULE_STYLE_ASSET_PREFIX = 'virtual:auklet-css-module-asset:';
 const RESOLVED_CSS_MODULE_STYLE_ASSET_PREFIX = '\0auklet-css-module-asset:';
-const CSS_MODULE_STYLE_ASSET_SUFFIX = '.css';
 
 export function toCssModuleVirtualId(file: string) {
   return `${CSS_MODULE_VIRTUAL_PREFIX}${path.resolve(file)}${CSS_MODULE_LOCALS_SUFFIX}`;
@@ -46,6 +46,7 @@ const decodeStyleAssetId = (id: string, prefix: string) => {
       -CSS_MODULE_STYLE_ASSET_SUFFIX.length,
     );
     const parsed = JSON.parse(decodeURIComponent(payload));
+
     if (
       !Array.isArray(parsed) ||
       parsed.length !== 2 ||
@@ -100,6 +101,7 @@ export function resolveCssModuleStyleAssetVirtualId(id: string) {
   const parsed =
     decodeStyleAssetId(unwrappedId, CSS_MODULE_STYLE_ASSET_PREFIX) ??
     decodeStyleAssetId(unwrappedId, RESOLVED_CSS_MODULE_STYLE_ASSET_PREFIX);
+
   if (!parsed) return null;
   return {
     ...parsed,
